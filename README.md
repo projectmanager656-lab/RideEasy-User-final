@@ -13,36 +13,53 @@ A production-ready cab booking platform similar to Ola/Uber for **Pune** and **K
 ## Project Structure
 
 ```
-├── Backend/
-│   ├── config/
-│   │   └── db.js              # MongoDB connection (env-based)
-│   ├── controllers/
-│   ├── middlewares/
-│   ├── models/
-│   ├── routes/
-│   ├── services/
-│   ├── app.js
-│   └── server.js
+├── backend/                    # API (Node + Express)
+│   ├── src/
+│   │   ├── config/           # db, env, jwt, cors
+│   │   ├── controllers/
+│   │   ├── middlewares/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── socket/
+│   │   ├── utils/
+│   │   ├── validators/
+│   │   ├── tests/
+│   │   ├── scripts/          # e.g. seed-test-captain
+│   │   └── app.js
+│   ├── api/                  # Vercel serverless entry
+│   ├── server.js
+│   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   ├── context/
 │   │   ├── pages/
+│   │   ├── services/         # apiClient.js, http.js (axios + auth)
+│   │   ├── hooks/
+│   │   ├── context/
+│   │   ├── config/
+│   │   ├── utils/
 │   │   ├── App.jsx
 │   │   └── main.jsx
+│   ├── android/              # Capacitor (single copy)
+│   ├── public/
 │   └── package.json
+├── docs/                     # ENVIRONMENT.md, API_CONVENTIONS.md, …
+├── scripts/                  # repo-level (e.g. smoke-api.mjs)
+├── .env.example              # explains where real .env files live (not auto-loaded)
 └── README.md
 ```
 
+Env file locations and copy-paste setup: **`docs/ENVIRONMENT.md`**. API response shapes: **`docs/API_CONVENTIONS.md`**.
+
 ## MongoDB Connection
 
-- Connection is handled in **`Backend/config/db.js`**.
-- Uses `process.env.MONGO_URI`. If not set, falls back to `mongodb://localhost:27017/cab_booking`.
-- `app.js` calls `connectToDb()` on startup.
+- Connection is handled in **`backend/src/config/db.js`**.
+- Uses `process.env.MONGO_URI`. If not set, falls back to `mongodb://127.0.0.1:27017/rideeasy` (see `getMongoUri()` in `backend/src/config/env.js`).
 
 ## Environment Variables
 
-### Backend (`.env` in `Backend/`)
+### Backend (`.env` in `backend/`)
 
 ```env
 MONGO_URI=mongodb+srv://<user>:<password>@cluster0.xxxxx.mongodb.net/<dbname>?retryWrites=true&w=majority
@@ -54,27 +71,71 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 
 - **MONGO_URI** — MongoDB Atlas (or local) connection string.  
 - **JWT_SECRET** — Used for user, driver, and admin tokens.  
-- **GOOGLE_MAPS_API_KEY** — For distance matrix and place suggestions (get fare and autocomplete).
+- **GOOGLE_MAPS_API_KEY** — Optional; not used by default (maps use Photon + OSRM on the server).
 
 ### Frontend (`.env` in `frontend/`)
 
 ```env
 VITE_BASE_URL=http://localhost:5001
-# Copy from Backend GOOGLE_MAPS_API_KEY for map display (avoids deprecated Marker + NoApiKeys)
-VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 ```
 
-- **VITE_BASE_URL** — Backend API URL.
-- **VITE_GOOGLE_MAPS_API_KEY** — For map display on user dashboard. Without it, a placeholder is shown. Use the same key as Backend `GOOGLE_MAPS_API_KEY`.
+- **VITE_BASE_URL** — Backend API URL. Maps use **Leaflet + OpenStreetMap** in the browser; search/fare use **Photon** (komoot) + **OSRM** on the backend — no Google Cloud account needed.
+
+### Split apps (`user-app`, `driver-app`, `admin-panel`)
+
+Each Vite app reads env from **its own folder** (not the repo root). For local dev, add a `.env` file (or copy from that app’s `.env.example`):
+
+```env
+VITE_BASE_URL=http://localhost:5001
+```
+
+Optional alias: `VITE_API_BASE_URL` (same value) if you prefer that name.
+
+Install dependencies **per app** the first time:
+
+```bash
+cd user-app && npm install
+cd ../driver-app && npm install
+cd ../admin-panel && npm install
+```
+
+From the repo root you can run:
+
+- `npm run dev:user` — passenger app (default Vite port, usually 5173)
+- `npm run dev:driver` — driver app (see `driver-app/vite.config.js` for port, often 5174)
+- `npm run dev:admin` — admin web console (port 5175)
+
+Keep the backend running (`http://localhost:5001`) while using these.
+
+### Login not working?
+
+1. **Start MongoDB** (local or Atlas) and run **`cd backend && npm install && node server.js`** (API on port **5001**).
+2. In **`backend/.env`**, set **`JWT_SECRET`** to a long random string (32+ chars). Without it, `/users/login` and `/captains/login` return **500**.
+3. Use **`http://localhost:5173`** (or your app port) **or** open Vite’s **Network** URL — CORS in development allows **localhost** and **private LAN IPs** (10.x, 192.168.x, 172.16–31.x) against `http://localhost:5001`.
+4. **Admin** (`admin-panel`): default dev credentials are **`DEFAULT_ADMIN_EMAIL`** / **`DEFAULT_ADMIN_PASSWORD`** in **`backend/.env`** (see **`backend/.env.example`**); if unset, the code often uses **`sm@gmail.com`** / **`123456`**.
+
+A **repo root `.env` is not read** by `backend` or Vite apps; use `backend/.env` and each app’s `.env`. See **`docs/ENVIRONMENT.md`**.
+
+## API responses
+
+JSON responses are normalized toward a single shape for new code:
+
+```json
+{ "success": true, "message": "…", "data": { } }
+```
+
+Many routes still **spread** resource fields at the top level (e.g. `user`, `token`) for backward compatibility with existing clients. Errors go through the centralized handler and include `success: false` plus `message` (and optional `errors` for validation). The frontend helper `frontend/src/utils/apiBody.js` (`stripApiEnvelope`) unwraps this envelope when only `data` remains. Conventions for **new** endpoints: **`docs/API_CONVENTIONS.md`**.
+
+Optional bootstrap admin credentials can be set via `DEFAULT_ADMIN_EMAIL` and `DEFAULT_ADMIN_PASSWORD` (see `backend/.env.example`). Set `ADMIN_LOGIN_DEBUG=true` only when troubleshooting login.
 
 ## How to Run
 
 ### Backend
 
 ```bash
-cd Backend
+cd backend
 npm install
-# Create .env with MONGO_URI, PORT, JWT_SECRET, GOOGLE_MAPS_API_KEY
+# Create .env with MONGO_URI, PORT, JWT_SECRET
 node server.js
 ```
 
@@ -91,7 +152,7 @@ Server runs at `http://localhost:5001` (or your `PORT`).
 ```bash
 cd frontend
 npm install
-# Create .env with VITE_BASE_URL=http://localhost:5001 and VITE_GOOGLE_MAPS_API_KEY
+# Create .env with VITE_BASE_URL=http://localhost:5001
 npm run dev
 ```
 
@@ -109,7 +170,7 @@ The service worker and manifest are generated at build time. Use `npm run previe
 
 ### Deploy
 
-- **Backend**: deploy `Backend` (Node + Express) to a server or service (e.g. VPS, Render, Railway, Fly.io) with `MONGO_URI`, `PORT`, `JWT_SECRET`, `GOOGLE_MAPS_API_KEY` configured.
+- **Backend**: deploy the **`backend/`** directory (Node + Express) to a server or service (e.g. VPS, Render, Railway, Fly.io) with `MONGO_URI`, `PORT`, `JWT_SECRET`, `GOOGLE_MAPS_API_KEY` configured.
 - **Frontend**: deploy `frontend/dist` to any static host that supports HTTPS (Netlify, Vercel, Cloudflare Pages, S3+CloudFront, etc.).
 - Set `VITE_BASE_URL` in the frontend build environment to point to your backend URL.
 
@@ -251,8 +312,8 @@ Users can only book rides within supported service areas. Drivers in the same ci
 
 - Fix common MongoDB issues by ensuring `MONGO_URI` is correct and IP/access is allowed (e.g. Atlas network access).
 - Razorpay is not required for the core flow; payment options are structured (UPI, QR, Cash) and stored in `payments`.
-- Map and distance logic use Google Maps API. Set `GOOGLE_MAPS_API_KEY` (Backend) and `VITE_GOOGLE_MAPS_API_KEY` (Frontend) for fare, suggestions, and map display.
-- The map component uses a custom center marker instead of the deprecated `google.maps.Marker` to avoid deprecation warnings.
+- Map and distance logic use **Photon** (geocoding/autocomplete), **OSRM** (routing), and **Leaflet/OSM** (tiles). No Google Maps API keys are required.
+- Ride screens may offer “Open in Google Maps” as a normal web link (no API key).
 
 ---
 

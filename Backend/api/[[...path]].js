@@ -2,7 +2,7 @@ const serverlessHttp = require('serverless-http');
 
 // Express app (includes routes + middleware).
 // Note: Socket.IO is NOT initialized in serverless runtime.
-const app = require('../app');
+const app = require('../src/app');
 
 const handler = serverlessHttp(app);
 

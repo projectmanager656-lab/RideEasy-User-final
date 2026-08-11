@@ -1,8 +1,0 @@
-{
-  "appId": "com.rideeasy.app",
-  "appName": "RideEasy",
-  "webDir": "frontend/dist",
-  "server": {
-    "androidScheme": "https"
-  }
-}

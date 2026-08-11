@@ -4,12 +4,13 @@
 
 ---
 
-## 1) `VITE_BASE_URL` आणि `VITE_GOOGLE_MAPS_API_KEY` — नेमके काय टाकायचे?
+## 1) `VITE_BASE_URL` — नेमके काय टाकायचे?
 
 | Variable | काय आहे? | उदाहरण |
 |----------|-----------|---------|
 | **`VITE_BASE_URL`** | तुमच्या **Node API** चा पूर्ण HTTPS URL (पोर्टसह जर लागत असेल). Frontend येथून REST + Socket.IO host काढतो. | `https://api.majhacompany.com` |
-| **`VITE_GOOGLE_MAPS_API_KEY`** | Google Cloud मधून **Maps JavaScript API** + **Places API** साठी browser key. | `AIza...` (की commit करू नका) |
+
+मॅप्ससाठी Google API की लागत नाही — app **Leaflet + OSM** (frontend) आणि **Photon + OSRM** (backend) वापरते.
 
 **फाइल:** `frontend/.env` (local) किंवा `frontend/.env.production` (build वेळी).
 
@@ -19,7 +20,7 @@
 
 ---
 
-## 2) Backend `.env` (production)
+## 2) `backend/.env` (production)
 
 ```env
 NODE_ENV=production
@@ -62,7 +63,7 @@ FORCE_HTTPS=true
 ### Render (उदाहरण)
 
 1. GitHub repo जोडा.  
-2. **New Web Service** → Root: `Backend` (किंवा तुमचा backend folder).  
+2. **New Web Service** → Root: `backend` (किंवा तुमचा API folder).  
 3. Build: `npm install` → Start: `npm start`.  
 4. Environment variables वरचे सर्व टाका.  
 5. Custom domain: `api.tumcha-domain.com` → SSL automatic.  
@@ -70,7 +71,7 @@ FORCE_HTTPS=true
 
 ### Railway
 
-सारखेच: New Project → Deploy from repo → `Backend` directory, `npm start`, env vars.
+सारखेच: New Project → Deploy from repo → `backend` directory, `npm start`, env vars.
 
 **Socket.IO:** same origin CORS + sticky sessions जर multiple instances — सुरुवातीला **एक instance** ठेवा.
 
@@ -81,9 +82,9 @@ FORCE_HTTPS=true
 1. Root: `frontend`  
 2. Build: `npm run build`  
 3. Output: `dist`  
-4. Env: `VITE_BASE_URL`, `VITE_GOOGLE_MAPS_API_KEY`, optional `VITE_SENTRY_DSN`  
+4. Env: `VITE_BASE_URL`, optional `VITE_SENTRY_DSN`  
 5. Custom domain: `app.tumcha-domain.com`  
-6. Backend `CORS_ORIGINS` मध्ये हा URL जोडा.
+6. `backend` च्या `CORS_ORIGINS` मध्ये हा URL जोडा.
 
 ---
 
@@ -105,7 +106,7 @@ Staging URL साठी `PLAYWRIGHT_BASE_URL` env वापरा.
 
 1. [sentry.io](https://sentry.io) → project (React + Node).  
 2. Frontend: `npm i @sentry/react` → `main.jsx` मध्ये `initSentry()` (पहा `src/initSentry.js`).  
-3. Backend: `npm i @sentry/node` → `server.js` मध्ये `Sentry.init` सर्वात वर.  
+3. `backend`: `npm i @sentry/node` → `server.js` मध्ये `Sentry.init` सर्वात वर.  
 4. DSN फक्त env मध्ये — commit नाही.
 
 ---
@@ -115,7 +116,7 @@ Staging URL साठी `PLAYWRIGHT_BASE_URL` env वापरा.
 1. [razorpay.com](https://razorpay.com) → API keys.  
 2. `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` — order create करण्यासाठी (तुमचा code लिहायचा बाकी).  
 3. Dashboard → **Webhooks** → URL `https://api.../webhooks/razorpay` → secret → `RAZORPAY_WEBHOOK_SECRET`.  
-4. Stub: `Backend/controllers/webhooks.controller.js` मध्ये `payment.captured` नंतर ride/wallet अपडेट लिहा.
+4. Stub: `backend/src/controllers/webhooks.controller.js` मध्ये `payment.captured` नंतर ride/wallet अपडेट लिहा.
 
 ---
 

@@ -32,7 +32,6 @@ Production API URL साठी `frontend/.env.production` बनवा (उद�
 
 ```
 VITE_BASE_URL=https://api.tumcha-domain.com
-VITE_GOOGLE_MAPS_API_KEY=your_key
 ```
 
 मग:
@@ -105,7 +104,7 @@ Output: `android/app/build/outputs/bundle/release/app-release.aab`
 |--------|------|
 | पांढरा स्क्रीन | `webDir` चुकीचे; `npm run build:web` नंतर `cap sync` |
 | API connect नाही | `VITE_BASE_URL` — HTTPS + सर्व्हर सुरू |
-| Map रिकामे | `VITE_GOOGLE_MAPS_API_KEY` + Play Console मध्ये API key restriction (SHA-1) |
+| Map रिकामे | `npm run build` नंतर `cap sync`; इंटरनेट + `VITE_BASE_URL` बरोबर |
 | Location परवानगी | `AndroidManifest.xml` मध्ये आधीच FINE/COARSE आहे |
 
 ---

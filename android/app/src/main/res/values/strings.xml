@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">RideEasy</string>
-    <string name="title_activity_main">RideEasy</string>
-    <string name="package_name">com.rideeasy.app</string>
-    <string name="custom_url_scheme">com.rideeasy.app</string>
-</resources>

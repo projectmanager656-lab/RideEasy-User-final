@@ -5,6 +5,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "seed:captain": "node src/scripts/seed-test-captain.js",
+    "migrate:vehicle-types": "node src/scripts/migrate-legacy-vehicle-types.js",
+    "migrate:services": "node src/scripts/ensure-services-doc.js",
     "test": "jest",
     "test:coverage": "jest --coverage"
   },
@@ -21,7 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.2",
     "serverless-http": "^4.0.0",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "jest": "^29.7.0"

@@ -1,0 +1,132 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { apiClient, withAuth } from '../services/http'
+import { formatApiError } from '../utils/apiError'
+import { stripApiEnvelope } from '../utils/apiBody'
+import { passengerRideStatusLabel, passengerRideStatusBadgeClass } from '../utils/rideStatusLabel'
+
+const RideHistory = () => {
+  const [ rides, setRides ] = useState([])
+  const [ loading, setLoading ] = useState(true)
+  const [ error, setError ] = useState('')
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const loadRides = useCallback(() => {
+    setLoading(true)
+    setError('')
+    return apiClient
+      .get('/rides/history', withAuth({ params: { limit: 50 } }))
+      .then((res) => {
+        if (!mountedRef.current) return
+        const raw = stripApiEnvelope(res.data)
+        const list = Array.isArray(raw?.rides) ? raw.rides : (Array.isArray(raw) ? raw : [])
+        setRides(list)
+      })
+      .catch((err) => {
+        if (!mountedRef.current) return
+        setError(formatApiError(err))
+      })
+      .finally(() => {
+        if (!mountedRef.current) return
+        setLoading(false)
+      })
+  }, [])
+
+  useEffect(() => {
+    loadRides()
+  }, [loadRides])
+
+  return (
+    <div className="min-h-dvh min-h-screen w-full max-w-full overflow-x-hidden bg-black text-white pb-24">
+      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-black/90 px-3 py-3 backdrop-blur sm:gap-3 sm:px-4">
+        <Link to="/home" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-200">
+          <i className="ri-arrow-left-line text-lg" />
+        </Link>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold sm:text-lg">Ride history</h1>
+          <p className="text-xs text-slate-400">Your past trips</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadRides()}
+          disabled={loading}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+          aria-label="Refresh list"
+        >
+          <i className={`ri-refresh-line text-lg ${loading ? 'animate-spin' : ''}`} />
+        </button>
+      </header>
+
+      <div className="mx-auto w-full max-w-lg px-3 pt-4 sm:px-4">
+        {loading && rides.length === 0 && <p className="text-sm text-slate-400">Loading…</p>}
+        {error ? (
+          <div role="alert" className="rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-200">
+            {error}
+          </div>
+        ) : null}
+        {!loading && !error && rides.length === 0 && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-6 text-center">
+            <p className="text-sm text-slate-400">No rides yet. Book one from the Ride tab.</p>
+            <Link to="/home" className="mt-4 inline-block text-sm font-medium text-emerald-400 hover:text-emerald-300">
+              Book a ride
+            </Link>
+          </div>
+        )}
+        <ul className="mt-3 space-y-3">
+          {rides.map((r) => (
+            <li
+              key={r._id}
+              className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${passengerRideStatusBadgeClass(r.status)}`}>
+                  {passengerRideStatusLabel(r.status)}
+                </span>
+                <span className="text-sm font-semibold text-emerald-400">₹{r.price ?? r.fare ?? '—'}</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {r.completedAt
+                  ? new Date(r.completedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                  : r.createdAt
+                    ? new Date(r.createdAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                    : ''}
+              </p>
+              <div className="mt-2 space-y-1 text-sm break-words">
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Pickup · </span>
+                  {r.pickupLocation || '—'}
+                </p>
+                <p className="text-slate-300">
+                  <span className="text-slate-500">Drop · </span>
+                  {r.dropLocation || '—'}
+                </p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                {r.vehicleType ? <span>{String(r.vehicleType)}</span> : null}
+                {r.paymentMethod ? <span>{String(r.paymentMethod)}</span> : null}
+              </div>
+              {String(r.status || '').toLowerCase() === 'cancelled' && Number(r.cancellationFee || 0) > 0 ? (
+                <p className="mt-2 text-xs font-medium text-rose-300">Cancellation fee charged: ₹{Number(r.cancellationFee)}</p>
+              ) : null}
+              {r.captain?.name && (
+                <p className="mt-2 text-xs text-slate-500">Driver · {r.captain.name}</p>
+              )}
+              {r.rating != null && (
+                <p className="mt-1 text-xs text-amber-400">Your rating · {r.rating}/5</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+export default RideHistory

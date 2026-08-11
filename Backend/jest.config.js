@@ -1,10 +1,10 @@
 /** @type {import('jest').Config} */
 module.exports = {
     testEnvironment: 'node',
-    roots: ['<rootDir>/tests'],
+    roots: ['<rootDir>/src/tests'],
     testMatch: ['**/*.test.js'],
     collectCoverageFrom: [
-        'services/**/*.js',
+        'src/services/**/*.js',
         '!**/node_modules/**',
     ],
     coverageDirectory: 'coverage',

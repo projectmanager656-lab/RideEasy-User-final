@@ -2,14 +2,20 @@
   "name": "uber-video-main",
   "private": true,
   "scripts": {
-    "test": "npm test --prefix Backend",
-    "test:backend": "npm test --prefix Backend",
+    "test": "npm test --prefix backend",
+    "test:backend": "npm test --prefix backend",
     "test:e2e": "npm run test:e2e --prefix frontend",
     "test:all": "npm run test:backend && npm run test:e2e",
+    "test:smoke": "node scripts/smoke-api.mjs",
     "dev": "npm run dev --prefix frontend",
+    "dev:user": "npm run dev --prefix user-app",
+    "dev:driver": "npm run dev --prefix driver-app",
+    "dev:admin": "npm run dev --prefix admin-panel",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev:backend": "npm run dev --prefix Backend",
-    "start:backend": "npm start --prefix Backend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:all": "npx --yes concurrently -n web,api -c blue,green \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "start:backend": "npm start --prefix backend",
+    "seed:captain": "npm run seed:captain --prefix backend",
     "build:web": "npm run build --prefix frontend",
     "android:sync": "npm run build --prefix frontend && npm run cap:sync --prefix frontend",
     "android:open": "npm run cap:open:android --prefix frontend",
@@ -18,6 +24,8 @@
   "dependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/cli": "^6.2.1",
-    "@capacitor/core": "^8.2.0"
+    "@capacitor/core": "^8.2.0",
+    "@wdio/cli": "^9.30.1",
+    "mongoose": "^9.9.1"
   }
 }
