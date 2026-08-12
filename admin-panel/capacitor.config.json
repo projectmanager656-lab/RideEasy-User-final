@@ -1,6 +1,6 @@
 {
-  "appId": "com.rideeasy.passenger",
-  "appName": "RideEasy Passenger",
+  "appId": "com.rideeasy.admin",
+  "appName": "RideEasy Admin",
   "webDir": "dist",
   "server": {
     "androidScheme": "http",

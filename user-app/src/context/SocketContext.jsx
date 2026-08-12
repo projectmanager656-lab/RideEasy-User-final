@@ -25,7 +25,7 @@ function createNoOpSocket () {
   }
 }
 
-const socketUrl = getSocketBaseUrl()
+const socketUrl = import.meta.env.VITE_SOCKET_URL || getSocketBaseUrl()
 
 const socket =
   import.meta.env.VITE_DISABLE_SOCKET === 'true'

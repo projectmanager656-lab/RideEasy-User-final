@@ -17,6 +17,8 @@ export default defineConfig(({ mode }) => {
     base: './',
     define: {
       'import.meta.env.VITE_APP_ROLE': JSON.stringify('user'),
+      'import.meta.env.VITE_BASE_URL': JSON.stringify(env.VITE_BASE_URL || 'http://localhost:5001'),
+      'import.meta.env.VITE_SOCKET_URL': JSON.stringify(env.VITE_SOCKET_URL || env.VITE_BASE_URL || 'http://localhost:5001'),
     },
     plugins: [
       react(),

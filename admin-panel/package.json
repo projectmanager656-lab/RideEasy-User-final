@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@sentry/react": "^10.46.0",
     "axios": "^1.7.7",
