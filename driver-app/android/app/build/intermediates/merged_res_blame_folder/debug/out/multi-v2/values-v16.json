@@ -1,0 +1,38 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.rideeasy.driver.app-mergeDebugResources-27:/values-v16/values-v16.xml",
+            "map": [
+                {
+                    "source": "/Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/res/values-v16/values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "65",
+                        "endOffsets": "116"
+                    }
+                },
+                {
+                    "source": "/Users/jaid/.gradle/caches/transforms-3/bb1f4105b1b1f6864d9147d2ddd4cb47/transformed/appcompat-1.6.1/res/values-v16/values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "5",
+                        "endColumns": "12",
+                        "endOffsets": "223"
+                    },
+                    "to": {
+                        "startLines": "3",
+                        "startColumns": "4",
+                        "startOffsets": "121",
+                        "endLines": "6",
+                        "endColumns": "12",
+                        "endOffsets": "289"
+                    }
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:ns1="urn:oasis:names:tc:xliff:document:1.2">
+    <string msgid="5976598919945601918" name="abc_action_bar_home_description">"घराकडे नेव्हिगेट करा"</string>
+    <string msgid="8388173803310557296" name="abc_action_bar_up_description">"वर नेव्‍हिगेट करा"</string>
+    <string msgid="3937310113216875497" name="abc_action_menu_overflow_description">"आणखी पर्याय"</string>
+    <string msgid="4692188335987374352" name="abc_action_mode_done">"पूर्ण झाले"</string>
+    <string msgid="1189761859438369441" name="abc_activity_chooser_view_see_all">"सर्व पहा"</string>
+    <string msgid="2165779757652331008" name="abc_activitychooserview_choose_application">"अ‍ॅप निवडा"</string>
+    <string msgid="4215997306490295099" name="abc_capital_off">"बंद"</string>
+    <string msgid="884982626291842264" name="abc_capital_on">"सुरू"</string>
+    <string msgid="8833365367933412986" name="abc_menu_alt_shortcut_label">"Alt+"</string>
+    <string msgid="2223301931652355242" name="abc_menu_ctrl_shortcut_label">"Ctrl+"</string>
+    <string msgid="838001238306846836" name="abc_menu_delete_shortcut_label">"हटवा"</string>
+    <string msgid="7986526966204849475" name="abc_menu_enter_shortcut_label">"एंटर करा"</string>
+    <string msgid="375214403600139847" name="abc_menu_function_shortcut_label">"Function+"</string>
+    <string msgid="4192209724446364286" name="abc_menu_meta_shortcut_label">"Meta+"</string>
+    <string msgid="4741552369836443843" name="abc_menu_shift_shortcut_label">"Shift+"</string>
+    <string msgid="5473865519181928982" name="abc_menu_space_shortcut_label">"space"</string>
+    <string msgid="6180552449598693998" name="abc_menu_sym_shortcut_label">"Sym+"</string>
+    <string msgid="5520303668377388990" name="abc_prepend_shortcut_label">"मेनू+"</string>
+    <string msgid="7208076849092622260" name="abc_search_hint">"शोधा…"</string>
+    <string msgid="3741173234950517107" name="abc_searchview_description_clear">"क्‍वेरी साफ करा"</string>
+    <string msgid="693312494995508443" name="abc_searchview_description_query">"शोध क्वेरी"</string>
+    <string msgid="3417662926640357176" name="abc_searchview_description_search">"शोधा"</string>
+    <string msgid="1486535517437947103" name="abc_searchview_description_submit">"क्वेरी सबमिट करा"</string>
+    <string msgid="2293578557972875415" name="abc_searchview_description_voice">"व्हॉइस शोध"</string>
+    <string msgid="8875138169939072951" name="abc_shareactionprovider_share_with">"यांच्यासोबत शेअर करा"</string>
+    <string msgid="9055268688411532828" name="abc_shareactionprovider_share_with_application">"<ns1:g id="APPLICATION_NAME">%s</ns1:g> सह शेअर करा"</string>
+    <string msgid="1656852541809559762" name="abc_toolbar_collapse_description">"कोलॅप्स करा"</string>
+    <string name="accept">स्वीकारा</string>
+    <string name="access_denied_admin">तुम्ही प्रशासक म्हणून अधिकृत नाही</string>
+    <string name="account">खाते</string>
+    <string name="account_holder_name">खातेदाराचे नाव</string>
+    <string name="account_holder_name_ph">खातेदाराचे नाव</string>
+    <string name="account_number">खाते क्रमांक</string>
+    <string name="account_number_ph">खाते क्रमांक</string>
+    <string name="action">Action</string>
+    <string name="actions">Actions</string>
+    <string name="activate_subscription">सबस्क्रिप्शन सक्रिय करा</string>
+    <string name="activating">सक्रिय होत आहे…</string>
+    <string name="active">सक्रिय</string>
+    <string name="active_subscribed">सक्रिय + सबस्क्राइब्ड</string>
+    <string name="active_subscribed_subtitle">सक्रिय + सबस्क्राइब्ड</string>
+    <string name="admin_console">प्रशासक कन्सोल</string>
+    <string name="admin_credentials">तुमचे प्रशासक क्रेडेन्शियल टाका</string>
+    <string name="admin_login">प्रशासक लॉगिन</string>
+    <string name="admin_routes_note_data"> API हे मुख्य अ‍ॅपपासून वेगळे आहे</string>
+    <string name="admin_routes_note_prefix">रूट्स </string>
+    <string name="after_driver_accepts">ड्रायव्हरने स्वीकारल्यानंतर</string>
+    <string name="all_filter">सर्व</string>
+    <string name="all_statuses">सर्व स्थिती</string>
+    <string name="all_statuses_subtitle">सर्व स्थिती</string>
+    <string name="already_have_account">आधीच खाते आहे?</string>
+    <string name="amount">रक्कम</string>
+    <string name="app_name">राइडईझी</string>
+    <string name="approve">Approve</string>
+    <string name="approved">Approved</string>
+    <string name="arrive_first_otp">OTP टाकण्यासाठी प्रथम पोहोचा</string>
+    <string name="ask_your_driver">तुमच्या ड्रायव्हरला विचारा</string>
+    <string name="auto">ऑटो</string>
+    <string name="auto_desc">किफायतशीर ऑटो राइड</string>
+    <string name="back_to_dashboard">डॅशबोर्डवर परत</string>
+    <string name="back_to_home">होमवर परत</string>
+    <string name="bank_details_hint">बँक तपशील विभाग तसाच ठेवा — तुमचे भविष्यातील रिफंड आणि कॅशबॅक यातूनच दिले जातात.</string>
+    <string name="bank_details_payouts">बँक तपशील — पेआउटसाठी</string>
+    <string name="bank_details_title">बँक तपशील (रिफंडसाठी)</string>
+    <string name="bank_details_together">तुमचे बँक तपशील नोंदणीसह पाठवले जातात</string>
+    <string name="bike">बाईक</string>
+    <string name="bike_desc">जलद आणि किफायतशीर</string>
+    <string name="block">ब्लॉक</string>
+    <string name="blocked">ब्लॉक केले</string>
+    <string name="book">बुक करा</string>
+    <string name="book_a_ride">राइड बुक करा</string>
+    <string name="book_another_ride">आणखी एक राइड बुक करा</string>
+    <string name="by_city">शहरानुसार</string>
+    <string name="cab">कॅब</string>
+    <string name="cab_desc">आरामदायी कॅब राइड</string>
+    <string msgid="881409763997275156" name="call_notification_answer_action">"उत्तर द्या"</string>
+    <string msgid="8793775615905189152" name="call_notification_answer_video_action">"व्हिडिओ"</string>
+    <string msgid="3229508546291798546" name="call_notification_decline_action">"नकार द्या"</string>
+    <string msgid="2659457946726154263" name="call_notification_hang_up_action">"कॉल बंद करा"</string>
+    <string msgid="6107532579223922871" name="call_notification_incoming_text">"इनकमिंग कॉल"</string>
+    <string msgid="8623827134497363134" name="call_notification_ongoing_text">"सुरू असलेला कॉल"</string>
+    <string msgid="59049573811482460" name="call_notification_screening_text">"इनकमिंग कॉल स्क्रीन करत आहे"</string>
+    <string name="cancel">रद्द करा</string>
+    <string name="cancellation_fee_charged">कॅन्सलेशन शुल्क आकारले</string>
+    <string name="cash">कॅश</string>
+    <string name="cash_cash">कॅश कॅश</string>
+    <string name="charged">Charged</string>
+    <string name="choose_a_ride">एक राइड निवडा</string>
+    <string name="choose_subscription_plan">तुमची सबस्क्रिप्शन योजना निवडा</string>
+    <string name="city">शहर</string>
+    <string name="city_for_search">शोधासाठी शहर</string>
+    <string name="city_vehicle">शहर / वाहन</string>
+    <string name="close">बंद करा</string>
+    <string name="commission">कमिशन</string>
+    <string name="commission_subtitle">कमिशन</string>
+    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">सुरू करा</string>
+    <string msgid="227660514972886228" name="common_google_play_services_enable_text">तुम्ही Google Play सेवा सक्षम केल्याशिवाय %1$s हा अ‍ॅप कार्य करणार नाही.</string>
+    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Google Play सेवा सुरू करा</string>
+    <string msgid="7153882981874058840" name="common_google_play_services_install_button">स्‍थापित करा</string>
+    <string name="common_google_play_services_install_text">Google Play सेवा आपल्या डिव्हाइसवर उपलब्ध नाही, त्याशिवाय %1$s चालणार नाही.</string>
+    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Google Play सेवा मिळवा</string>
+    <string name="common_google_play_services_notification_channel_name">Google Play सेवा उपलब्धता</string>
+    <string name="common_google_play_services_notification_ticker">Google Play सेवा एरर</string>
+    <string name="common_google_play_services_unknown_issue">%1$s ला Google Play सेवांमध्ये समस्या येत आहे. कृपया पुन्हा प्रयत्न करा.</string>
+    <string name="common_google_play_services_unsupported_text">तुमचे डिव्हाइस सपोर्ट करत नसलेल्या, Google Play सेवांशिवाय %1$s चालणार नाही.</string>
+    <string msgid="6556509956452265614" name="common_google_play_services_update_button">अपडेट करा</string>
+    <string msgid="9053896323427875356" name="common_google_play_services_update_text">तुम्ही Google Play सेवा अपडेट करेपर्यंत %1$s चालणार नाही.</string>
+    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Google Play सेवा अपडेट करा</string>
+    <string name="common_google_play_services_updating_text">सध्‍या अपडेट होत असलेल्‍या, Google Play सेवांशिवाय %1$s चालणार नाही.</string>
+    <string name="common_google_play_services_wear_update_text">Google Play सेवांच्या नवीन आवृत्तीची आवश्यकता आहे. हे स्वत:ला लवकरच अपडेट करेल.</string>
+    <string name="common_open_on_phone">फोनवर उघडा</string>
+    <string name="common_signin_button_text">साइन इन करा</string>
+    <string name="common_signin_button_text_long">Google सह साइन इन करा</string>
+    <string name="complete_payment">पेमेंट पूर्ण करा</string>
+    <string name="complete_payment_confirm">राइडच्या पुष्टीसाठी पेमेंट पूर्ण करा</string>
+    <string name="complete_ride">राइड पूर्ण करा</string>
+    <string name="complete_upi_first">प्रथम UPI / ऑनलाइन पेमेंट पूर्ण करा, किंवा डेस्कटॉपवर QR + Confirm वापरा.</string>
+    <string name="completed_rides">पूर्ण राइड्स</string>
+    <string name="completed_rides_subtitle">पूर्ण राइड्स</string>
+    <string name="confirm_ride_amount">राइडची पुष्टी करा (₹%s)</string>
+    <string name="confirm_ride_to_start">सुरू करण्यासाठी या राइडची पुष्टी करा</string>
+    <string name="confirm_your_ride">तुमच्या राइडची पुष्टी करा</string>
+    <string name="continue_as_driver">ड्रायव्हर म्हणून सुरू ठेवा</string>
+    <string name="continue_as_user">वापरकर्ता म्हणून सुरू ठेवा</string>
+    <string name="continue_with">%s सह सुरू ठेवा</string>
+    <string name="could_not_complete_ride">राइड पूर्ण करता आली नाही. कृपया प्रथम राइड सुरू करा.</string>
+    <string name="could_not_load_analytics">विश्लेषण लोड करता आले नाही</string>
+    <string name="could_not_load_prices">किंमती लोड करता आल्या नाहीत</string>
+    <string name="could_not_refresh_profile">तुमची प्रोफाइल रिफ्रेश करता आली नाही</string>
+    <string name="could_not_refresh_ride">राइड रिफ्रेश करता आली नाही. कृपया पुन्हा प्रयत्न करा.</string>
+    <string name="could_not_resolve_location">निवडलेले ठिकाण शोधता आले नाही</string>
+    <string name="could_not_send_otp">OTP पाठवता आला नाही</string>
+    <string name="could_not_start_ride">राइड सुरू करता आली नाही</string>
+    <string name="could_not_update_status">स्थिती अपडेट करता आली नाही</string>
+    <string name="could_not_verify_session">तुमचा सत्र सत्यापित करता आला नाही. कृपया पुन्हा प्रयत्न करा.</string>
+    <string name="create_account">खाते तयार करा</string>
+    <string name="create_driver_account">ड्रायव्हर खाते तयार करा</string>
+    <string name="creating">तयार होत आहे…</string>
+    <string name="customers">ग्राहक</string>
+    <string name="customers_subtitle">ग्राहक</string>
+    <string name="dashboard">डॅशबोर्ड</string>
+    <string name="discount">सवलत</string>
+    <string name="display_name">दाखवले जाणारे नाव</string>
+    <string name="distance">अंतर</string>
+    <string name="driver">ड्रायव्हर</string>
+    <string name="driver_accepted_ride">ड्रायव्हरने तुमची राइड स्वीकारली</string>
+    <string name="driver_arrived">ड्रायव्हर पोहोचला आहे. राइड सुरू करण्यासाठी तुमचा OTP शेअर करा.</string>
+    <string name="driver_assigned">ड्रायव्हर नियुक्त झाला. नकाशावर लाइव्ह स्थान पहा. ड्रायव्हर पोहोचल्यावरच OTP शेअर करा.</string>
+    <string name="driver_net">Driver net</string>
+    <string name="driver_phone_number">ड्रायव्हर फोन क्रमांक</string>
+    <string name="driver_qr">ड्रायव्हर QR</string>
+    <string name="driver_registration">ड्रायव्हर नोंदणी</string>
+    <string name="driver_with_name">ड्रायव्हर: %s</string>
+    <string name="drivers">ड्रायव्हर</string>
+    <string name="drivers_being_notified">जवळच्या ड्रायव्हरना सूचना दिल्या जात आहेत. तुमचा</string>
+    <string name="drivers_note">ड्रायव्हरला ब्लॉक केल्यास तो राइड घेऊ शकणार नाही.</string>
+    <string name="drop">ड्रॉप</string>
+    <string name="drop_destination">ड्रॉप ठिकाण</string>
+    <string name="drop_off">ड्रॉप-ऑफ</string>
+    <string name="duration">कालावधी</string>
+    <string name="edit_pickup_drop">पिकअप आणि ड्रॉप संपादित करा — पुन्हा शोधा</string>
+    <string name="email">ईमेल</string>
+    <string name="ends">समाप्ती</string>
+    <string name="english">इंग्रजी</string>
+    <string name="enter_6_digit_otp">6 अंकी OTP टाका</string>
+    <string name="enter_otp">OTP टाका</string>
+    <string name="enter_passenger_otp">प्रवाशाचा 6 अंकी OTP टाका.</string>
+    <string name="enter_password">तुमचा पासवर्ड टाका</string>
+    <string name="enter_pickup_drop_fare">पुढे जाण्यासाठी पिकअप, ड्रॉप निवडा आणि राइड निवडा</string>
+    <string name="eta_min">ETA ~%s मिनिटे</string>
+    <string name="eta_to_pickup">पिकअपपर्यंत ETA</string>
+    <string name="failed">अयशस्वी</string>
+    <string name="failed_accept_ride">राइड स्वीकारता आली नाही</string>
+    <string name="failed_load_pricing">किंमत निर्धारण लोड करता आले नाही</string>
+    <string name="failed_mark_arrived">पोहोचले म्हणून चिन्हांकित करता आले नाही</string>
+    <string name="failed_submit_rating">रेटिंग सबमिट करता आली नाही</string>
+    <string name="fare">भाडे</string>
+    <string name="fare_price">भाडे: ₹%s</string>
+    <string name="fare_total">भाडे एकूण</string>
+    <string name="fare_unavailable">भाडे उपलब्ध नाही</string>
+    <string name="feedback_helps">तुमचा अभिप्राय सर्वांच्या राइड चांगल्या बनवतो.</string>
+    <string name="fill_all_four">पेआउट मिळवण्यासाठी चारही भरा</string>
+    <string name="filter">फिल्टर</string>
+    <string name="find_a_trip">ट्रिप शोधा</string>
+    <string name="find_trip">ट्रिप शोधा</string>
+    <string name="finish_ride">राइड संपवा</string>
+    <string name="finish_this_ride">ही राइड संपवा</string>
+    <string name="flags">Flags</string>
+    <string name="friends_referral_ph">मित्राचा रेफरल कोड</string>
+    <string name="from">पासून</string>
+    <string name="full_name">पूर्ण नाव</string>
+    <string name="go_online_to_receive">राइड विनंत्या मिळवण्यासाठी ऑनलाइन जा.</string>
+    <string name="gross_fare">एकूण भाडे</string>
+    <string name="gross_fare_label">एकूण भाडे (₹)</string>
+    <string name="hindi">हिंदी</string>
+    <string name="home">होम</string>
+    <string name="home_address">घराचा पत्ता</string>
+    <string name="home_to_drop">घर → ड्रॉप</string>
+    <string name="home_to_pickup">घर → पिकअप</string>
+    <string name="id">आयडी</string>
+    <string name="ifsc">IFSC कोड</string>
+    <string name="ifsc_ph">IFSC कोड</string>
+    <string name="inactive_subscribe">सबस्क्रिप्शन निष्क्रिय — कमाई सुरू ठेवण्यासाठी सबस्क्राइब करा.</string>
+    <string name="incl_fees">शुल्कांसह</string>
+    <string name="income">उत्पन्न</string>
+    <string name="install_rideeasy">RideEasy इन्स्टॉल करा</string>
+    <string name="invalid_email_password">अवैध ईमेल किंवा पासवर्ड</string>
+    <string name="invalid_json">अवैध JSON</string>
+    <string name="invalid_server_response">अवैध सर्व्हर प्रतिसाद</string>
+    <string name="join_a_fleet">फ्लीटमध्ये सामील व्हा</string>
+    <string name="landing_choose_signin">तुम्ही कसे साइन इन करू इच्छिता ते निवडा</string>
+    <string name="landing_cities_tagline">कोल्हापूर, इचलकरंजी आणि सांगली येथे सेवा</string>
+    <string name="language">भाषा</string>
+    <string name="leaving">निघत आहोत…</string>
+    <string name="license_number">परवाना क्रमांक</string>
+    <string name="license_ph">जसे MH09-20241234567</string>
+    <string name="live">लाइव्ह</string>
+    <string name="live_gps_updating">नकाशावर लाइव्ह GPS अपडेट</string>
+    <string name="live_passenger_map">लाइव्ह प्रवासी नकाशा</string>
+    <string name="loading">लोड होत आहे…</string>
+    <string name="loading_account">तुमचे खाते लोड होत आहे…</string>
+    <string name="loading_admin">प्रशासक लोड होत आहे…</string>
+    <string name="loading_otp">OTP लोड होत आहे…</string>
+    <string name="loading_overview">आढावा लोड होत आहे…</string>
+    <string name="loading_rides">राइड्स लोड होत आहेत...</string>
+    <string name="log_out">लॉग आउट</string>
+    <string name="logging_in">लॉगिन होत आहे…</string>
+    <string name="login">लॉगिन</string>
+    <string name="login_here">येथे लॉगिन करा</string>
+    <string name="login_response_missing">अनपेक्षित लॉगिन प्रतिसाद</string>
+    <string name="login_with_phone_otp">फोन + OTP ने लॉगिन करा</string>
+    <string name="logout">लॉग आउट</string>
+    <string name="looking_for_driver">ड्रायव्हर शोधत आहोत</string>
+    <string name="marathi">मराठी</string>
+    <string name="mark_arrived_pickup">पिकअपवर पोहोचल्याची नोंद करा</string>
+    <string name="marking_arrived">पोहोचले म्हणून चिन्हांकित होत आहे…</string>
+    <string name="method">Method</string>
+    <string name="min_6_chars">किमान 6 अक्षरे</string>
+    <string name="min_away">%s मिनिटांत</string>
+    <string name="mobile_10_digit">10 अंकी मोबाईल क्रमांक</string>
+    <string name="monthly">मासिक</string>
+    <string name="name">नाव</string>
+    <string name="navigate">नेव्हिगेट करा</string>
+    <string name="new_here">नवीन आहात?</string>
+    <string name="new_ride_available">नवीन राइड उपलब्ध!</string>
+    <string name="no_booking_history">बुकिंग इतिहास अजून उपलब्ध नाही. पूर्ण झालेल्या राइड्स येथे दिसतील.</string>
+    <string name="no_rides_yet">अजून राइड नाही</string>
+    <string name="no_trips_yet">अजून ट्रिप नाही</string>
+    <string name="offline">ऑफलाइन</string>
+    <string name="online">ऑनलाइन</string>
+    <string name="online_drivers">ऑनलाइन ड्रायव्हर</string>
+    <string name="online_drivers_label">ऑनलाइन ड्रायव्हर</string>
+    <string name="open_google_maps">Google Maps उघडा</string>
+    <string name="open_navigation_pickup">पिकअपसाठी नेव्हिगेशन उघडा</string>
+    <string name="open_payment_qr">पेमेंट QR उघडा</string>
+    <string name="operating_city">कार्यरत शहर</string>
+    <string name="optional_feedback">ऐच्छिक अभिप्राय</string>
+    <string name="otp_6_digit">6 अंकी OTP</string>
+    <string name="otp_verification_failed">OTP सत्यापन अयशस्वी</string>
+    <string name="overview">आढावा</string>
+    <string name="paid">पैसे दिले</string>
+    <string name="passenger">प्रवासी</string>
+    <string name="passenger_with_name">प्रवासी: %s</string>
+    <string name="password">पासवर्ड</string>
+    <string name="past_rides_subtitle">तुमच्या पूर्ण झालेल्या सहली</string>
+    <string name="pay_amount">%s पैसे द्या</string>
+    <string name="pay_driver_directly_upi">ड्रायव्हरला थेट पैसे द्या — UPI</string>
+    <string name="pay_online_upi">ऑनलाइन पेमेंट करा (UPI अ‍ॅप्स)</string>
+    <string name="pay_with_upi">UPI ने पेमेंट करा (PhonePe/GPay)</string>
+    <string name="payment">Payment</string>
+    <string name="payment_at_end">शेवटी पेमेंट</string>
+    <string name="payment_change_next">पुढील टप्प्यात पेमेंट पद्धत बदलू शकता.</string>
+    <string name="payment_failed">पेमेंट अयशस्वी</string>
+    <string name="payment_receipt_when_ends">राइड संपल्यावर पेमेंट पावती दिसेल</string>
+    <string name="payment_success_confirming">पेमेंट यशस्वी. तुमच्या राइडची पुष्टी होत आहे…</string>
+    <string name="payments">पेमेंट्स</string>
+    <string name="payments_note">राइड भाड्यातील प्लॅटफॉर्मचा वाटा दाखवते</string>
+    <string name="pending">Pending</string>
+    <string name="per_vehicle"> प्रति वाहन</string>
+    <string name="phone">फोन</string>
+    <string name="pickup">पिकअप</string>
+    <string name="pickup_address">पिकअप पत्ता</string>
+    <string name="plan">योजना</string>
+    <string name="platform">Platform</string>
+    <string name="platform_revenue">प्लॅटफॉर्म महसूल</string>
+    <string name="platform_revenue_label">प्लॅटफॉर्म महसूल (₹)</string>
+    <string name="please_choose_ride">कृपया एक राइड निवडा</string>
+    <string name="please_login_again">कृपया पुन्हा लॉगिन करा.</string>
+    <string name="pricing">किंमत निर्धारण</string>
+    <string name="pricing_note_mid">हे सोपे किंमत ओव्हरराइड आहे आणि </string>
+    <string name="pricing_note_prefix">येथे फ्लॅट प्रति-वाहन किंमत निर्धारण </string>
+    <string name="pricing_note_suffix"> राइड बुकिंग फ्लोवर परिणाम करत नाही.</string>
+    <string name="pricing_saved">किंमत निर्धारण साठवले</string>
+    <string name="processing">प्रक्रिया होत आहे…</string>
+    <string name="profile">प्रोफाइल</string>
+    <string name="profile_signin_note">प्रोफाइल पाहण्यासाठी आणि संपादित करण्यासाठी साइन इन करा</string>
+    <string name="profile_subtitle">तुमचे खाते आणि साठवलेले पत्ते व्यवस्थापित करा</string>
+    <string name="qr">QR</string>
+    <string name="quick_pick_map">नकाशावरून त्वरित निवडा</string>
+    <string name="rate_your_driver">तुमच्या ड्रायव्हरला रेट करा</string>
+    <string name="receipt">पावती</string>
+    <string name="recent_rides">अलीकडील राइड्स</string>
+    <string name="recommended">शिफारस केलेले</string>
+    <string name="referral_hint">रेफरल दोघांनाही बोनस क्रेडिट देतात</string>
+    <string name="referral_optional">रेफरल कोड (ऐच्छिक)</string>
+    <string name="refresh_list">यादी रिफ्रेश करा</string>
+    <string name="refresh_profile">प्रोफाइल रिफ्रेश करा</string>
+    <string name="refresh_stats">आकडेवारी रिफ्रेश करा</string>
+    <string name="register_as_captain">कॅप्टन म्हणून नोंदणी करा</string>
+    <string name="registered">नोंदणीकृत</string>
+    <string name="registered_subtitle">नोंदणीकृत</string>
+    <string name="registration_failed">नोंदणी अयशस्वी</string>
+    <string name="registration_response_missing">अनपेक्षित नोंदणी प्रतिसाद</string>
+    <string name="reject">Reject</string>
+    <string name="reject_failed">नाकारता आले नाही</string>
+    <string name="remove_driver_approval">कृपया ड्रायव्हर मान्यता बंधने काढा</string>
+    <string name="retry">पुन्हा प्रयत्न</string>
+    <string name="returning_home_sec">%s सेकंदांत होमवर परतत आहोत…</string>
+    <string name="ride">Ride</string>
+    <string name="ride_completed">राइड पूर्ण झाली</string>
+    <string name="ride_history">राइड इतिहास</string>
+    <string name="ride_type">राइडचा प्रकार</string>
+    <string name="rider">प्रवासी</string>
+    <string name="rides">राइड्स</string>
+    <string name="route">मार्ग</string>
+    <string name="route_to_drop">ड्रॉपपर्यंतचा मार्ग</string>
+    <string name="rupee">₹</string>
+    <string name="save_changes">बदल साठवा</string>
+    <string name="save_pricing">किंमत निर्धारण साठवा</string>
+    <string name="saved">साठवले</string>
+    <string name="saving">साठवले जात आहे…</string>
+    <string msgid="6264217191555673260" name="search_menu_title">"शोध"</string>
+    <string name="search_placeholder">शहर, मार्ग, प्रवासी, ड्रायव्हर, आयडी शोधा...</string>
+    <string name="search_users_placeholder">नाव, ईमेल, फोन, शहर शोधा…</string>
+    <string name="select">निवडा</string>
+    <string name="select_language">भाषा निवडा</string>
+    <string name="select_pickup_drop_vehicle">कृपया पिकअप, ड्रॉप आणि वाहन निवडा</string>
+    <string name="send_otp">OTP पाठवा</string>
+    <string name="sending_otp">OTP पाठवले जात आहे…</string>
+    <string name="service_fee">सेवा शुल्क</string>
+    <string name="share_code_with_driver">राइड सुरू करण्यासाठी हा कोड तुमच्या ड्रायव्हरसोबत शेअर करा</string>
+    <string name="share_on_arrival">दिसेल — पोहोचल्यावर राइड सुरू करण्यासाठी शेअर करा.</string>
+    <string name="sign_in">साइन इन</string>
+    <string name="sign_in_as_user">वापरकर्ता म्हणून साइन इन करा</string>
+    <string name="signing_out">साइन आउट होत आहे…</string>
+    <string name="signup_note">बँक तपशील आणि रेफरल कॅशबॅकमध्ये मदत करतात.</string>
+    <string name="site">Site</string>
+    <string name="skip">वगळा</string>
+    <string name="stars">%s स्टार</string>
+    <string name="start_ride">राइड सुरू करा</string>
+    <string name="status">स्थिती</string>
+    <string name="status_accepted">स्वीकारले</string>
+    <string name="status_accepted_label">स्वीकारले</string>
+    <string name="status_arrived">पोहोचले</string>
+    <string name="status_arrived_label">पोहोचले</string>
+    <string name="status_assigned">नियुक्त</string>
+    <string msgid="6277540029070332960" name="status_bar_notification_info_overflow">"९९९+"</string>
+    <string name="status_cancelled">रद्द</string>
+    <string name="status_cancelled_label">रद्द</string>
+    <string name="status_completed">पूर्ण</string>
+    <string name="status_completed_label">पूर्ण</string>
+    <string name="status_done">पूर्ण</string>
+    <string name="status_finding_driver">ड्रायव्हर शोधत आहोत</string>
+    <string name="status_label">स्थिती</string>
+    <string name="status_live_ride">लाइव्ह राइड</string>
+    <string name="status_searching">शोध सुरू</string>
+    <string name="status_searching_label">शोध सुरू</string>
+    <string name="status_started">सुरू झाली</string>
+    <string name="status_started_label">सुरू झाली</string>
+    <string name="submit_rating">रेटिंग सबमिट करा</string>
+    <string name="submitting">सबमिट होत आहे…</string>
+    <string name="subscribe_failed">सबस्क्रिप्शन अयशस्वी</string>
+    <string name="subscribe_with_price">सबस्क्राइब ₹%s</string>
+    <string name="subscription">Subscription</string>
+    <string name="suggestions_hint">पत्ता टाइप करा — सूचना कोल्हापूर, इचलकरंजी किंवा सांगलीवर आधारित आहेत (वरील शहर निवडा)।</string>
+    <string name="thanks_rideeasy">RideEasy सोबत प्रवास केल्याबद्दल धन्यवाद</string>
+    <string name="time_left">%1$s दिवस %2$s तास शिल्लक</string>
+    <string name="title_activity_main">राइडईझी</string>
+    <string name="to">पर्यंत</string>
+    <string name="today_earnings">आज: ₹%1$s (%2$s राइड्स)</string>
+    <string name="total_drivers">एकूण ड्रायव्हर</string>
+    <string name="total_drivers_label">एकूण ड्रायव्हर</string>
+    <string name="total_fare">एकूण भाडे</string>
+    <string name="total_paid">एकूण दिले</string>
+    <string name="total_rides">एकूण राइड्स</string>
+    <string name="total_rides_count">एकूण %s राइड्स</string>
+    <string name="total_rides_label">एकूण राइड्स</string>
+    <string name="total_users">एकूण वापरकर्ते</string>
+    <string name="total_users_label">एकूण वापरकर्ते</string>
+    <string name="trip_complete">ट्रिप पूर्ण</string>
+    <string name="trip_fare">ट्रिप भाडे</string>
+    <string name="trip_history">ट्रिप इतिहास</string>
+    <string name="trip_label">ट्रिप</string>
+    <string name="trips">ट्रिप्स</string>
+    <string name="unavailable">उपलब्ध नाही</string>
+    <string name="unblock">अनब्लॉक</string>
+    <string name="upi">UPI</string>
+    <string name="upi_browser_hint">हा ब्राउझर UPI अ‍ॅप उघडू शकत नाही (डेस्कटॉप किंवा इम्युलेटरमध्ये upi:// हँडलर नाही). फोनवर PhonePe/GPay ने QR स्कॅन करा, किंवा खऱ्या Android/iPhone वर चाचणी करा.</string>
+    <string name="upi_handle_missing">UPI हँडल कॉन्फिगर नाही. .env मध्ये VITE_UPI_HANDLE सेट करा.</string>
+    <string name="upi_id_ph">UPI आयडी (ऐच्छिक)</string>
+    <string name="upi_match_above">वरील UPI आयडीशी जुळले पाहिजे</string>
+    <string name="upi_online">UPI / ऑनलाइन</string>
+    <string name="upi_payee">UPI प्राप्तकर्ता</string>
+    <string name="upi_payments_optional">UPI पेमेंट (ऐच्छिक)</string>
+    <string name="upi_qr">UPI QR</string>
+    <string name="upi_qr_fallback">UPI QR पर्याय (PhonePe/GPay मध्ये स्कॅन करा)</string>
+    <string name="user_id">वापरकर्ता आयडी</string>
+    <string name="users">वापरकर्ते</string>
+    <string name="vehicle">वाहन</string>
+    <string name="vehicle_number">वाहन क्रमांक</string>
+    <string name="vehicle_number_ph">जसे MH-09-AB-1234</string>
+    <string name="vehicle_type">वाहनाचा प्रकार</string>
+    <string name="verify_otp_login">OTP सत्यापित करा आणि लॉगिन करा</string>
+    <string name="verifying">सत्यापित होत आहे…</string>
+    <string name="waiting_approval">प्रशासक मंजुरीची प्रतीक्षा — तुम्ही अजून ऑनलाइन जाऊ शकत नाही.</string>
+    <string name="waiting_payment_confirmation">पेमेंट पुष्टीची प्रतीक्षा.</string>
+    <string name="wallet">वॉलेट</string>
+    <string name="weekly">साप्ताहिक</string>
+    <string name="whats_your_email">तुमचा ईमेल कोणता?</string>
+    <string name="when">केव्हा</string>
+    <string name="will_show_after_accept">येथे फक्त</string>
+    <string name="with_captain_assigned">कॅप्टन नियुक्तीसह</string>
+    <string name="work_address">ऑफिसचा पत्ता</string>
+    <string name="work_to_drop">ऑफिस → ड्रॉप</string>
+    <string name="work_to_pickup">ऑफिस → पिकअप</string>
+    <string name="yearly">वार्षिक</string>
+    <string name="you_rated_trip">तुम्ही या ट्रिपला %s★ रेट केले — धन्यवाद!</string>
+    <string name="your_driver">तुमचा ड्रायव्हर</string>
+    <string name="your_name">तुमचे नाव</string>
+    <string name="your_past_trips">तुमच्या मागील सहली</string>
+    <string name="your_rating">तुमची रेटिंग: %s</string>
+    <string name="your_ride_otp">तुमचा राइड OTP</string>
+</resources>

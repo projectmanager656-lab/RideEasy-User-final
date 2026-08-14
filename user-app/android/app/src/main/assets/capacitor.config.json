@@ -1,0 +1,25 @@
+{
+	"appId": "com.rideeasy.passenger",
+	"appName": "RideEasy Passenger",
+	"webDir": "dist",
+	"server": {
+		"androidScheme": "http",
+		"cleartext": true
+	},
+	"android": {
+		"allowMixedContent": true
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 2000,
+			"launchAutoHide": true,
+			"backgroundColor": "#000000",
+			"androidSplashResourceName": "splash",
+			"androidScaleType": "CENTER_CROP",
+			"showSpinner": false,
+			"splashFullScreen": true,
+			"splashImmersive": true,
+			"layoutName": "splash_screen"
+		}
+	}
+}
