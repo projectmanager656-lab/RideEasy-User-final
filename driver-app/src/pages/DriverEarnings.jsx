@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
+import { useLanguage } from '../i18n'
 
 const DriverEarnings = () => {
+  const { t } = useLanguage()
   const [ earnings, setEarnings ] = useState(null)
   const [ error, setError ] = useState('')
   const [ loading, setLoading ] = useState(true)
@@ -36,8 +38,8 @@ const DriverEarnings = () => {
           <i className="ri-arrow-left-line text-lg" />
         </Link>
         <div>
-          <h1 className="text-lg font-semibold">Earnings</h1>
-          <p className="text-xs text-zinc-400">Wallet & trip totals</p>
+          <h1 className="text-lg font-semibold">{t('earnings')}</h1>
+          <p className="text-xs text-zinc-400">{t('wallet_trip_totals')}</p>
         </div>
       </header>
 
@@ -49,29 +51,29 @@ const DriverEarnings = () => {
         ) : null}
 
         {loading ? (
-          <p className="text-sm text-zinc-400">Loading…</p>
+          <p className="text-sm text-zinc-400">{t('loading')}</p>
         ) : earnings ? (
           <div className="space-y-4">
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-lg">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">Total earned</p>
+              <p className="text-xs uppercase tracking-wide text-zinc-500">{t('total_earned')}</p>
               <p className="mt-1 text-3xl font-bold text-emerald-400">₹{earnings.totalEarnings ?? 0}</p>
               <p className="mt-2 text-sm text-zinc-400">
-                {earnings.count ?? earnings.completedRides ?? 0} completed rides
+                {t('rides_with_count', { count: earnings.count ?? earnings.completedRides ?? 0 })}
               </p>
             </div>
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-xs text-zinc-500">Wallet balance</p>
+              <p className="text-xs text-zinc-500">{t('wallet_balance')}</p>
               <p className="text-xl font-semibold text-white">₹{earnings.walletBalance ?? 0}</p>
             </div>
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-              <p className="text-xs text-zinc-500">Today</p>
+              <p className="text-xs text-zinc-500">{t('today')}</p>
               <p className="text-lg font-medium text-white">
                 ₹{earnings.todayEarnings ?? 0} · {earnings.todayRides ?? 0} rides
               </p>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-zinc-400">No earnings data.</p>
+          <p className="text-sm text-zinc-400">{t('no_earnings_data')}</p>
         )}
       </div>
     </div>

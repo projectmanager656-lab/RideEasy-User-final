@@ -4,8 +4,10 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { passengerRideStatusLabel, passengerRideStatusBadgeClass } from '../utils/rideStatusLabel'
+import { useLanguage } from '../i18n'
 
 const RideHistory = () => {
+  const { t } = useLanguage()
   const [ rides, setRides ] = useState([])
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState('')
@@ -50,22 +52,22 @@ const RideHistory = () => {
           <i className="ri-arrow-left-line text-lg" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold sm:text-lg">Ride history</h1>
-          <p className="text-xs text-slate-400">Your past trips</p>
+          <h1 className="truncate text-base font-semibold sm:text-lg">{t('ride_history')}</h1>
+          <p className="text-xs text-slate-400">{t('your_past_trips')}</p>
         </div>
         <button
           type="button"
           onClick={() => loadRides()}
           disabled={loading}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-          aria-label="Refresh list"
+          aria-label={t('refresh_list')}
         >
           <i className={`ri-refresh-line text-lg ${loading ? 'animate-spin' : ''}`} />
         </button>
       </header>
 
       <div className="mx-auto w-full max-w-lg px-3 pt-4 sm:px-4">
-        {loading && rides.length === 0 && <p className="text-sm text-slate-400">Loading…</p>}
+        {loading && rides.length === 0 && <p className="text-sm text-slate-400">{t('loading')}</p>}
         {error ? (
           <div role="alert" className="rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-200">
             {error}
@@ -73,9 +75,9 @@ const RideHistory = () => {
         ) : null}
         {!loading && !error && rides.length === 0 && (
           <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-6 text-center">
-            <p className="text-sm text-slate-400">No rides yet. Book one from the Ride tab.</p>
+            <p className="text-sm text-slate-400">{t('no_rides_yet')}</p>
             <Link to="/home" className="mt-4 inline-block text-sm font-medium text-emerald-400 hover:text-emerald-300">
-              Book a ride
+              {t('book_a_ride')}
             </Link>
           </div>
         )}
@@ -100,11 +102,11 @@ const RideHistory = () => {
               </p>
               <div className="mt-2 space-y-1 text-sm break-words">
                 <p className="text-slate-300">
-                  <span className="text-slate-500">Pickup · </span>
+                  <span className="text-slate-500">{t('pickup')} · </span>
                   {r.pickupLocation || '—'}
                 </p>
                 <p className="text-slate-300">
-                  <span className="text-slate-500">Drop · </span>
+                  <span className="text-slate-500">{t('drop')} · </span>
                   {r.dropLocation || '—'}
                 </p>
               </div>
@@ -113,13 +115,13 @@ const RideHistory = () => {
                 {r.paymentMethod ? <span>{String(r.paymentMethod)}</span> : null}
               </div>
               {String(r.status || '').toLowerCase() === 'cancelled' && Number(r.cancellationFee || 0) > 0 ? (
-                <p className="mt-2 text-xs font-medium text-rose-300">Cancellation fee charged: ₹{Number(r.cancellationFee)}</p>
+                <p className="mt-2 text-xs font-medium text-rose-300">{t('cancellation_fee_charged')}: ₹{Number(r.cancellationFee)}</p>
               ) : null}
               {r.captain?.name && (
-                <p className="mt-2 text-xs text-slate-500">Driver · {r.captain.name}</p>
+                <p className="mt-2 text-xs text-slate-500">{t('driver_with_name', { name: r.captain.name })}</p>
               )}
               {r.rating != null && (
-                <p className="mt-1 text-xs text-amber-400">Your rating · {r.rating}/5</p>
+                <p className="mt-1 text-xs text-amber-400">{t('your_rating', { rating: r.rating })}</p>
               )}
             </li>
           ))}

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { useLanguage } from '../i18n'
 
 function statusStyle (status) {
   const s = String(status || '').toLowerCase()
@@ -37,6 +38,7 @@ function toPersonName (value) {
 }
 
 const CaptainRideHistory = () => {
+  const { t } = useLanguage()
   const [ rides, setRides ] = useState([])
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState('')
@@ -81,22 +83,22 @@ const CaptainRideHistory = () => {
           <i className="ri-arrow-left-line text-lg" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-semibold sm:text-lg">Trip history</h1>
-          <p className="text-xs text-slate-400">Your completed and past rides</p>
+          <h1 className="truncate text-base font-semibold sm:text-lg">{t('trip_history')}</h1>
+          <p className="text-xs text-slate-400">{t('your_completed_past_rides')}</p>
         </div>
         <button
           type="button"
           onClick={() => loadRides()}
           disabled={loading}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50"
-          aria-label="Refresh list"
+          aria-label={t('refresh_list')}
         >
           <i className={`ri-refresh-line text-lg ${loading ? 'animate-spin' : ''}`} />
         </button>
       </header>
 
       <div className="mx-auto w-full max-w-lg px-3 pt-4 sm:px-4">
-        {loading && rides.length === 0 && <p className="text-sm text-slate-400">Loading…</p>}
+        {loading && rides.length === 0 && <p className="text-sm text-slate-400">{t('loading')}</p>}
         {error ? (
           <div role="alert" className="rounded-lg border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-200">
             {error}
@@ -104,9 +106,9 @@ const CaptainRideHistory = () => {
         ) : null}
         {!loading && !error && rides.length === 0 && (
           <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-6 text-center">
-            <p className="text-sm text-slate-400">No trips yet. When you complete rides, they show up here.</p>
+            <p className="text-sm text-slate-400">{t('no_trips_yet')}</p>
             <Link to="/captain-home" className="mt-4 inline-block text-sm font-medium text-emerald-400 hover:text-emerald-300">
-              Back to dashboard
+              {t('back_to_dashboard')}
             </Link>
           </div>
         )}
@@ -127,7 +129,7 @@ const CaptainRideHistory = () => {
                   <span className="text-sm font-semibold text-emerald-400">
                     ₹{earnings ?? '—'}
                     {r.price != null && r.captainNetEarning != null && Number(r.price) !== Number(r.captainNetEarning) ? (
-                      <span className="ml-1 text-xs font-normal text-slate-500">fare ₹{r.price}</span>
+                      <span className="ml-1 text-xs font-normal text-slate-500">{t('fare_amount', { amount: r.price })}</span>
                     ) : null}
                   </span>
                 </div>
@@ -140,11 +142,11 @@ const CaptainRideHistory = () => {
                 </p>
                 <div className="mt-2 space-y-1 text-sm break-words">
                   <p className="text-slate-300">
-                    <span className="text-slate-500">Pickup · </span>
+                    <span className="text-slate-500">{t('pickup_label')}</span>
                     {r.pickupLocation || '—'}
                   </p>
                   <p className="text-slate-300">
-                    <span className="text-slate-500">Drop · </span>
+                    <span className="text-slate-500">{t('drop_label')}</span>
                     {r.dropLocation || '—'}
                   </p>
                 </div>
@@ -153,7 +155,7 @@ const CaptainRideHistory = () => {
                   {r.paymentMethod ? <span>{String(r.paymentMethod)}</span> : null}
                 </div>
                 {passengerName ? (
-                  <p className="mt-2 text-xs text-slate-500">Passenger · {passengerName}</p>
+                  <p className="mt-2 text-xs text-slate-500">{t('passenger_with_name', { name: passengerName })}</p>
                 ) : null}
               </li>
             )

@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { CaptainDataContext } from '../context/CaptainContext'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { useLanguage } from '../i18n'
 
 const DriverProfile = () => {
+  const { t } = useLanguage()
   const { captain, setCaptain } = useContext(CaptainDataContext)
   const [upiId, setUpiId] = useState('')
   const [paymentQrUrl, setPaymentQrUrl] = useState('')
@@ -29,7 +31,7 @@ const DriverProfile = () => {
     const bFilled = bFields.filter(Boolean).length
     const hadBank = captain?.bankDetails && String(captain.bankDetails.accountNumber || '').trim()
     if (bFilled > 0 && bFilled < 4) {
-      alert('Bank details: fill all four fields (holder, account, IFSC, UPI) or clear all to remove.')
+      alert(t('bank_details_partial_alert'))
       return
     }
     setSaving(true)
@@ -52,8 +54,9 @@ const DriverProfile = () => {
       const body = stripApiEnvelope(res.data)
       const cap = body?.captain ?? body
       if (cap && setCaptain) setCaptain((prev) => ({ ...(prev || {}), ...cap }))
+      alert(t('saved'))
     } catch (e) {
-      alert(e.response?.data?.message || e.message || 'Save failed')
+      alert(e.response?.data?.message || e.message || t('save_failed'))
     } finally {
       setSaving(false)
     }
@@ -63,7 +66,7 @@ const DriverProfile = () => {
     || (captain?.fullname
       ? `${captain.fullname.firstname || ''} ${captain.fullname.lastname || ''}`.trim()
       : '')
-    || 'Driver'
+    || t('driver')
 
   return (
     <div className="min-h-dvh min-h-screen bg-black text-white pb-24">
@@ -72,8 +75,8 @@ const DriverProfile = () => {
           <i className="ri-arrow-left-line text-lg" />
         </Link>
         <div>
-          <h1 className="text-lg font-semibold">Profile</h1>
-          <p className="text-xs text-zinc-400">Account & vehicle</p>
+          <h1 className="text-lg font-semibold">{t('profile')}</h1>
+          <p className="text-xs text-zinc-400">{t('account_vehicle')}</p>
         </div>
       </header>
 
@@ -92,53 +95,53 @@ const DriverProfile = () => {
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-4 text-sm">
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Passenger payments</p>
-            <label className="block text-xs text-zinc-400 mb-1">Your UPI ID</label>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{t('passenger_payments')}</p>
+            <label className="block text-xs text-zinc-400 mb-1">{t('your_upi_id')}</label>
             <input
               className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
-              placeholder="you@paytm"
+              placeholder={t('upi_placeholder')}
             />
-            <label className="block text-xs text-zinc-400 mb-1">Payment QR (image URL or data URL)</label>
+            <label className="block text-xs text-zinc-400 mb-1">{t('payment_qr_label')}</label>
             <input
               className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 text-xs"
               value={paymentQrUrl}
               onChange={(e) => setPaymentQrUrl(e.target.value)}
-              placeholder="https://… or data:image/…"
+              placeholder={t('payment_qr_placeholder')}
             />
             <div className="border-t border-zinc-800 pt-4 mt-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">Bank payouts</p>
-              <label className="block text-xs text-zinc-400 mb-1">Account holder</label>
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">{t('bank_payouts')}</p>
+              <label className="block text-xs text-zinc-400 mb-1">{t('account_holder')}</label>
               <input
                 className="mb-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
                 value={accountHolderName}
                 onChange={(e) => setAccountHolderName(e.target.value)}
-                placeholder="Name as per bank"
+                placeholder={t('name_as_per_bank')}
               />
-              <label className="block text-xs text-zinc-400 mb-1">Account number</label>
+              <label className="block text-xs text-zinc-400 mb-1">{t('account_number')}</label>
               <input
                 className="mb-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
                 inputMode="numeric"
-                placeholder="9–18 digits"
+                placeholder={t('digits_9_18')}
               />
-              <label className="block text-xs text-zinc-400 mb-1">IFSC</label>
+              <label className="block text-xs text-zinc-400 mb-1">{t('ifsc')}</label>
               <input
                 className="mb-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 uppercase"
                 value={ifscCode}
                 onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                placeholder="HDFC0001234"
+                placeholder={t('ifsc_example_placeholder')}
               />
-              <label className="block text-xs text-zinc-400 mb-1">UPI (bank record)</label>
+              <label className="block text-xs text-zinc-400 mb-1">{t('upi_bank_record')}</label>
               <input
                 className="mb-3 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100"
                 value={bankUpiId}
                 onChange={(e) => setBankUpiId(e.target.value)}
-                placeholder="Same as passenger UPI if one account"
+                placeholder={t('upi_same_as_passenger_ph')}
               />
-              <p className="text-[11px] text-zinc-500 mb-2">Clear all four bank fields and save to remove stored bank details.</p>
+              <p className="text-[11px] text-zinc-500 mb-2">{t('clear_bank_fields_hint')}</p>
             </div>
             <button
               type="button"
@@ -146,30 +149,30 @@ const DriverProfile = () => {
               onClick={savePayee}
               className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-medium text-white disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save payment details'}
+              {saving ? t('saving') : t('save_payment_details')}
             </button>
           </div>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-3 text-sm">
           <div className="flex justify-between gap-2 border-b border-zinc-800 pb-2">
-            <span className="text-zinc-500">Email</span>
+            <span className="text-zinc-500">{t('email')}</span>
             <span className="text-right text-zinc-200">{captain?.email || '—'}</span>
           </div>
           <div className="flex justify-between gap-2 border-b border-zinc-800 pb-2">
-            <span className="text-zinc-500">City</span>
+            <span className="text-zinc-500">{t('city')}</span>
             <span className="text-right text-zinc-200">{captain?.city || '—'}</span>
           </div>
           <div className="flex justify-between gap-2 border-b border-zinc-800 pb-2">
-            <span className="text-zinc-500">Vehicle</span>
+            <span className="text-zinc-500">{t('vehicle')}</span>
             <span className="text-right text-zinc-200">
               {captain?.vehicleType || '—'} · {captain?.vehicleNumber || '—'}
             </span>
           </div>
           <div className="flex justify-between gap-2">
-            <span className="text-zinc-500">Status</span>
+            <span className="text-zinc-500">{t('status')}</span>
             <span className="text-right capitalize text-emerald-400">
-              {captain?.status === 'active' ? 'Online-ready' : captain?.status || '—'}
+              {captain?.status === 'active' ? t('online_ready') : captain?.status || '—'}
             </span>
           </div>
         </div>
@@ -178,7 +181,7 @@ const DriverProfile = () => {
           to="/captain/logout"
           className="flex w-full items-center justify-center rounded-2xl border border-zinc-700 bg-zinc-900 py-3 text-sm font-medium text-zinc-200 hover:bg-zinc-800"
         >
-          Log out
+          {t('log_out')}
         </Link>
       </div>
     </div>

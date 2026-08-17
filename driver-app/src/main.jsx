@@ -7,6 +7,7 @@ import UserContext from './context/UserContext';
 import CaptainContext from './context/CaptainContext';
 import SocketProvider from './context/SocketContext';
 import { initSentry } from './initSentry';
+import { LanguageProvider } from './i18n'
 
 void initSentry();
 
@@ -16,7 +17,9 @@ createRoot(document.getElementById('root')).render(
     <CaptainContext>
       <UserContext>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <App />
+          <LanguageProvider>
+            <App />
+          </LanguageProvider>
         </BrowserRouter>
       </UserContext>
     </CaptainContext>

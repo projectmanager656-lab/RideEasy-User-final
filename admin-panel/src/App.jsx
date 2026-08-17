@@ -11,7 +11,7 @@ const AdminProtectWrapper = lazy(() => import('./pages/AdminProtectWrapper'))
  */
 const App = () => {
   return (
-    <div className="min-h-dvh min-h-screen bg-white text-black">
+    <div className="min-h-dvh min-h-screen bg-white text-black text-slate-900">
       <Suspense fallback={<div className="h-screen flex items-center justify-center text-neutral-600 text-sm bg-white">Loading admin…</div>}>
         <Routes>
           <Route path="/" element={<Navigate to="/admin" replace />} />

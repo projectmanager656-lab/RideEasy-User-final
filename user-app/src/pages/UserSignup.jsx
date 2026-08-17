@@ -5,8 +5,10 @@ import { apiClient } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { signupBankClientError } from '../utils/signupBankValidation'
+import { useLanguage } from '../i18n'
 
 const UserSignup = () => {
+  const { t } = useLanguage()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -79,7 +81,7 @@ const UserSignup = () => {
           setUpiId('')
           setReferredByCode('')
         } else {
-          setFormError('Registration response missing user or token.')
+          setFormError(t('registration_response_missing'))
         }
       }
     } catch (error) {
@@ -98,7 +100,7 @@ const UserSignup = () => {
           className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-emerald-500"
           aria-hidden
         />
-        <p className="text-sm text-zinc-400">Loading…</p>
+        <p className="text-sm text-zinc-400">{t('loading')}</p>
       </div>
     )
   }
@@ -118,32 +120,32 @@ const UserSignup = () => {
               {formError}
             </div>
           ) : null}
-          <h3 className="mb-2 text-sm font-medium text-zinc-400">Your name</h3>
+          <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('your_name')}</h3>
           <input
             required
             minLength={2}
             className={field}
             type="text"
-            placeholder="Full name"
+            placeholder={t('full_name')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <h3 className="mb-2 text-sm font-medium text-zinc-400">Phone</h3>
+          <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('phone')}</h3>
           <input
             required
             className={field}
             type="tel"
-            placeholder="10-digit mobile"
+            placeholder={t('mobile_10_digit')}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
           />
-          <h3 className="mb-2 text-sm font-medium text-zinc-400">City</h3>
+          <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('city')}</h3>
           <select value={city} onChange={(e) => setCity(e.target.value)} className={`${field} mb-4`}>
             <option value="Kolhapur">Kolhapur</option>
             <option value="Ichalkaranji">Ichalkaranji</option>
             <option value="Sangli">Sangli</option>
           </select>
-          <h3 className="mb-2 text-sm font-medium text-zinc-400">Email</h3>
+          <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('email')}</h3>
           <input
             required
             type="email"
@@ -153,16 +155,16 @@ const UserSignup = () => {
             className={field}
           />
           <div className="mb-6 rounded-xl border-2 border-emerald-600/40 bg-zinc-900/70 p-4 ring-1 ring-emerald-500/20">
-            <h3 className="mb-1 text-base font-semibold text-emerald-300">बँक तपशील (साइनअपसाठी आवश्यक)</h3>
+            <h3 className="mb-1 text-base font-semibold text-emerald-300">{t('bank_details_title')}</h3>
             <p className="mb-3 text-xs text-zinc-400 leading-relaxed">
-              खाली चारही फील्ड भरा — खातेदाराचे नाव, खाते क्रमांक, IFSC, UPI. हे तपशील राइड पेमेंट / वेरिफिकेशनसाठी वापरले जातात.
+              {t('bank_details_hint')}
             </p>
             <input
               required
               minLength={2}
               className={`${field} mb-3`}
               type="text"
-              placeholder="खातेदाराचे नाव / Account holder name"
+              placeholder={t('account_holder_name_ph')}
               value={accountHolderName}
               onChange={(e) => setAccountHolderName(e.target.value)}
             />
@@ -173,7 +175,7 @@ const UserSignup = () => {
               className={`${field} mb-3`}
               type="text"
               inputMode="numeric"
-              placeholder="खाते क्रमांक / Account number (9–18 अंक)"
+              placeholder={t('account_number_ph')}
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ''))}
             />
@@ -183,7 +185,7 @@ const UserSignup = () => {
               maxLength={11}
               className={`${field} mb-3 uppercase`}
               type="text"
-              placeholder="IFSC (उदा. HDFC0001234)"
+              placeholder={t('ifsc_ph')}
               value={ifscCode}
               onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
             />
@@ -192,47 +194,47 @@ const UserSignup = () => {
               minLength={5}
               className={field}
               type="text"
-              placeholder="UPI ID (उदा. नाव@okaxis)"
+              placeholder={t('upi_id_ph')}
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
             />
           </div>
-          <h3 className="mb-2 text-sm font-medium text-zinc-400">Password</h3>
+          <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('password')}</h3>
           <input
             required
             minLength={6}
             type="password"
-            placeholder="Min 6 characters"
+            placeholder={t('min_6_chars')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={field}
           />
           <div className="mb-6">
-            <h3 className="mb-2 text-sm font-medium text-zinc-400">Referral code (optional)</h3>
+            <h3 className="mb-2 text-sm font-medium text-zinc-400">{t('referral_optional')}</h3>
             <input
               className={`${field} uppercase`}
               type="text"
-              placeholder="Enter friend's referral code"
+              placeholder={t('friends_referral_ph')}
               value={referredByCode}
               onChange={(e) => setReferredByCode(e.target.value.toUpperCase())}
             />
-            <p className="mt-1 text-xs text-zinc-500">Valid referral code ने signup केल्यावर first successful ride payment वर 50 off मिळेल.</p>
+            <p className="mt-1 text-xs text-zinc-500">{t('referral_hint')}</p>
           </div>
           <p className="mb-3 text-xs text-zinc-500">
-            वरील बँक तपशील व इतर फील्ड भरून &quot;Create account&quot; दाबा. Verification नंतरच खाते सक्रिय होईल.
+            {t('signup_note')}
           </p>
           <button
             disabled={loading}
             type="submit"
             className="w-full rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
           >
-            {loading ? 'Creating...' : 'Create account'}
+            {loading ? t('creating') : t('create_account')}
           </button>
         </form>
         <p className="mt-6 text-center text-sm text-zinc-500">
-          Already have an account?{' '}
+          {t('already_have_account')}{' '}
           <Link to="/login" className="font-medium text-emerald-400 hover:text-emerald-300">
-            Login here
+            {t('login_here')}
           </Link>
         </p>
       </div>

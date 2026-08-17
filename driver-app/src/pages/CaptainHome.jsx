@@ -14,21 +14,23 @@ import { RIDE_REQUEST, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/ride
 import { stripApiEnvelope } from '../utils/apiBody'
 import { useDriverLocationSocket } from '../hooks/useDriverLocationSocket'
 import { ridePickupInServiceArea, fallbackCoordsForCaptainCity } from '../utils/serviceArea'
+import { useLanguage } from '../i18n'
 
 const LOCATION_EMIT_MS = 2000
 const PENDING_POLL_MS = 4000
 const LAST_COMPLETED_KEY = 'rideeasy_driver_last_completed_ride'
 
-function geoErrorMessage (err) {
-  if (!err) return 'Location unavailable.'
+function geoErrorMessage (err, t) {
+  if (!err) return t('location_unavailable')
   const code = err.code
-  if (code === 1) return 'Location permission denied. Enable location for this app in browser or system settings.'
-  if (code === 2) return 'Location unavailable. Try moving to an area with better GPS signal.'
-  if (code === 3) return 'Location request timed out.'
-  return err.message || 'Location error.'
+  if (code === 1) return t('location_permission_denied_full')
+  if (code === 2) return t('location_unavailable_signal')
+  if (code === 3) return t('location_request_timed_out')
+  return err.message || t('location_error')
 }
 
 const CaptainHome = () => {
+    const { t } = useLanguage()
     const [ ridePopupPanel, setRidePopupPanel ] = useState(false)
     const [ confirmRidePopupPanel, setConfirmRidePopupPanel ] = useState(false)
     const [ acceptSuccessOpen, setAcceptSuccessOpen ] = useState(false)
@@ -85,7 +87,7 @@ const CaptainHome = () => {
         onPosition: (loc) => {
             if (activeRideIdRef.current) setCaptainGps(loc)
         },
-        onGeoError: (err) => setGeoError(err ? geoErrorMessage(err) : ''),
+        onGeoError: (err) => setGeoError(err ? geoErrorMessage(err, t) : ''),
     })
 
     const rideMapCoords = useMemo(() => {
@@ -112,11 +114,11 @@ const CaptainHome = () => {
         if (!navigator.geolocation) return
         const id = navigator.geolocation.watchPosition(
             (p) => setCaptainGps({ lat: p.coords.latitude, lng: p.coords.longitude }),
-            (err) => setGeoError(geoErrorMessage(err)),
+            (err) => setGeoError(geoErrorMessage(err, t)),
             { enableHighAccuracy: true, maximumAge: 10_000 }
         )
         return () => navigator.geolocation.clearWatch(id)
-    }, [ ride?._id, onlineEmit ])
+    }, [ ride?._id, onlineEmit, t ])
 
     useEffect(() => {
         if (!socket || !captain?._id) return
@@ -319,14 +321,14 @@ const CaptainHome = () => {
                         return
                     }
                     if (assigned && assigned !== capId) {
-                        alert('This ride was taken by another driver.')
+                        alert(t('ride_taken_by_another_driver'))
                         setRide(null)
                         setRidePopupPanel(false)
                         return
                     }
                 } catch { /* fall through */ }
             }
-            alert(err.response?.data?.message || err.message || 'Failed to accept ride.')
+            alert(err.response?.data?.message || err.message || t('failed_to_accept_ride'))
             setRidePopupPanel(false)
         }
     }
@@ -340,7 +342,7 @@ const CaptainHome = () => {
             setAcceptSuccessOpen(false)
             setRide(null)
         } catch (err) {
-            alert(err.response?.data?.message || err.message || 'Reject failed')
+            alert(err.response?.data?.message || err.message || t('reject_failed'))
         }
     }
 
@@ -351,16 +353,16 @@ const CaptainHome = () => {
         <div className="flex min-h-[calc(100dvh-4rem)] flex-col bg-black text-white">
             <header className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 border-b border-zinc-800">
                 <div>
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">Driver</p>
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">{t('driver')}</p>
                     <div className="flex flex-wrap items-center gap-2">
-                        <h1 className="text-lg font-semibold sm:text-xl">Dashboard</h1>
+                        <h1 className="text-lg font-semibold sm:text-xl">{t('dashboard')}</h1>
                         {captain?.status === 'active' ? (
                             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
-                                Online
+                                {t('online')}
                             </span>
                         ) : (
                             <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                                Offline
+                                {t('offline')}
                             </span>
                         )}
                     </div>
@@ -369,14 +371,14 @@ const CaptainHome = () => {
                     <Link
                         to="/history"
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-                        aria-label="Trip history"
+                        aria-label={t('trip_history')}
                     >
                         <i className="text-lg ri-history-line" />
                     </Link>
                     <Link
                         to="/captain/logout"
                         className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
-                        aria-label="Logout"
+                        aria-label={t('logout')}
                     >
                         <i className="text-lg ri-logout-box-r-line" />
                     </Link>
@@ -391,7 +393,7 @@ const CaptainHome = () => {
             {subscriptionReminders.length > 0 ? (
                 <div className="shrink-0 border-b border-amber-800 bg-amber-950/80 px-4 py-2 text-xs text-amber-100 sm:px-6">
                     {subscriptionReminders.map((r, idx) => (
-                        <p key={`${idx}-${r?.level || 'note'}`}>{r?.message || 'Subscription update available.'}</p>
+                        <p key={`${idx}-${r?.level || 'note'}`}>{r?.message || t('subscription_update_available')}</p>
                     ))}
                 </div>
             ) : null}
@@ -416,13 +418,13 @@ const CaptainHome = () => {
             <section className="flex-1 min-h-0 overflow-y-auto rounded-t-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-[0_-12px_40px_rgba(0,0,0,0.4)] px-4 py-4 sm:px-6 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 {isPlanExpired ? (
                     <div className="mb-3 rounded-xl border border-amber-700/50 bg-amber-950/40 p-3 text-amber-100">
-                        <p className="text-sm font-semibold">Plan expired</p>
-                        <p className="mt-1 text-xs text-amber-200">Renew your subscription to go online and accept rides.</p>
+                        <p className="text-sm font-semibold">{t('plan_expired')}</p>
+                        <p className="mt-1 text-xs text-amber-200">{t('renew_to_go_online')}</p>
                     </div>
                 ) : null}
                 <CaptainDetails />
                 {subscriptionStatus && !subscriptionStatus.active && (
-                    <p className="text-amber-600 text-sm mt-3">Activate subscription to receive ride requests.</p>
+                    <p className="text-amber-600 text-sm mt-3">{t('activate_subscription_to_receive')}</p>
                 )}
             </section>
 

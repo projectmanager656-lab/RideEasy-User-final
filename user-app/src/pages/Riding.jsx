@@ -10,10 +10,12 @@ import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { useLanguage } from '../i18n'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
 const Riding = () => {
+    const { t } = useLanguage()
     const location = useLocation()
     const { ride: initialRide } = location.state || {}
     const [ride, setRide] = useState(initialRide)
@@ -183,7 +185,7 @@ const Riding = () => {
                     }
                 })
                 .catch((e) => {
-                    const msg = e.response?.data?.message || e.message || 'Could not refresh ride'
+                    const msg = e.response?.data?.message || e.message || t('could_not_refresh_ride')
                     setRideFetchError(msg)
                 })
         }
@@ -191,7 +193,7 @@ const Riding = () => {
         const intervalMs = ride?.status === 'started' ? 4_000 : 12_000
         const id = setInterval(poll, intervalMs)
         return () => clearInterval(id)
-    }, [ride?._id, ride?.status])
+    }, [ride?._id, ride?.status, t])
 
     useEffect(() => {
         if (ride?.status !== 'completed' || !ride?._id) return
@@ -205,10 +207,10 @@ const Riding = () => {
                 setRide(res.data)
             })
             .catch((e) => {
-                const msg = e.response?.data?.message || e.message || 'Could not refresh ride'
+                const msg = e.response?.data?.message || e.message || t('could_not_refresh_ride')
                 setRideFetchError(msg)
             })
-    }, [ride?._id, ride?.status])
+    }, [ride?._id, ride?.status, t])
 
     const openInGoogleMaps = () => {
         const dest = dropCoords || (ride?.dropLocation ? encodeURIComponent(ride.dropLocation) : null)
@@ -226,9 +228,9 @@ const Riding = () => {
         && dropCoords?.lat != null
     const paymentLabel = useMemo(() => {
         const m = ride?.paymentMethod || 'Cash'
-        if (m === 'UPI') return 'UPI / Online'
+        if (m === 'UPI') return t('upi_online')
         return m
-    }, [ride?.paymentMethod])
+    }, [ride?.paymentMethod, t])
 
     const confirmRidePayment = useCallback(async (method) => {
         if (!ride?._id) return
@@ -240,12 +242,12 @@ const Riding = () => {
             })
             if (data?.ride) setRide(data.ride)
         } catch (e) {
-            const message = e.response?.data?.message || e.message || 'Payment failed'
+            const message = e.response?.data?.message || e.message || t('payment_failed')
             setPayError(message)
         } finally {
             setPaying(false)
         }
-    }, [ride?._id])
+    }, [ride?._id, t])
 
     const submitRating = useCallback(async (value, comment) => {
         if (!ride?._id) return
@@ -261,11 +263,11 @@ const Riding = () => {
             })
             setRide(res.data)
         } catch (err) {
-            setRateError(err.response?.data?.message || err.message || 'Failed to submit rating')
+            setRateError(err.response?.data?.message || err.message || t('failed_submit_rating'))
         } finally {
             setSubmittingRating(false)
         }
-    }, [ride?._id])
+    }, [ride?._id, t])
 
     const goHome = useCallback(() => {
         navigate('/home', { replace: true })
@@ -323,7 +325,7 @@ const Riding = () => {
                         className="absolute bottom-3 left-3 right-3 z-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
                     >
                         <i className="ri-navigation-line" />
-                        Open in Google Maps
+                        {t('open_google_maps')}
                     </button>
                 )}
             </div>
@@ -343,7 +345,7 @@ const Riding = () => {
                     <div className='text-right min-w-0'>
                         <h2 className='text-lg font-medium capitalize text-white'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
                         <h4 className='text-xl font-semibold -mt-1 -mb-1 text-zinc-100'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
-                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : 'Vehicle'}</p>
+                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
                     </div>
                 </div>
 
@@ -352,14 +354,14 @@ const Riding = () => {
                         <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
                             <i className="text-lg ri-map-pin-user-fill text-emerald-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>Pickup</h3>
+                                <h3 className='text-lg font-medium text-white'>{t('pickup')}</h3>
                                 <p className='text-sm -mt-1 text-zinc-400'>{ride?.pickupLocation || '—'}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
                             <i className="text-lg ri-map-pin-2-fill text-rose-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>Drop</h3>
+                                <h3 className='text-lg font-medium text-white'>{t('drop')}</h3>
                                 <p className='text-sm -mt-1 text-zinc-400'>{ride?.dropLocation || ride?.destination}</p>
                             </div>
                         </div>
@@ -373,7 +375,7 @@ const Riding = () => {
                     </div>
                 </div>
                 <button className='w-full mt-5 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-400 font-semibold p-3' disabled>
-                    Payment & receipt when the driver ends the ride
+                    {t('payment_receipt_when_ends')}
                 </button>
             </div>
         </div>

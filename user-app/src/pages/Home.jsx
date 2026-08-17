@@ -16,6 +16,7 @@ import LiveTracking from '../components/LiveTracking';
 import RideMap from '../components/RideMap';
 import { getAppLogoUrl } from '../config/externalEndpoints'
 import { SERVICE_AREA_USER_MESSAGE, SERVICE_AREAS } from '../utils/serviceArea'
+import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
@@ -51,6 +52,7 @@ function normalizeRideStatus(s) {
 }
 
 const Home = () => {
+    const { t } = useLanguage()
     const [ pickup, setPickup ] = useState('')
     const [ destination, setDestination ] = useState('')
     const [ serviceCity, setServiceCity ] = useState(readStoredServiceCity)
@@ -246,7 +248,7 @@ const Home = () => {
             }
             if (!hasShownAcceptAlert) {
                 setHasShownAcceptAlert(true)
-                alert("Driver has accepted your ride")
+                alert(t('driver_accepted_ride'))
             }
         };
 
@@ -379,7 +381,7 @@ const Home = () => {
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
         }
-    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer]);
+    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer, t]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -450,7 +452,7 @@ const Home = () => {
                     syncRideFromServer(data._id)
                     if (!hasShownAcceptAlert) {
                         setHasShownAcceptAlert(true)
-                        alert("Driver has accepted your ride")
+                        alert(t('driver_accepted_ride'))
                     }
                 }
             } catch {
@@ -464,7 +466,7 @@ const Home = () => {
             cancelled = true
             clearInterval(id)
         }
-    }, [ride, hasShownAcceptAlert, syncRideFromServer]);
+    }, [ride, hasShownAcceptAlert, syncRideFromServer, t]);
 
 
     const handlePickupChange = async (e) => {
@@ -625,7 +627,7 @@ const Home = () => {
         const p = (pickup || '').trim()
         const d = (destination || '').trim()
         if (!p || !d) {
-            alert('Please enter pickup and drop location to get fare.')
+            alert(t('enter_pickup_drop_fare'))
             return
         }
         setPanelOpen(false)
@@ -647,7 +649,7 @@ const Home = () => {
             setPickupCoords(pu)
             setDropCoords(du)
             if (!pu || !du) {
-                setBookingError('Could not resolve pickup or drop location.')
+                setBookingError(t('could_not_resolve_location'))
                 return
             }
             const response = await apiClient.get('/rides/get-fare', withAuth({
@@ -674,7 +676,7 @@ const Home = () => {
         const vehicleTypeNorm = u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO')
         const price = fare[vehicleTypeNorm] ?? fare[vehicleType]
         if (price == null) {
-            alert('Please select pickup, drop and vehicle type again.')
+            alert(t('select_pickup_drop_vehicle'))
             return
         }
         try {
@@ -723,7 +725,7 @@ const Home = () => {
 
     const continueFromVehiclePanel = () => {
         if (!vehicleType) {
-            alert('Please choose a ride')
+            alert(t('please_choose_ride'))
             return
         }
         setVehiclePanel(false)
@@ -771,10 +773,10 @@ const Home = () => {
                     }} className={`absolute right-6 top-6 text-2xl transition-opacity duration-300 ${panelOpen ? 'opacity-100' : 'opacity-0'}`}>
                         <i className="ri-arrow-down-wide-line"></i>
                     </h5>
-                    <h4 className='text-2xl font-semibold text-white'>Find a trip</h4>
+                    <h4 className='text-2xl font-semibold text-white'>{t('find_a_trip')}</h4>
                     <p className="mt-1 text-xs text-slate-500">{SERVICE_AREA_USER_MESSAGE}</p>
                     <div className="mt-3">
-                        <label htmlFor="user-service-city" className="mb-1 block text-xs font-medium text-zinc-500">City for search</label>
+                        <label htmlFor="user-service-city" className="mb-1 block text-xs font-medium text-zinc-500">{t('city_for_search')}</label>
                         <select
                             id="user-service-city"
                             value={serviceCity}
@@ -798,7 +800,7 @@ const Home = () => {
                         submitHandler(e)
                     }}>
                         <div className="mb-3">
-                            <label htmlFor="user-pickup" className="mb-1 block text-xs font-medium text-zinc-500">From</label>
+                            <label htmlFor="user-pickup" className="mb-1 block text-xs font-medium text-zinc-500">{t('from')}</label>
                             <input
                                 id="user-pickup"
                                 onClick={() => {
@@ -810,11 +812,11 @@ const Home = () => {
                                 className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
                                 type="text"
                                 autoComplete="off"
-                                placeholder='Pick-up address'
+                                placeholder={t('pickup_address')}
                             />
                         </div>
                         <div>
-                            <label htmlFor="user-drop" className="mb-1 block text-xs font-medium text-zinc-500">To</label>
+                            <label htmlFor="user-drop" className="mb-1 block text-xs font-medium text-zinc-500">{t('to')}</label>
                             <input
                                 id="user-drop"
                                 onClick={() => {
@@ -826,7 +828,7 @@ const Home = () => {
                                 className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
                                 type="text"
                                 autoComplete="off"
-                                placeholder='Drop / destination'
+                                placeholder={t('drop_destination')}
                             />
                         </div>
                         {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
@@ -841,7 +843,7 @@ const Home = () => {
                                             fetchPickupCoords(a)
                                         }}
                                     >
-                                        Home → pickup
+                                        {t('home_to_pickup')}
                                     </button>
                                 ) : null}
                                 {currentUser.savedAddresses?.work ? (
@@ -854,7 +856,7 @@ const Home = () => {
                                             fetchDropCoords(a)
                                         }}
                                     >
-                                        Work → drop
+                                        {t('work_to_drop')}
                                     </button>
                                 ) : null}
                                 {currentUser.savedAddresses?.home ? (
@@ -867,7 +869,7 @@ const Home = () => {
                                             fetchDropCoords(a)
                                         }}
                                     >
-                                        Home → drop
+                                        {t('home_to_drop')}
                                     </button>
                                 ) : null}
                                 {currentUser.savedAddresses?.work ? (
@@ -880,7 +882,7 @@ const Home = () => {
                                             fetchPickupCoords(a)
                                         }}
                                     >
-                                        Work → pickup
+                                        {t('work_to_pickup')}
                                     </button>
                                 ) : null}
                             </div>
@@ -894,7 +896,7 @@ const Home = () => {
                             || !(destination || '').trim()
                         }
                         className='bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl mt-3 w-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed'>
-                        Find Trip
+                        {t('find_trip')}
                     </button>
                 </div>
                 )}

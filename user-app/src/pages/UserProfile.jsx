@@ -4,8 +4,10 @@ import { UserDataContext } from '../context/UserContext'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { useLanguage } from '../i18n'
 
 const UserProfile = () => {
+  const { t } = useLanguage()
   const { user, setUser, refreshUser } = useContext(UserDataContext)
   const navigate = useNavigate()
   const [ name, setName ] = useState('')
@@ -28,14 +30,14 @@ const UserProfile = () => {
     try {
       const r = await refreshUser()
       if (!r?.ok) {
-        setError('Could not refresh profile. Try again.')
+        setError(t('could_not_refresh_profile'))
       }
     } catch {
-      setError('Could not refresh profile. Try again.')
+      setError(t('could_not_refresh_profile'))
     } finally {
       setSyncing(false)
     }
-  }, [ refreshUser ])
+  }, [ refreshUser, t ])
 
   const save = async (e) => {
     e.preventDefault()
@@ -50,7 +52,7 @@ const UserProfile = () => {
       const body = stripApiEnvelope(data)
       const u = body?.user ?? body
       if (u && typeof u === 'object') setUser(u)
-      setMessage('Saved.')
+      setMessage(t('saved'))
     } catch (err) {
       setError(formatApiError(err))
     } finally {
@@ -71,15 +73,15 @@ const UserProfile = () => {
           <i className="ri-arrow-left-line text-lg" />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold">Profile</h1>
-          <p className="text-xs text-zinc-500">Your account & saved places</p>
+          <h1 className="text-lg font-semibold">{t('profile')}</h1>
+          <p className="text-xs text-zinc-500">{t('profile_subtitle')}</p>
         </div>
         <button
           type="button"
           onClick={() => void pullLatest()}
           disabled={syncing}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-          aria-label="Refresh profile"
+          aria-label={t('refresh_profile')}
         >
           <i className={`ri-refresh-line text-lg ${syncing ? 'animate-spin' : ''}`} />
         </button>
@@ -87,32 +89,32 @@ const UserProfile = () => {
 
       <div className="mx-auto max-w-md space-y-6 px-4 pt-6">
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Account</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t('account')}</h2>
           <p className="mt-3 text-sm text-white">
-            <span className="text-zinc-500">Name · </span>
+            <span className="text-zinc-500">{t('name')} · </span>
             {user?.name || '—'}
           </p>
           <p className="mt-2 text-sm text-white">
-            <span className="text-zinc-500">Phone · </span>
+            <span className="text-zinc-500">{t('phone')} · </span>
             {user?.phone || '—'}
           </p>
           <p className="mt-2 text-sm text-white break-all">
-            <span className="text-zinc-500">Email · </span>
+            <span className="text-zinc-500">{t('email')} · </span>
             {user?.email || '—'}
           </p>
           {user?.city ? (
             <p className="mt-2 text-sm text-white">
-              <span className="text-zinc-500">City · </span>
+              <span className="text-zinc-500">{t('city')} · </span>
               {user.city}
             </p>
           ) : null}
           {uid ? (
-            <p className="mt-3 text-[11px] text-zinc-600 font-mono break-all" title="User id">
-              ID · {uid}
+            <p className="mt-3 text-[11px] text-zinc-600 font-mono break-all" title={t('user_id')}>
+              {t('id')} · {uid}
             </p>
           ) : null}
           <p className="mt-3 text-xs text-zinc-600">
-            Phone and email are used to sign in. Only your display name and saved addresses can be updated below.
+            {t('profile_edit_note')}
           </p>
         </section>
 
@@ -129,34 +131,34 @@ const UserProfile = () => {
           ) : null}
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500">Display name</label>
+            <label className="block text-xs font-medium text-zinc-500">{t('display_name')}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
-              placeholder="Your name"
+              placeholder={t('your_name')}
               minLength={2}
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500">Home address</label>
+            <label className="block text-xs font-medium text-zinc-500">{t('home_address')}</label>
             <input
               value={home}
               onChange={(e) => setHome(e.target.value)}
               className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
-              placeholder="Quick pick on the map screen"
+              placeholder={t('quick_pick_map')}
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-zinc-500">Work address</label>
+            <label className="block text-xs font-medium text-zinc-500">{t('work_address')}</label>
             <input
               value={work}
               onChange={(e) => setWork(e.target.value)}
               className="mt-1 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-white placeholder:text-zinc-600 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
-              placeholder="Quick pick on the map screen"
+              placeholder={t('quick_pick_map')}
             />
           </div>
 
@@ -165,7 +167,7 @@ const UserProfile = () => {
             disabled={saving || syncing}
             className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? t('saving') : t('save_changes')}
           </button>
         </form>
 
@@ -174,7 +176,7 @@ const UserProfile = () => {
           onClick={logout}
           className="w-full rounded-xl border border-zinc-700 bg-zinc-950 py-3 text-sm font-semibold text-zinc-200 hover:bg-zinc-900"
         >
-          Log out
+          {t('log_out')}
         </button>
       </div>
     </div>

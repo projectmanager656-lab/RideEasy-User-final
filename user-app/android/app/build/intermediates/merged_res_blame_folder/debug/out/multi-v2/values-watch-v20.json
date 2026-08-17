@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.rideeasy.passenger.app-mergeDebugResources-27:/values-watch-v20/values-watch-v20.xml",
+            "outputFile": "com.rideeasy.passenger.app-mergeDebugResources-24:/values-watch-v20/values-watch-v20.xml",
             "map": [
                 {
-                    "source": "/Users/jaid/.gradle/caches/transforms-3/bb1f4105b1b1f6864d9147d2ddd4cb47/transformed/appcompat-1.6.1/res/values-watch-v20/values-watch-v20.xml",
+                    "source": "/Users/jaid/.gradle/caches/transforms-3/4ce7c60d257b8629ab4c81cf615a92a1/transformed/appcompat-1.6.1/res/values-watch-v20/values-watch-v20.xml",
                     "from": {
                         "startLines": "2,5,8",
                         "startColumns": "4,4,4",
@@ -23,7 +23,7 @@
                     }
                 },
                 {
-                    "source": "/Users/jaid/.gradle/caches/transforms-3/85cebf61215df7a72c73de143ebb802a/transformed/core-splashscreen-1.0.1/res/values-watch-v20/values-watch-v20.xml",
+                    "source": "/Users/jaid/.gradle/caches/transforms-3/02af67d3594ada2148314bae886ebee9/transformed/core-splashscreen-1.0.1/res/values-watch-v20/values-watch-v20.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",

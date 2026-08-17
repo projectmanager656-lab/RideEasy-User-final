@@ -40,14 +40,6 @@
     <color name="colorAccent" ns1:ignore="UnusedResources">#FF4081</color>
     <color name="colorPrimary" ns1:ignore="UnusedResources">#3F51B5</color>
     <color name="colorPrimaryDark" ns1:ignore="UnusedResources">#303F9F</color>
-    <color name="common_google_signin_btn_text_dark_default">@android:color/white</color>
-    <color name="common_google_signin_btn_text_dark_disabled">#1F000000</color>
-    <color name="common_google_signin_btn_text_dark_focused">@android:color/black</color>
-    <color name="common_google_signin_btn_text_dark_pressed">@android:color/white</color>
-    <color name="common_google_signin_btn_text_light_default">#90000000</color>
-    <color name="common_google_signin_btn_text_light_disabled">#1F000000</color>
-    <color name="common_google_signin_btn_text_light_focused">#90000000</color>
-    <color name="common_google_signin_btn_text_light_pressed">#DE000000</color>
     <color name="dim_foreground_disabled_material_dark">#80bebebe</color>
     <color name="dim_foreground_disabled_material_light">#80323232</color>
     <color name="dim_foreground_material_dark">#ffbebebe</color>
@@ -295,7 +287,6 @@
     <integer name="cancel_button_image_alpha">127</integer>
     <integer name="config_tooltipAnimTime">150</integer>
     <integer name="default_icon_animation_duration">10000</integer>
-    <integer name="google_play_services_version">12451000</integer>
     <integer name="status_bar_notification_info_maxnum">999</integer>
     <string name="abc_action_bar_home_description">Navigate home</string>
     <string name="abc_action_bar_up_description">Navigate up</string>
@@ -324,41 +315,8 @@
     <string name="abc_shareactionprovider_share_with">Share with</string>
     <string name="abc_shareactionprovider_share_with_application">Share with <ns2:g example="Mail" id="application_name">%s</ns2:g></string>
     <string name="abc_toolbar_collapse_description">Collapse</string>
-    <string name="accept">Accept</string>
-    <string name="accepted">Accepted</string>
-    <string name="access_denied_admin_role">Access denied — admin role required</string>
-    <string name="account_and_saved_places">Account &amp; saved places</string>
-    <string name="account_completes_after_verification">Account completes after verification.</string>
-    <string name="account_holder_name_placeholder">Account holder name</string>
-    <string name="account_number_placeholder">Account number (9–18 digits)</string>
-    <string name="activate_subscription_to_receive_rides">Activate subscription to receive ride requests.</string>
-    <string name="activating">Activating...</string>
-    <string name="active">Active</string>
-    <string name="active_subscribed_subtitle">Active + subscribed</string>
-    <string name="add_pickup_location">Add a pick-up location</string>
-    <string name="admin_login">Admin Login</string>
-    <string name="after_driver_accepts">after a driver accepts</string>
-    <string name="all_filter">All</string>
-    <string name="all_statuses_subtitle">All statuses</string>
-    <string name="already_have_account">Already have an account?</string>
-    <string name="amount">Amount:</string>
     <string name="androidx_startup" translatable="false">androidx.startup</string>
     <string name="app_name">RideEasy Admin</string>
-    <string name="arrive_first_to_enter_otp">Arrive first to enter OTP</string>
-    <string name="arrived">Arrived</string>
-    <string name="auto">Auto</string>
-    <string name="auto_desc">Affordable auto rides</string>
-    <string name="back_to_dashboard">Back to dashboard</string>
-    <string name="back_to_home">Back to home</string>
-    <string name="bank_details_all_fields">Fill all four fields below. Bank details (required) — account holder, account number, IFSC, UPI.</string>
-    <string name="bank_details_required">Bank details (required for signup)</string>
-    <string name="bike">Bike</string>
-    <string name="bike_desc">Quick &amp; economical</string>
-    <string name="book_a_ride">Book a ride</string>
-    <string name="booking_history_not_available">Booking history not available yet. Completed rides will appear here.</string>
-    <string name="bulk_delete_failed">Bulk delete failed</string>
-    <string name="cab">Cab</string>
-    <string name="cab_desc">Comfortable cab ride</string>
     <string name="call_notification_answer_action">Answer</string>
     <string name="call_notification_answer_video_action">Video</string>
     <string name="call_notification_decline_action">Decline</string>
@@ -366,287 +324,12 @@
     <string name="call_notification_incoming_text">Incoming call</string>
     <string name="call_notification_ongoing_text">Ongoing call</string>
     <string name="call_notification_screening_text">Screening an incoming call</string>
-    <string name="cancel">Cancel</string>
-    <string name="captain">Captain</string>
-    <string name="cash">Cash</string>
-    <string name="change_payment_method_next_step">You can change payment method in the next step.</string>
-    <string name="choose_a_ride">Choose a ride</string>
-    <string name="choose_how_to_sign_in">Choose how you want to sign in and start your ride.</string>
-    <string name="choose_subscription_plan">Choose subscription plan</string>
-    <string name="city">City</string>
-    <string name="close">Close</string>
-    <string name="comment_optional">Comment (optional)</string>
-    <string name="commission_subtitle">Commission</string>
-    <string msgid="2523291102206661146" name="common_google_play_services_enable_button">Enable</string>
-    <string msgid="227660514972886228" name="common_google_play_services_enable_text"><ns2:g id="app_name">%1$s</ns2:g> won\'t work unless you enable Google Play services.</string>
-    <string msgid="5122002158466380389" name="common_google_play_services_enable_title">Enable Google Play services</string>
-    <string msgid="7153882981874058840" name="common_google_play_services_install_button">Install</string>
-    <string name="common_google_play_services_install_text"><ns2:g id="app_name">%1$s</ns2:g> won\'t run without Google Play services, which are missing from your device.</string>
-    <string msgid="7215213145546190223" name="common_google_play_services_install_title">Get Google Play services</string>
-    <string name="common_google_play_services_notification_channel_name">Google Play services availability</string>
-    <string name="common_google_play_services_notification_ticker">Google Play services error</string>
-    <string name="common_google_play_services_unknown_issue"><ns2:g id="app_name">%1$s</ns2:g> is having trouble with Google Play services. Please try again.</string>
-    <string name="common_google_play_services_unsupported_text"><ns2:g id="app_name">%1$s</ns2:g> won\'t run without Google Play services, which are not supported by your device.</string>
-    <string msgid="6556509956452265614" name="common_google_play_services_update_button">Update</string>
-    <string msgid="9053896323427875356" name="common_google_play_services_update_text"><ns2:g id="app_name">%1$s</ns2:g> won\'t run unless you update Google Play services.</string>
-    <string msgid="6006316683626838685" name="common_google_play_services_update_title">Update Google Play services</string>
-    <string name="common_google_play_services_updating_text"><ns2:g id="app_name">%1$s</ns2:g> won\'t run without Google Play services, which are currently updating.</string>
-    <string name="common_google_play_services_wear_update_text">New version of Google Play services needed. It will update itself shortly.</string>
-    <string name="common_open_on_phone">Open on phone</string>
-    <string name="common_signin_button_text">Sign in</string>
-    <string name="common_signin_button_text_long">Sign in with Google</string>
-    <string name="complete_payment_to_confirm_ride">Complete payment to confirm your ride</string>
-    <string name="complete_ride">Complete Ride</string>
-    <string name="complete_upi_payment_first">Complete UPI / online payment first, or use QR + Confirm on desktop.</string>
-    <string name="completed">Completed</string>
-    <string name="completed_rides_subtitle">Completed rides</string>
-    <string name="confirm_bulk_delete_drivers">Permanently delete %s driver(s)?</string>
-    <string name="confirm_bulk_delete_rides">Permanently delete %s ride record(s)?</string>
-    <string name="confirm_bulk_delete_users">Permanently delete %s user(s)?</string>
-    <string name="confirm_delete_driver">Do you want to permanently delete this driver from database? This cannot be undone.</string>
-    <string name="confirm_delete_ride">Do you want to permanently delete this ride record? This cannot be undone.</string>
-    <string name="confirm_delete_user">Do you want to permanently delete this user from database? This cannot be undone.</string>
-    <string name="confirm_remove_driver_approval">Remove driver approval? They will need approval again before going online.</string>
-    <string name="confirm_ride_with_amount">Confirm Ride (₹%s)</string>
-    <string name="confirm_this_ride_to_start">Confirm this ride to Start</string>
-    <string name="confirm_your_ride">Confirm your ride</string>
-    <string name="console_covers_text">This console covers users, drivers (captains), rides, payments from completed rides, and pricing.</string>
-    <string name="continue_as_driver">Continue as Driver</string>
-    <string name="continue_as_user">Continue as User</string>
-    <string name="continue_with">Continue with %s</string>
-    <string name="could_not_complete_ride">Could not complete ride. Please start ride first.</string>
-    <string name="could_not_load_subscription_prices">Could not load subscription prices. Check your connection and try again.</string>
-    <string name="could_not_send_otp">Could not send OTP</string>
-    <string name="could_not_start_ride">Could not start ride</string>
-    <string name="could_not_update_status">Could not update status</string>
-    <string name="create_account">Create account</string>
-    <string name="create_driver_account">Create Driver Account</string>
-    <string name="creating">Creating…</string>
     <string name="custom_url_scheme">com.rideeasy.admin</string>
-    <string name="customers_subtitle">Customers</string>
-    <string name="dashboard">Dashboard</string>
-    <string name="delete_failed">Delete failed</string>
-    <string name="distance">Distance</string>
-    <string name="driver">Driver</string>
-    <string name="driver_accepted_your_ride">Driver has accepted your ride</string>
-    <string name="driver_assigned">Driver assigned. Track live location on the map. Share OTP only when the driver arrives.</string>
-    <string name="driver_has_arrived">Driver has arrived. Share your OTP to start the ride.</string>
-    <string name="driver_phone_number">Driver phone number</string>
-    <string name="driver_registration">Driver Registration</string>
-    <string name="driver_with_name">Driver · %s</string>
-    <string name="drivers">Drivers</string>
-    <string name="drivers_being_notified">Drivers nearby are being notified. Your </string>
-    <string name="drop">Drop</string>
-    <string name="drop_label">Drop ·</string>
-    <string name="drop_off">Drop-off</string>
-    <string name="drop_off_not_available">Drop-off not available</string>
-    <string name="email">Email</string>
-    <string name="email_placeholder">email@example.com</string>
-    <string name="ends">Ends:</string>
-    <string name="english">English</string>
-    <string name="enter_6_digit_otp">Enter 6-digit OTP</string>
-    <string name="enter_destination">Enter your destination</string>
-    <string name="enter_friends_referral_code">Enter friend\'s referral code</string>
-    <string name="enter_otp">Enter OTP</string>
-    <string name="enter_otp_from_passenger">Enter the 6-digit OTP from the passenger.</string>
-    <string name="enter_password">Enter password</string>
-    <string name="eta_approx">ETA ~%s min</string>
-    <string name="eta_to_pickup">ETA to pickup:</string>
-    <string name="failed">Failed</string>
-    <string name="failed_to_accept_ride">Failed to accept ride.</string>
-    <string name="failed_to_mark_arrived">Failed to mark arrived</string>
-    <string name="failed_to_submit_rating">Failed to submit rating</string>
-    <string name="fare_with_price">Fare ₹%s</string>
-    <string name="find_a_trip">Find a trip</string>
-    <string name="find_trip">Find Trip</string>
-    <string name="finish_ride">Finish Ride</string>
-    <string name="finish_this_ride">Finish this Ride</string>
-    <string name="full_name">Full name</string>
-    <string name="go_online_to_receive_rides">Go online to receive rides</string>
-    <string name="gross_fare_label">GROSS FARE (₹)</string>
-    <string name="hindi">Hindi</string>
-    <string name="home">Home</string>
-    <string name="home_address">Home address</string>
-    <string name="home_to_drop">Home → drop</string>
-    <string name="home_to_pickup">Home → pickup</string>
-    <string name="ifsc_placeholder">IFSC (e.g. HDFC0001234)</string>
-    <string name="inactive_subscribe_to_accept_rides">Inactive — Subscribe to accept rides</string>
-    <string name="incl_fees">incl. fees</string>
-    <string name="install">Install</string>
-    <string name="invalid_email_or_password">Invalid email or password</string>
-    <string name="invalid_json">Invalid JSON</string>
-    <string name="invalid_server_response">Invalid response from server</string>
-    <string name="join_a_fleet">Join a fleet?</string>
-    <string name="landing_tagline">Pune &amp; Kolhapur • Safe, affordable city rides</string>
-    <string name="language">Language</string>
-    <string name="last_7_days">Last 7 days (by date)</string>
-    <string name="license_no">License no.</string>
-    <string name="license_number">License number</string>
-    <string name="live_gps_updating">Live GPS updating on map</string>
-    <string name="live_location_passenger_map">Live location · passenger map</string>
-    <string name="loading">Loading…</string>
-    <string name="loading_otp">Loading OTP…</string>
-    <string name="loading_rides">Loading rides…</string>
-    <string name="logging_in">Logging in…</string>
-    <string name="login">Login</string>
-    <string name="login_here">Login here</string>
-    <string name="login_with_phone_otp">Login with phone OTP</string>
-    <string name="logout">Log out</string>
-    <string name="looking_for_a_driver">Looking for a Driver</string>
-    <string name="marathi">Marathi</string>
-    <string name="mark_arrived_at_pickup">Mark Arrived at Pickup</string>
-    <string name="marking_arrived">Marking arrived…</string>
-    <string name="min_6_characters">Min 6 characters</string>
-    <string name="minutes_away">%s min away</string>
-    <string name="monthly">Monthly</string>
-    <string name="monthly_with_price">Monthly — ₹%s</string>
-    <string name="name">Name</string>
-    <string name="navigate">Navigate</string>
-    <string name="new_here">New here?</string>
-    <string name="new_ride_available">New Ride Available!</string>
-    <string name="no_rides_yet">No rides yet. Book one from the Ride tab.</string>
-    <string name="no_trips_yet">No trips yet. When you complete rides, they show up here.</string>
     <string name="no_webview_text">This app requires a WebView to work</string>
-    <string name="offline">Offline</string>
-    <string name="online">Online</string>
-    <string name="online_drivers_label">ONLINE DRIVERS</string>
-    <string name="online_processed_like_upi">Online is processed like UPI on the server until a payment gateway is connected.</string>
-    <string name="open_in_google_maps">Open in Google Maps</string>
-    <string name="open_navigation_to_pickup">Open navigation to pickup</string>
-    <string name="operating_city">Operating city</string>
-    <string name="otp_verification_failed">OTP verification failed</string>
-    <string name="overview">Overview</string>
     <string name="package_name">com.rideeasy.admin</string>
-    <string name="passenger_with_name">Passenger · %s</string>
-    <string name="password">Password</string>
-    <string name="pay_now">Pay Now (%s)</string>
-    <string name="pay_online_upi_apps">Pay online (UPI apps)</string>
-    <string name="pay_then_rate">Rate after making the payment.</string>
-    <string name="pay_with_upi">Pay with UPI (PhonePe/GPay)</string>
-    <string name="payment">Payment</string>
-    <string name="payment_after_ride_completion">Payment after ride completion</string>
-    <string name="payment_at_end">Payment at end</string>
-    <string name="payment_failed">Payment failed</string>
-    <string name="payment_successful_confirming">Payment successful. Confirming your ride…</string>
-    <string name="payments">Payments</string>
-    <string name="phone">Phone</string>
-    <string name="phone_10_digit">10-digit mobile</string>
-    <string name="pickup">Pickup</string>
-    <string name="pickup_label">Pickup ·</string>
-    <string name="pickup_not_available">Pickup not available</string>
-    <string name="plan">Plan:</string>
-    <string name="platform_revenue_label">PLATFORM REVENUE (₹)</string>
-    <string name="please_choose_a_ride">Please choose a ride</string>
-    <string name="please_enter_pickup_and_drop">Please enter pickup and drop location to get fare.</string>
-    <string name="please_log_in_again">Please log in again.</string>
-    <string name="please_select_pickup_drop_vehicle">Please select pickup, drop and vehicle type again.</string>
-    <string name="pricing">Pricing</string>
-    <string name="pricing_saved">Pricing saved</string>
-    <string name="processing">Processing...</string>
-    <string name="profile">Profile</string>
-    <string name="rate_your_driver">Rate your driver (1–5)</string>
-    <string name="recent_rides">Recent rides</string>
-    <string name="redirecting">Redirecting…</string>
-    <string name="referral_code_optional">Referral code (optional)</string>
-    <string name="referral_discount_hint">With a valid referral code you get ₹50 off on your first successful ride payment.</string>
-    <string name="refresh">Refresh</string>
-    <string name="refresh_list">Refresh list</string>
-    <string name="register_as_captain">Register as Captain</string>
-    <string name="registered_subtitle">Registered</string>
-    <string name="registration_failed">Registration failed</string>
-    <string name="reject">Reject</string>
-    <string name="reject_failed">Reject failed</string>
-    <string name="request_failed">Request failed</string>
-    <string name="ride">Ride</string>
-    <string name="ride_history">Ride history</string>
-    <string name="rideeasy_driver">RideEasy Driver</string>
-    <string name="rider">Rider</string>
-    <string name="rides">Rides</string>
-    <string name="route_to_drop">Route to drop</string>
-    <string name="save_changes">Save changes</string>
-    <string name="saved">Saved.</string>
-    <string name="saved_for_quick_pickup_drop">Saved for quick pickup/drop</string>
-    <string name="saving">Saving…</string>
     <string name="search_menu_title">Search</string>
-    <string name="search_placeholder">Search city, route, passenger, driver, id…</string>
-    <string name="search_users_placeholder">Search name, email, phone, city…</string>
-    <string name="searching">Searching</string>
-    <string name="select">Select</string>
-    <string name="select_language">Select Language</string>
-    <string name="select_payment_method">Select payment method</string>
-    <string name="send_otp">Send OTP</string>
-    <string name="sending_otp">Sending OTP…</string>
-    <string name="share_otp_title">Share this code with your driver to start the ride</string>
-    <string name="share_otp_when_arrives"> — share it when they arrive to start the ride.</string>
-    <string name="sign_in_as_driver">Sign in as Driver</string>
-    <string name="sign_in_as_user">Sign in as User</string>
-    <string name="signed_in_with_admin_jwt">You are signed in with admin JWT</string>
-    <string name="signing_out">Signing out…</string>
-    <string name="site">Site</string>
-    <string name="six_digit_otp">6-digit OTP</string>
-    <string name="start_ride">Start Ride</string>
-    <string name="started">Started</string>
-    <string name="status_accepted_label">Accepted</string>
-    <string name="status_arrived_label">Arrived</string>
     <string name="status_bar_notification_info_overflow">999+</string>
-    <string name="status_cancelled_label">Cancelled</string>
-    <string name="status_completed_label">Completed</string>
-    <string name="status_label">Status</string>
-    <string name="status_searching_label">Searching</string>
-    <string name="status_started_label">Started</string>
-    <string name="subscribe_failed">Subscribe failed</string>
-    <string name="subscribe_with_price">Subscribe (₹%s) — Cash</string>
-    <string name="subscription">Subscription</string>
-    <string name="super_admin">Super admin</string>
-    <string name="thanks_you_rated">Thanks! You rated %s/5</string>
-    <string name="time_left">Time left:</string>
     <string name="title_activity_main">RideEasy Admin</string>
-    <string name="today_earnings">Today: ₹%1$s (%2$s rides)</string>
-    <string name="total_drivers_label">TOTAL DRIVERS</string>
-    <string name="total_fare">Total fare</string>
-    <string name="total_rides_label">TOTAL RIDES</string>
-    <string name="total_rides_with_count">Total (%s rides)</string>
-    <string name="total_users_label">TOTAL USERS</string>
-    <string name="trip_history">Trip history</string>
-    <string name="trips">Trips</string>
-    <string name="type_location_hint">Type a location in Pune / Kolhapur to see suggestions.</string>
-    <string name="upi">UPI</string>
-    <string name="upi_handle_not_configured">UPI handle is not configured. Set VITE_UPI_HANDLE in the .env file.</string>
-    <string name="upi_id_for_payments_optional">UPI ID for payments (optional)</string>
-    <string name="upi_id_placeholder">UPI ID (e.g. name@okaxis)</string>
-    <string name="upi_no_handler_hint">This browser cannot open UPI apps (desktop or emulator has no upi:// handler). Scan the QR with PhonePe/GPay on your phone, or test on a real Android/iPhone.</string>
-    <string name="upi_online">UPI / Online</string>
-    <string name="upi_online_payee">UPI / online payee:</string>
-    <string name="upi_payee">UPI Payee: %s</string>
-    <string name="upi_qr">UPI QR</string>
-    <string name="upi_qr_fallback">UPI QR fallback (scan in PhonePe/GPay)</string>
-    <string name="use_admin_credentials">Use your admin credentials</string>
-    <string name="use_saved_addresses_hint">Use saved addresses from the booking screen to fill pickup or drop in one tap.</string>
-    <string name="users">Users</string>
-    <string name="vehicle">Vehicle</string>
-    <string name="vehicle_number">Vehicle number</string>
-    <string name="vehicle_type">Vehicle type</string>
-    <string name="verify_otp_and_login">Verify OTP and Login</string>
-    <string name="verifying">Verifying…</string>
-    <string name="waiting_for_admin_approval">Waiting for admin approval — you cannot go online until approved.</string>
-    <string name="waiting_for_payment_confirmation">Waiting for payment confirmation.</string>
-    <string name="wallet_balance">Wallet ₹%s</string>
-    <string name="weekly">Weekly</string>
-    <string name="weekly_with_price">Weekly — ₹%s</string>
-    <string name="welcome_super_admin">Welcome, Super admin</string>
-    <string name="whats_your_email">What\'s your email</string>
-    <string name="will_show_after_accept"> will show </string>
-    <string name="work_address">Work address</string>
-    <string name="work_to_drop">Work → drop</string>
-    <string name="work_to_pickup">Work → pickup</string>
-    <string name="yearly">Yearly</string>
-    <string name="yearly_with_price">Yearly — ₹%s</string>
-    <string name="your_completed_and_past_rides">Your completed and past rides</string>
-    <string name="your_driver">Your driver</string>
-    <string name="your_name">Your name</string>
-    <string name="your_past_trips">Your past trips</string>
-    <string name="your_rating">Your rating · %s/5</string>
-    <string name="your_ride_otp">Your ride OTP</string>
     <style name="AlertDialog.AppCompat" parent="Base.AlertDialog.AppCompat"/>
     <style name="AlertDialog.AppCompat.Light" parent="Base.AlertDialog.AppCompat.Light"/>
     <style name="Animation.AppCompat.Dialog" parent="Base.Animation.AppCompat.Dialog"/>
@@ -2215,11 +1898,11 @@
     <declare-styleable name="ActionBar">
         
         <attr name="navigationMode">
-            
+            <!-- Normal static title text -->
             <enum name="normal" value="0"/>
-            
+            <!-- The action bar will use a selection list for navigation. -->
             <enum name="listMode" value="1"/>
-            
+            <!-- The action bar will use a series of horizontal tabs for navigation. -->
             <enum name="tabMode" value="2"/>
         </attr>
         
@@ -2371,17 +2054,22 @@
 
         
         <attr name="tintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and icon color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2393,17 +2081,22 @@
         <attr format="color" name="tickMarkTint"/>
         
         <attr name="tickMarkTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2424,9 +2117,10 @@
         <attr name="android:textAppearance"/>
         
         <attr format="enum" name="autoSizeTextType">
-            
+            <!-- No auto-sizing (default). -->
             <enum name="none" value="0"/>
-            
+            <!-- Uniform horizontal and vertical text size scaling to fit within the
+            container. -->
             <enum name="uniform" value="1"/>
         </attr>
         
@@ -2458,17 +2152,22 @@
         <attr format="color" name="drawableTint"/>
         
         <attr name="drawableTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
         
@@ -2856,17 +2555,22 @@
 
         
         <attr name="checkMarkTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and icon color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2889,17 +2593,22 @@
 
         
         <attr name="buttonTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and icon color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>
@@ -2920,70 +2629,76 @@
 
         
         <attr name="layout_anchorGravity">
-            
+            <!-- Push object to the top of its container, not changing its size. -->
             <flag name="top" value="0x30"/>
-            
+            <!-- Push object to the bottom of its container, not changing its size. -->
             <flag name="bottom" value="0x50"/>
-            
+            <!-- Push object to the left of its container, not changing its size. -->
             <flag name="left" value="0x03"/>
-            
+            <!-- Push object to the right of its container, not changing its size. -->
             <flag name="right" value="0x05"/>
-            
+            <!-- Place object in the vertical center of its container, not changing its size. -->
             <flag name="center_vertical" value="0x10"/>
-            
+            <!-- Grow the vertical size of the object if needed so it completely fills its container. -->
             <flag name="fill_vertical" value="0x70"/>
-            
+            <!-- Place object in the horizontal center of its container, not changing its size. -->
             <flag name="center_horizontal" value="0x01"/>
-            
+            <!-- Grow the horizontal size of the object if needed so it completely fills its container. -->
             <flag name="fill_horizontal" value="0x07"/>
-            
+            <!-- Place the object in the center of its container in both the vertical and horizontal axis, not changing its size. -->
             <flag name="center" value="0x11"/>
-            
+            <!-- Grow the horizontal and vertical size of the object if needed so it completely fills its container. -->
             <flag name="fill" value="0x77"/>
-            
+            <!-- Additional option that can be set to have the top and/or bottom edges of
+                 the child clipped to its container's bounds.
+                 The clip will be based on the vertical gravity: a top gravity will clip the bottom
+                 edge, a bottom gravity will clip the top edge, and neither will clip both edges. -->
             <flag name="clip_vertical" value="0x80"/>
-            
+            <!-- Additional option that can be set to have the left and/or right edges of
+                 the child clipped to its container's bounds.
+                 The clip will be based on the horizontal gravity: a left gravity will clip the right
+                 edge, a right gravity will clip the left edge, and neither will clip both edges. -->
             <flag name="clip_horizontal" value="0x08"/>
-            
+            <!-- Push object to the beginning of its container, not changing its size. -->
             <flag name="start" value="0x00800003"/>
-            
+            <!-- Push object to the end of its container, not changing its size. -->
             <flag name="end" value="0x00800005"/>
         </attr>
 
         
         <attr format="enum" name="layout_insetEdge">
-            
+            <!-- Don't inset. -->
             <enum name="none" value="0x0"/>
-            
+            <!-- Inset the top edge. -->
             <enum name="top" value="0x30"/>
-            
+            <!-- Inset the bottom edge. -->
             <enum name="bottom" value="0x50"/>
-            
+            <!-- Inset the left edge. -->
             <enum name="left" value="0x03"/>
-            
+            <!-- Inset the right edge. -->
             <enum name="right" value="0x05"/>
-            
+            <!-- Inset the start edge. -->
             <enum name="start" value="0x00800003"/>
-            
+            <!-- Inset the end edge. -->
             <enum name="end" value="0x00800005"/>
         </attr>
         
         <attr name="layout_dodgeInsetEdges">
-            
+            <!-- Don't dodge any edges -->
             <flag name="none" value="0x0"/>
-            
+            <!-- Dodge the top inset edge. -->
             <flag name="top" value="0x30"/>
-            
+            <!-- Dodge the bottom inset edge. -->
             <flag name="bottom" value="0x50"/>
-            
+            <!-- Dodge the left inset edge. -->
             <flag name="left" value="0x03"/>
-            
+            <!-- Dodge the right inset edge. -->
             <flag name="right" value="0x05"/>
-            
+            <!-- Dodge the start inset edge. -->
             <flag name="start" value="0x00800003"/>
-            
+            <!-- Dodge the end inset edge. -->
             <flag name="end" value="0x00800005"/>
-            
+            <!-- Dodge all the inset edges. -->
             <flag name="all" value="0x77"/>
         </attr>
     </declare-styleable>
@@ -3016,14 +2731,23 @@
         <attr format="reference" name="fontProviderCerts"/>
         
         <attr name="fontProviderFetchStrategy">
-            
+            <!-- The blocking font fetch works as follows.
+              First, check the local cache, then if the requested font is not cached, request the
+              font from the provider and wait until it is finished.  You can change the length of
+              the timeout by modifying fontProviderFetchTimeout.  If the timeout happens, the
+              default typeface will be used instead. -->
             <enum name="blocking" value="0"/>
-            
+            <!-- The async font fetch works as follows.
+              First, check the local cache, then if the requeted font is not cached, trigger a
+              request the font and continue with layout inflation. Once the font fetch succeeds, the
+              target text view will be refreshed with the downloaded font data. The
+              fontProviderFetchTimeout will be ignored if async loading is specified. -->
             <enum name="async" value="1"/>
         </attr>
         
         <attr format="integer" name="fontProviderFetchTimeout">
-            
+            <!-- A special value for the timeout. In this case, the blocking font fetching will not
+              timeout and wait until a reply is received from the font provider. -->
             <enum name="forever" value="-1"/>
         </attr>
         
@@ -3134,19 +2858,6 @@
         
         <attr name="android:dropDownHorizontalOffset"/>
     </declare-styleable>
-    <declare-styleable name="LoadingImageView"><attr name="imageAspectRatioAdjust">
-<enum name="none" value="0"/>
-
-<enum name="adjust_width" value="1"/>
-
-<enum name="adjust_height" value="2"/>
-
-</attr>
-
-<attr format="float" name="imageAspectRatio"/>
-
-<attr format="boolean" name="circleCrop"/>
-</declare-styleable>
     <declare-styleable name="MenuGroup">
 
         
@@ -3231,15 +2942,24 @@
 
         
         <attr name="showAsAction">
-            
+            <!-- Never show this item in an action bar, show it in the overflow menu instead.
+                 Mutually exclusive with "ifRoom" and "always". -->
             <flag name="never" value="0"/>
-            
+            <!-- Show this item in an action bar if there is room for it as determined
+                 by the system. Favor this option over "always" where possible.
+                 Mutually exclusive with "never" and "always". -->
             <flag name="ifRoom" value="1"/>
-            
+            <!-- Always show this item in an actionbar, even if it would override
+                 the system's limits of how much stuff to put there. This may make
+                 your action bar look bad on some screens. In most cases you should
+                 use "ifRoom" instead. Mutually exclusive with "ifRoom" and "never". -->
             <flag name="always" value="2"/>
-            
+            <!-- When this item is shown as an action in the action bar, show a text
+                 label with it even if it has an icon representation. -->
             <flag name="withText" value="4"/>
-            
+            <!-- This item's action view collapses to a normal menu
+                 item. When expanded, the action view takes over a
+                 larger segment of its container. -->
             <flag name="collapseActionView" value="8"/>
         </attr>
 
@@ -3263,17 +2983,22 @@
 
         
         <attr name="iconTintMode">
-            
+            <!-- The tint is drawn on top of the icon.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the icon. The icon’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the icon, but with the icon’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the icon with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and icon color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
 
@@ -3349,25 +3074,6 @@
         <attr format="reference" name="submitBackground"/>
         <attr name="android:focusable"/>
     </declare-styleable>
-    <declare-styleable name="SignInButton"><attr format="reference" name="buttonSize">
-<enum name="standard" value="0"/>
-
-<enum name="wide" value="1"/>
-
-<enum name="icon_only" value="2"/>
-
-</attr>
-<attr format="reference" name="colorScheme">
-<enum name="dark" value="0"/>
-
-<enum name="light" value="1"/>
-
-<enum name="auto" value="2"/>
-
-</attr>
-
-<attr format="reference|string" name="scopeUris"/>
-</declare-styleable>
     <declare-styleable name="Spinner">
         
         <attr name="android:prompt"/>
@@ -3407,17 +3113,22 @@
         <attr format="color" name="thumbTint"/>
         
         <attr name="thumbTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
         
@@ -3426,17 +3137,22 @@
         <attr format="color" name="trackTint"/>
         
         <attr name="trackTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
         
@@ -3502,11 +3218,11 @@
         <attr name="contentInsetEndWithActions"/>
         <attr format="dimension" name="maxButtonHeight"/>
         <attr name="buttonGravity">
-            
+            <!-- Place object in the vertical center of its container, not changing its size. -->
             <flag name="center_vertical" value="0x10"/>
-            
+            <!-- Push object to the top of its container, not changing its size. -->
             <flag name="top" value="0x30"/>
-            
+            <!-- Push object to the bottom of its container, not changing its size. -->
             <flag name="bottom" value="0x50"/>
         </attr>
         
@@ -3550,17 +3266,22 @@
 
         
         <attr name="backgroundTintMode">
-            
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
             <enum name="src_over" value="3"/>
-            
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
             <enum name="src_in" value="5"/>
-            
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
             <enum name="src_atop" value="9"/>
-            
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
             <enum name="multiply" value="14"/>
-            
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
             <enum name="screen" value="15"/>
-            
+            <!-- Combines the tint and icon color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
             <enum name="add" value="16"/>
         </attr>
     </declare-styleable>

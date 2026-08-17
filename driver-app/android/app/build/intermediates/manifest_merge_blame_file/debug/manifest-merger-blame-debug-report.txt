@@ -11,243 +11,159 @@
 11    <!-- Permissions -->
 12
 13    <uses-permission android:name="android.permission.INTERNET" />
-13-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:42:5-67
-13-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:42:22-64
+13-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:41:5-67
+13-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:41:22-64
 14    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-14-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:43:5-79
-14-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:43:22-76
+14-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:42:5-79
+14-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:42:22-76
 15    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-15-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:44:5-81
-15-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:44:22-78
+15-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:43:5-81
+15-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:43:22-78
 16    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-16-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:45:5-85
-16-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:45:22-82
+16-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:44:5-85
+16-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:44:22-82
 17    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-17-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:46:5-77
-17-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:46:22-74
-18    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-18-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:7:5-79
-18-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:7:22-76
-19
-20    <permission
-20-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
-21        android:name="com.rideeasy.driver.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-21-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
-22        android:protectionLevel="signature" />
-22-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
-23
-24    <uses-permission android:name="com.rideeasy.driver.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
-24-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
-24-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
-25
-26    <application
-26-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:4:5-38:19
-27        android:name="com.rideeasy.driver.RideEasyApplication"
-27-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:5:9-44
-28        android:allowBackup="true"
-28-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:6:9-35
-29        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-29-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/6534678263da19d79ce9202ddc2eefd3/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
-30        android:debuggable="true"
-31        android:extractNativeLibs="true"
-32        android:icon="@mipmap/ic_launcher"
-32-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:7:9-43
-33        android:label="@string/app_name"
-33-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:8:9-41
-34        android:networkSecurityConfig="@xml/network_security_config"
-34-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:12:9-69
-35        android:roundIcon="@mipmap/ic_launcher_round"
-35-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:9:9-54
-36        android:supportsRtl="true"
-36-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:10:9-35
-37        android:theme="@style/AppTheme" >
-37-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:11:9-40
-38        <activity
-38-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:14:9-27:20
-39            android:name="com.rideeasy.driver.MainActivity"
-39-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:16:13-41
-40            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-40-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:15:13-129
-41            android:exported="true"
-41-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:20:13-36
-42            android:label="@string/title_activity_main"
-42-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:17:13-56
-43            android:launchMode="singleTask"
-43-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:19:13-44
-44            android:theme="@style/AppTheme.NoActionBarLaunch" >
-44-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:18:13-62
-45            <intent-filter>
-45-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:22:13-25:29
-46                <action android:name="android.intent.action.MAIN" />
-46-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:23:17-69
-46-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:23:25-66
-47
-48                <category android:name="android.intent.category.LAUNCHER" />
-48-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:24:17-77
-48-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:24:27-74
-49            </intent-filter>
-50        </activity>
-51
-52        <provider
-53            android:name="androidx.core.content.FileProvider"
-53-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:30:13-62
-54            android:authorities="com.rideeasy.driver.fileprovider"
-54-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:31:13-64
-55            android:exported="false"
-55-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:32:13-37
-56            android:grantUriPermissions="true" >
-56-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:33:13-47
-57            <meta-data
-57-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:34:13-36:64
-58                android:name="android.support.FILE_PROVIDER_PATHS"
-58-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:35:17-67
-59                android:resource="@xml/file_paths" />
-59-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:36:17-51
-60        </provider>
-61
-62        <service
-62-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:11:9-17:19
-63            android:name="com.google.mlkit.common.internal.MlKitComponentDiscoveryService"
-63-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:12:13-91
-64            android:directBootAware="true"
-64-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:17:13-43
-65            android:exported="false" >
-65-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:13:13-37
+17-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:45:5-77
+17-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:45:22-74
+18
+19    <permission
+19-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
+20        android:name="com.rideeasy.driver.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+20-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
+21        android:protectionLevel="signature" />
+21-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
+22
+23    <uses-permission android:name="com.rideeasy.driver.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+23-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
+23-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
+24
+25    <application
+25-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:4:5-37:19
+26        android:allowBackup="true"
+26-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:5:9-35
+27        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+27-->[androidx.core:core:1.12.0] /Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
+28        android:debuggable="true"
+29        android:extractNativeLibs="true"
+30        android:icon="@mipmap/ic_launcher"
+30-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:6:9-43
+31        android:label="@string/app_name"
+31-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:7:9-41
+32        android:networkSecurityConfig="@xml/network_security_config"
+32-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:11:9-69
+33        android:roundIcon="@mipmap/ic_launcher_round"
+33-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:8:9-54
+34        android:supportsRtl="true"
+34-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:9:9-35
+35        android:theme="@style/AppTheme" >
+35-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:10:9-40
+36        <activity
+36-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:13:9-26:20
+37            android:name="com.rideeasy.driver.MainActivity"
+37-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:15:13-41
+38            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+38-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:14:13-129
+39            android:exported="true"
+39-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:19:13-36
+40            android:label="@string/title_activity_main"
+40-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:16:13-56
+41            android:launchMode="singleTask"
+41-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:18:13-44
+42            android:theme="@style/AppTheme.NoActionBarLaunch" >
+42-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:17:13-62
+43            <intent-filter>
+43-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:21:13-24:29
+44                <action android:name="android.intent.action.MAIN" />
+44-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:22:17-69
+44-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:22:25-66
+45
+46                <category android:name="android.intent.category.LAUNCHER" />
+46-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:23:17-77
+46-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:23:27-74
+47            </intent-filter>
+48        </activity>
+49
+50        <provider
+51            android:name="androidx.core.content.FileProvider"
+51-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:29:13-62
+52            android:authorities="com.rideeasy.driver.fileprovider"
+52-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:30:13-64
+53            android:exported="false"
+53-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:31:13-37
+54            android:grantUriPermissions="true" >
+54-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:32:13-47
+55            <meta-data
+55-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:33:13-35:64
+56                android:name="android.support.FILE_PROVIDER_PATHS"
+56-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:34:17-67
+57                android:resource="@xml/file_paths" />
+57-->/Users/jaid/Documents/RideEasy/driver-app/android/app/src/main/AndroidManifest.xml:35:17-51
+58        </provider>
+59        <provider
+59-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+60            android:name="androidx.startup.InitializationProvider"
+60-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:25:13-67
+61            android:authorities="com.rideeasy.driver.androidx-startup"
+61-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:26:13-68
+62            android:exported="false" >
+62-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:27:13-37
+63            <meta-data
+63-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+64                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+64-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:30:17-75
+65                android:value="androidx.startup" />
+65-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/61f606930917a64588c199b54d3d711a/transformed/emoji2-1.2.0/AndroidManifest.xml:31:17-49
 66            <meta-data
-66-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:14:13-16:85
-67                android:name="com.google.firebase.components:com.google.mlkit.nl.translate.NaturalLanguageTranslateRegistrar"
-67-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:15:17-126
-68                android:value="com.google.firebase.components.ComponentRegistrar" />
-68-->[com.google.mlkit:translate:17.0.2] /Users/jaid/.gradle/caches/transforms-3/7580988bff5da2bbe36cc808170645c1/transformed/translate-17.0.2/AndroidManifest.xml:16:17-82
+66-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7d158143758428a9a27e664e481c199e/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:29:13-31:52
+67                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+67-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7d158143758428a9a27e664e481c199e/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:30:17-78
+68                android:value="androidx.startup" />
+68-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7d158143758428a9a27e664e481c199e/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:31:17-49
 69            <meta-data
-69-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:20:13-22:85
-70                android:name="com.google.firebase.components:com.google.mlkit.common.internal.CommonComponentRegistrar"
-70-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:21:17-120
-71                android:value="com.google.firebase.components.ComponentRegistrar" />
-71-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:22:17-82
-72        </service>
+69-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:29:13-31:52
+70                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+70-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:30:17-85
+71                android:value="androidx.startup" />
+71-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:31:17-49
+72        </provider>
 73
-74        <provider
-74-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:9:9-13:38
-75            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
-75-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:10:13-78
-76            android:authorities="com.rideeasy.driver.mlkitinitprovider"
-76-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:11:13-69
-77            android:exported="false"
-77-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:12:13-37
-78            android:initOrder="99" />
-78-->[com.google.mlkit:common:18.10.0] /Users/jaid/.gradle/caches/transforms-3/cd3b90e5a8677906ac870c97663cf4db/transformed/common-18.10.0/AndroidManifest.xml:13:13-35
-79
-80        <activity
-80-->[com.google.android.gms:play-services-base:18.1.0] /Users/jaid/.gradle/caches/transforms-3/25d67a8c8cf4fa62e493f89ea31014d1/transformed/play-services-base-18.1.0/AndroidManifest.xml:20:9-22:45
-81            android:name="com.google.android.gms.common.api.GoogleApiActivity"
-81-->[com.google.android.gms:play-services-base:18.1.0] /Users/jaid/.gradle/caches/transforms-3/25d67a8c8cf4fa62e493f89ea31014d1/transformed/play-services-base-18.1.0/AndroidManifest.xml:20:19-85
-82            android:exported="false"
-82-->[com.google.android.gms:play-services-base:18.1.0] /Users/jaid/.gradle/caches/transforms-3/25d67a8c8cf4fa62e493f89ea31014d1/transformed/play-services-base-18.1.0/AndroidManifest.xml:22:19-43
-83            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
-83-->[com.google.android.gms:play-services-base:18.1.0] /Users/jaid/.gradle/caches/transforms-3/25d67a8c8cf4fa62e493f89ea31014d1/transformed/play-services-base-18.1.0/AndroidManifest.xml:21:19-78
-84
-85        <meta-data
-85-->[com.google.android.gms:play-services-basement:18.1.0] /Users/jaid/.gradle/caches/transforms-3/362b88ac6ac5d9f4776294732961007d/transformed/play-services-basement-18.1.0/AndroidManifest.xml:21:9-23:69
-86            android:name="com.google.android.gms.version"
-86-->[com.google.android.gms:play-services-basement:18.1.0] /Users/jaid/.gradle/caches/transforms-3/362b88ac6ac5d9f4776294732961007d/transformed/play-services-basement-18.1.0/AndroidManifest.xml:22:13-58
-87            android:value="@integer/google_play_services_version" />
-87-->[com.google.android.gms:play-services-basement:18.1.0] /Users/jaid/.gradle/caches/transforms-3/362b88ac6ac5d9f4776294732961007d/transformed/play-services-basement-18.1.0/AndroidManifest.xml:23:13-66
-88
-89        <provider
-89-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
-90            android:name="androidx.startup.InitializationProvider"
-90-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:25:13-67
-91            android:authorities="com.rideeasy.driver.androidx-startup"
-91-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:26:13-68
-92            android:exported="false" >
-92-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:27:13-37
-93            <meta-data
-93-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
-94                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-94-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:30:17-75
-95                android:value="androidx.startup" />
-95-->[androidx.emoji2:emoji2:1.2.0] /Users/jaid/.gradle/caches/transforms-3/d68d25321278bbf51ea3d07eae443045/transformed/emoji2-1.2.0/AndroidManifest.xml:31:17-49
-96            <meta-data
-96-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7aae74566d57297c62f418649eefc150/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:29:13-31:52
-97                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-97-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7aae74566d57297c62f418649eefc150/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:30:17-78
-98                android:value="androidx.startup" />
-98-->[androidx.lifecycle:lifecycle-process:2.6.1] /Users/jaid/.gradle/caches/transforms-3/7aae74566d57297c62f418649eefc150/transformed/lifecycle-process-2.6.1/AndroidManifest.xml:31:17-49
-99            <meta-data
-99-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:29:13-31:52
-100                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-100-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:30:17-85
-101                android:value="androidx.startup" />
-101-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:31:17-49
-102        </provider>
-103
-104        <service
-104-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:29:9-35:19
-105            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
-105-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:30:13-103
-106            android:exported="false" >
-106-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:31:13-37
-107            <meta-data
-107-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:32:13-34:39
-108                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
-108-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:33:17-94
-109                android:value="cct" />
-109-->[com.google.android.datatransport:transport-backend-cct:2.3.3] /Users/jaid/.gradle/caches/transforms-3/5247b784b9aea90ba75fa94056fc9266/transformed/transport-backend-cct-2.3.3/AndroidManifest.xml:34:17-36
-110        </service>
-111        <service
-111-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:26:9-30:19
-112            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
-112-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:27:13-117
-113            android:exported="false"
-113-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:28:13-37
-114            android:permission="android.permission.BIND_JOB_SERVICE" >
-114-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:29:13-69
-115        </service>
-116
-117        <receiver
-117-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:32:9-34:40
-118            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
-118-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:33:13-132
-119            android:exported="false" />
-119-->[com.google.android.datatransport:transport-runtime:2.2.6] /Users/jaid/.gradle/caches/transforms-3/69d641d8382b9d3d51bfe011a7ec55e9/transformed/transport-runtime-2.2.6/AndroidManifest.xml:34:13-37
-120        <receiver
-120-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:34:9-52:20
-121            android:name="androidx.profileinstaller.ProfileInstallReceiver"
-121-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:35:13-76
-122            android:directBootAware="false"
-122-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:36:13-44
-123            android:enabled="true"
-123-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:37:13-35
-124            android:exported="true"
-124-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:38:13-36
-125            android:permission="android.permission.DUMP" >
-125-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:39:13-57
-126            <intent-filter>
-126-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:40:13-42:29
-127                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
-127-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:17-91
-127-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:25-88
-128            </intent-filter>
-129            <intent-filter>
-129-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:43:13-45:29
-130                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
-130-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:17-85
-130-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:25-82
-131            </intent-filter>
-132            <intent-filter>
-132-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:46:13-48:29
-133                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
-133-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:17-88
-133-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:25-85
-134            </intent-filter>
-135            <intent-filter>
-135-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:49:13-51:29
-136                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
-136-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:17-95
-136-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/092c625d9035556a2daaa257f4922467/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:25-92
-137            </intent-filter>
-138        </receiver>
-139    </application>
-140
-141</manifest>
+74        <receiver
+74-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:34:9-52:20
+75            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+75-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:35:13-76
+76            android:directBootAware="false"
+76-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:36:13-44
+77            android:enabled="true"
+77-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:37:13-35
+78            android:exported="true"
+78-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:38:13-36
+79            android:permission="android.permission.DUMP" >
+79-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:39:13-57
+80            <intent-filter>
+80-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:40:13-42:29
+81                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+81-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:17-91
+81-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:41:25-88
+82            </intent-filter>
+83            <intent-filter>
+83-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:43:13-45:29
+84                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+84-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:17-85
+84-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:44:25-82
+85            </intent-filter>
+86            <intent-filter>
+86-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:46:13-48:29
+87                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+87-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:17-88
+87-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:47:25-85
+88            </intent-filter>
+89            <intent-filter>
+89-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:49:13-51:29
+90                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+90-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:17-95
+90-->[androidx.profileinstaller:profileinstaller:1.3.0] /Users/jaid/.gradle/caches/transforms-3/c4b6893a58c24e59df590ee54241c077/transformed/profileinstaller-1.3.0/AndroidManifest.xml:50:25-92
+91            </intent-filter>
+92        </receiver>
+93    </application>
+94
+95</manifest>
