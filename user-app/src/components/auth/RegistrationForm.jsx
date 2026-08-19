@@ -1,0 +1,134 @@
+import React, { useState } from 'react'
+import { useLanguage } from '../../i18n'
+import { inputBase, labelClass, errorBoxClass } from './classes'
+import AuthButton from './AuthButton'
+import PhoneInput from './PhoneInput'
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/**
+ * New-user registration panel: name, email, phone → Send OTP.
+ * Validates inline before any API call.
+ */
+const RegistrationForm = ({
+  draft,
+  onDraftChange,
+  onBack,
+  onSendOtp,
+  loading,
+  error,
+  duplicate,
+  onLoginInstead,
+  emailReadOnly = false,
+}) => {
+  const { t } = useLanguage()
+  const [ fieldErrors, setFieldErrors ] = useState({})
+
+  const set = (key) => (value) => onDraftChange({ ...draft, [key]: value })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const errors = {}
+    const name = String(draft.name || '').trim()
+    const email = String(draft.email || '').trim().toLowerCase()
+    const phone = String(draft.phone || '').trim()
+
+    if (name.length < 2) errors.name = t('valid_name_error')
+    if (!EMAIL_RE.test(email)) errors.email = t('valid_email_error')
+    if (!/^[6-9]\d{9}$/.test(phone)) errors.phone = t('valid_phone_error')
+
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    onSendOtp({ name, email, phone })
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-md px-6 pb-10">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-400 transition hover:text-white"
+      >
+        <i className="ri-arrow-left-line" aria-hidden />
+        {t('back_to_login')}
+      </button>
+
+      <h1 className="text-2xl font-bold">{t('create_your_account')}</h1>
+      <p className="mb-6 mt-1 text-sm text-zinc-400">{t('fill_details_below')}</p>
+
+      <div className="rounded-2xl border border-night-border bg-night-900 p-6 shadow-xl">
+        <form onSubmit={handleSubmit} noValidate>
+          {error ? <div role="alert" className={errorBoxClass}>{error}</div> : null}
+          {duplicate ? (
+            <div role="alert" className={`${errorBoxClass} border-brand/40 bg-brand/10 text-brand`}>
+              {t('account_exists')}
+              <button
+                type="button"
+                onClick={onLoginInstead}
+                className="mt-2 block w-full rounded-xl bg-brand px-4 py-2.5 text-center text-sm font-bold text-black transition hover:bg-brand-light"
+              >
+                {t('login')}
+              </button>
+            </div>
+          ) : null}
+          <div className="mb-4">
+            <label htmlFor="reg-name" className={labelClass}>{t('full_name')}</label>
+            <input
+              id="reg-name"
+              name="name"
+              required
+              type="text"
+              autoComplete="name"
+              className={`${inputBase} ${fieldErrors.name ? 'border-red-700 focus:border-red-600 focus:ring-red-600/50' : ''}`}
+              placeholder={t('enter_full_name')}
+              value={draft.name}
+              onChange={(e) => set('name')(e.target.value)}
+            />
+            {fieldErrors.name ? <p className="mt-1 text-xs text-red-300">{fieldErrors.name}</p> : null}
+          </div>
+          <div className="mb-4">
+            <label htmlFor="reg-email" className={labelClass}>{t('email')}</label>
+            <input
+              id="reg-email"
+              name="email"
+              required
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              readOnly={emailReadOnly}
+              className={`${inputBase} ${emailReadOnly ? 'cursor-not-allowed text-zinc-400' : ''} ${fieldErrors.email ? 'border-red-700 focus:border-red-600 focus:ring-red-600/50' : ''}`}
+              placeholder={t('enter_email')}
+              value={draft.email}
+              onChange={(e) => set('email')(e.target.value)}
+            />
+            {fieldErrors.email ? <p className="mt-1 text-xs text-red-300">{fieldErrors.email}</p> : null}
+          </div>
+          <PhoneInput
+            value={draft.phone}
+            onChange={set('phone')}
+            label={t('phone')}
+            placeholder={t('enter_phone')}
+            name="reg-phone"
+          />
+          {fieldErrors.phone ? <p className="-mt-2 mb-3 text-xs text-red-300">{fieldErrors.phone}</p> : null}
+          <AuthButton loading={loading}>
+            {loading ? t('sending_otp') : t('send_otp')}
+          </AuthButton>
+        </form>
+      </div>
+
+      <p className="mt-6 text-center text-sm text-zinc-500">
+        {t('register_login_hint')}{' '}
+        <button
+          type="button"
+          onClick={onLoginInstead}
+          className="font-semibold text-brand hover:text-brand-light"
+        >
+          {t('login')}
+        </button>
+      </p>
+    </div>
+  )
+}
+
+export default RegistrationForm

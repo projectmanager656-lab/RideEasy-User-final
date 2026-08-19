@@ -19,6 +19,8 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_APP_ROLE': JSON.stringify('user'),
       'import.meta.env.VITE_BASE_URL': JSON.stringify(env.VITE_BASE_URL || 'http://localhost:5001'),
       'import.meta.env.VITE_SOCKET_URL': JSON.stringify(env.VITE_SOCKET_URL || env.VITE_BASE_URL || 'http://localhost:5001'),
+      /** Changes every build → boot-time purge of stale service workers/caches. */
+      __BUILD_STAMP__: JSON.stringify(Date.now()),
     },
     plugins: [
       react(),

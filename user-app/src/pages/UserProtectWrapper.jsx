@@ -19,6 +19,7 @@ const UserProtectWrapper = ({ children }) => {
     profileError,
     isAuthenticated,
     refreshUser,
+    clearSession,
   } = useContext(UserDataContext)
 
   const navigate = useNavigate()
@@ -44,13 +45,25 @@ const UserProtectWrapper = ({ children }) => {
         <p className="text-zinc-300 text-sm max-w-md">
           {profileError || 'Could not verify your session. Check your connection and try again.'}
         </p>
-        <button
-          type="button"
-          className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 text-sm"
-          onClick={() => void refreshUser()}
-        >
-          Retry
-        </button>
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <button
+            type="button"
+            className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 text-sm"
+            onClick={() => void refreshUser()}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            className="rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-4 py-2 text-sm"
+            onClick={() => {
+              clearSession()
+              navigate('/login', { replace: true })
+            }}
+          >
+            Sign in again
+          </button>
+        </div>
       </div>
     )
   }

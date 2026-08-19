@@ -1,14 +1,15 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useLanguage } from '../i18n'
 
-const BottomNav = () => {
+  const BottomNav = () => {
   const { t } = useLanguage()
   const location = useLocation()
   const path = location.pathname
   const hidden =
     path === '/login' ||
     path === '/signup' ||
+    path === '/welcome' ||
     path === '/user/logout'
 
   if (hidden) return null

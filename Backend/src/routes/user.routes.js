@@ -2,6 +2,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const userController = require('../controllers/user.controller');
 const rideController = require('../controllers/ride.controller');
+const onboardingController = require('../controllers/onboarding.controller');
 const auth = require('../middlewares/auth.middleware');
 const { loginRateLimit } = require('../middlewares/loginRateLimit.middleware');
 const {
@@ -9,6 +10,10 @@ const {
     loginValidators,
     phoneOtpSendValidators,
     phoneOtpVerifyValidators,
+    checkUserValidators,
+    googleLoginValidators,
+    loginOtpSendValidators,
+    loginOtpVerifyValidators,
 } = require('../validators/auth.validators');
 
 const router = express.Router();
@@ -16,6 +21,16 @@ const router = express.Router();
 router.post('/register', registerUserValidators, userController.registerUser);
 
 router.post('/login', loginRateLimit, loginValidators, userController.loginUser);
+
+router.post('/google', googleLoginValidators, userController.googleLogin);
+
+router.post('/check-user', checkUserValidators, userController.checkUserExists);
+
+router.get('/onboarding/status', onboardingController.getOnboardingStatus);
+router.post('/onboarding/complete', onboardingController.markOnboardingComplete);
+
+router.post('/login/send-otp', loginOtpSendValidators, userController.sendLoginOtp);
+router.post('/login/verify-otp', loginOtpVerifyValidators, userController.verifyLoginOtp);
 
 router.post('/phone/send-otp', phoneOtpSendValidators, userController.sendPhoneOtp);
 router.post('/phone/verify-otp',
