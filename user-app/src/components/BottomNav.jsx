@@ -16,41 +16,41 @@ const BottomNav = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-20 border-t border-zinc-800 bg-black/95 backdrop-blur"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      className="shrink-0 border-t bg-[#050505]"
+      style={{ borderTopColor: '#222222', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex h-14 max-w-lg items-center justify-between px-1 min-[400px]:px-3 sm:px-4">
+      <div className="mx-auto flex h-[68px] max-w-[430px] items-center justify-between px-1 min-[400px]:px-3 sm:px-4">
         <NavLink
           to="/home"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
           }
         >
-          <i className="ri-map-pin-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Book</span>
+          <i className="ri-home-5-line text-lg" />
+          <span className="max-[380px]:text-[10px]">Home</span>
         </NavLink>
         <NavLink
-          to="/riding"
+          to="/ride"
           className={() =>
-            `${base} ${path === '/riding' ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${path === '/ride' || path === '/riding' ? 'text-[#FFC800]' : 'text-[#777777]'}`
           }
         >
           <i className="ri-roadster-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Live</span>
+          <span className="max-[380px]:text-[10px]">Ride</span>
         </NavLink>
         <NavLink
           to="/history"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
           }
         >
           <i className="ri-history-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Trips</span>
+          <span className="max-[380px]:text-[10px]">History</span>
         </NavLink>
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
           }
         >
           <i className="ri-user-3-line text-lg" />

@@ -3,8 +3,11 @@ import { UserDataContext } from '../context/UserContext'
 import Payment from './Payment'
 import axios from 'axios'
 import { API_BASE_URL } from '../config/apiBaseUrl'
+import { findRideTier } from '../constants/rideTiers'
 
 function passengerVehicleLabel (vehicleType) {
+    const tier = findRideTier(vehicleType)
+    if (tier) return tier.label
     const t = String(vehicleType || '').toUpperCase()
     if (t === 'BIKE') return 'Bike'
     if (t === 'AUTO') return 'Auto'
@@ -13,6 +16,8 @@ function passengerVehicleLabel (vehicleType) {
 }
 
 function passengerVehicleIconClass (vehicleType) {
+    const tier = findRideTier(vehicleType)
+    if (tier) return tier.icon
     const t = String(vehicleType || '').toUpperCase()
     if (t === 'BIKE') return 'ri-motorbike-line'
     if (t === 'AUTO') return 'ri-taxi-line'
@@ -24,11 +29,14 @@ const ConfirmRide = (props) => {
     const { user } = useContext(UserDataContext)
     const [paymentMethod, setPaymentMethod] = useState(props.paymentMethod || 'Cash')
 
-    const vehicleType = props.vehicleType || 'AUTO'
+    const vehicleType = props.vehicleType || 'ECONOMY'
     const fare = props.fare || {}
     const u = String(vehicleType).toUpperCase()
-    const vehicleTypeNorm = u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO')
-    const priceRaw = fare[vehicleTypeNorm] ?? fare[vehicleType] ?? fare.price
+    const tier = findRideTier(vehicleType)
+    const vehicleTypeNorm = tier
+        ? tier.vehicleType
+        : (u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO'))
+    const priceRaw = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? fare.price)
     const price = Number.isFinite(Number(priceRaw)) && Number(priceRaw) > 0 ? Number(priceRaw) : null
 
     const isUpiLike = paymentMethod === 'UPI' || paymentMethod === 'Online'
@@ -71,21 +79,21 @@ const ConfirmRide = (props) => {
 
             <div className="w-full space-y-0 rounded-xl border border-zinc-800 overflow-hidden bg-zinc-900/50">
                 <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
-                    <i className="ri-map-pin-user-fill text-emerald-500"></i>
+                    <i className="ri-map-pin-user-fill text-yellow-400"></i>
                     <div className="min-w-0">
                         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Pickup</p>
                         <p className="font-medium text-zinc-100 break-words">{props.pickup}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
-                    <i className="ri-map-pin-2-fill text-emerald-500"></i>
+                    <i className="ri-map-pin-2-fill text-yellow-400"></i>
                     <div className="min-w-0">
                         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Drop</p>
                         <p className="font-medium text-zinc-100 break-words">{props.destination}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
-                    <i className={`${passengerVehicleIconClass(vehicleType)} text-xl text-emerald-500`} />
+                    <i className={`${passengerVehicleIconClass(vehicleType)} text-xl text-yellow-400`} />
                     <div className="min-w-0">
                         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Ride type</p>
                         <p className="font-medium text-zinc-100">{passengerVehicleLabel(vehicleType)}</p>
@@ -93,15 +101,24 @@ const ConfirmRide = (props) => {
                 </div>
                 {fare.distanceKm != null && (
                     <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
-                        <i className="ri-roadster-line text-emerald-500"></i>
+                        <i className="ri-roadster-line text-yellow-400"></i>
                         <div>
                             <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Distance</p>
                             <p className="font-medium text-zinc-100">{fare.distanceKm} km</p>
                         </div>
                     </div>
                 )}
+                {props.scheduledAt && (
+                    <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
+                        <i className="ri-calendar-event-line text-yellow-400"></i>
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Scheduled for</p>
+                            <p className="font-medium text-zinc-100">{new Date(props.scheduledAt).toLocaleString()}</p>
+                        </div>
+                    </div>
+                )}
                 <div className="flex items-center gap-3 p-3 border-b border-zinc-800">
-                    <i className="ri-currency-line text-emerald-500"></i>
+                    <i className="ri-currency-line text-yellow-400"></i>
                     <div>
                         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Total fare</p>
                         <p className="text-lg font-semibold text-zinc-100">{price != null ? `₹${price}` : 'Fare unavailable'}</p>

@@ -10,6 +10,7 @@ import 'remixicon/fonts/remixicon.css'
 const UserLogin = lazy(() => import('./pages/UserLogin'))
 const UserSignup = lazy(() => import('./pages/UserSignup'))
 const Home = lazy(() => import('./pages/Home'))
+const RideTab = lazy(() => import('./pages/RideTab'))
 const UserProtectWrapper = lazy(() => import('./pages/UserProtectWrapper'))
 const UserLogout = lazy(() => import('./pages/UserLogout'))
 const Riding = lazy(() => import('./pages/Riding'))
@@ -42,30 +43,33 @@ const UserAppRoot = () => {
 
 const App = () => {
   return (
-    <div className="min-h-dvh min-h-screen bg-black text-white pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:pb-20">
+    <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black text-white">
       <NativeAndroidFlavorRedirect />
-      <Suspense fallback={<div className="h-screen flex items-center justify-center text-zinc-400 text-sm bg-black">Loading RideEasy…</div>}>
-        <Routes>
-          <Route path="/" element={<UserAppRoot />} />
-          <Route path="/login" element={<UserLogin />} />
-          <Route path="/signup" element={<UserSignup />} />
-          <Route
-            path="/riding"
-            element={(
-              <UserProtectWrapper>
-                <RidingRouteGuard>
-                  <Riding />
-                </RidingRouteGuard>
-              </UserProtectWrapper>
-            )}
-          />
-          <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
-          <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
-          <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
-          <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
-        </Routes>
-      </Suspense>
-      <InstallPWAButton />
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
+        <Suspense fallback={<div className="h-full flex items-center justify-center text-zinc-400 text-sm bg-black">Loading RideEasy…</div>}>
+          <Routes>
+            <Route path="/" element={<UserAppRoot />} />
+            <Route path="/login" element={<UserLogin />} />
+            <Route path="/signup" element={<UserSignup />} />
+            <Route
+              path="/riding"
+              element={(
+                <UserProtectWrapper>
+                  <RidingRouteGuard>
+                    <Riding />
+                  </RidingRouteGuard>
+                </UserProtectWrapper>
+              )}
+            />
+            <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
+            <Route path="/ride" element={<UserProtectWrapper><RideTab /></UserProtectWrapper>} />
+            <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
+            <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
+            <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
+          </Routes>
+        </Suspense>
+        <InstallPWAButton />
+      </div>
       <BottomNav />
     </div>
   )

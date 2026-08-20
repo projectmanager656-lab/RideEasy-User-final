@@ -1,5 +1,6 @@
 import React from 'react'
 import RideStatusStepper from './RideStatusStepper'
+import { tierFare } from '../constants/rideTiers'
 
 function rideStatusNorm(s) {
     return String(s || '').trim().toLowerCase()
@@ -26,6 +27,12 @@ const LookingForDriver = (props) => {
             {isSearching && (
                 <div className="mb-4 rounded-xl border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-200">
                     Drivers nearby are being notified. Your <strong className="text-white">6-digit OTP</strong> will show here only <strong className="text-white">after a driver accepts</strong> — share it when they arrive to start the ride.
+                </div>
+            )}
+
+            {isSearching && props.assignmentError && (
+                <div className="mb-4 rounded-xl border border-brand-yellow/40 bg-brand-yellow/10 px-3 py-2 text-sm text-brand-yellow">
+                    {props.assignmentError}
                 </div>
             )}
 
@@ -68,7 +75,7 @@ const LookingForDriver = (props) => {
                         <i className="ri-currency-line text-emerald-400"></i>
                         <div>
                             <h3 className='text-lg font-medium text-white'>
-                                ₹{props.ride?.price ?? props.fare?.[props.vehicleType] ?? props.fare?.price ?? '—'}
+                                ₹{props.ride?.price ?? props.fare?.[props.vehicleType] ?? tierFare(props.vehicleType) ?? props.fare?.price ?? '—'}
                             </h3>
                             <p className='text-sm -mt-1 text-zinc-400'>Payment at end</p>
                         </div>

@@ -4,12 +4,16 @@
 
 @layer base {
   html {
+    height: 100%;
     -webkit-text-size-adjust: 100%;
   }
   body {
-    @apply overflow-x-hidden antialiased text-white bg-zinc-950;
+    height: 100%;
+    overflow: hidden;
+    @apply antialiased text-white bg-zinc-950;
   }
   #root {
-    @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full bg-black shadow-2xl overflow-x-hidden;
+    height: 100%;
+    @apply relative mx-auto w-full max-w-[480px] bg-black shadow-2xl;
   }
 }
