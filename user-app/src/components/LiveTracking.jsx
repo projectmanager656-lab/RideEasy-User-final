@@ -1,11 +1,24 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { MapContainer, TileLayer, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet'
 import { getMapTileUrlTemplate } from '../config/externalEndpoints'
 
 const containerStyle = { width: '100%', height: '100%' }
 const defaultCenter = { lat: 18.5204, lng: 73.8567 } // Pune
 
-const LiveTracking = ({ onPositionChange }) => {
+/** Exposes the Leaflet map instance and honours external "fly to" requests. */
+function MapBridge({ mapRef, flyTo }) {
+    const map = useMap()
+    useEffect(() => {
+        if (mapRef) mapRef.current = map
+    }, [map, mapRef])
+    useEffect(() => {
+        if (!flyTo?.center) return
+        map.setView(flyTo.center, flyTo.zoom ?? map.getZoom(), { animate: true })
+    }, [flyTo, map])
+    return null
+}
+
+const LiveTracking = ({ onPositionChange, zoomControl = true, mapRef = null, flyTo = null }) => {
     const [currentPosition, setCurrentPosition] = useState(defaultCenter)
     const center = useMemo(() => [currentPosition.lat, currentPosition.lng], [currentPosition.lat, currentPosition.lng])
 
@@ -27,7 +40,8 @@ const LiveTracking = ({ onPositionChange }) => {
 
     return (
         <div className="relative w-full h-full">
-            <MapContainer center={center} zoom={15} style={containerStyle} zoomControl>
+            <MapContainer center={center} zoom={15} style={containerStyle} zoomControl={zoomControl}>
+                <MapBridge mapRef={mapRef} flyTo={flyTo} />
                 <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
                     url={getMapTileUrlTemplate()}

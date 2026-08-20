@@ -1,6 +1,6 @@
 import React, { useContext, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { apiClient, withAuth } from '../services/http'
+import { logout } from '../services/authService'
 import { UserDataContext } from '../context/UserContext'
 
 export const UserLogout = () => {
@@ -11,16 +11,16 @@ export const UserLogout = () => {
     useEffect(() => {
         if (!token) {
             clearSession()
-            navigate('/login', { replace: true })
+            navigate('/welcome', { replace: true })
             return
         }
         let cancelled = false
-        apiClient.get('/users/logout', withAuth())
+        logout()
             .catch(() => { /* still clear local session */ })
             .finally(() => {
                 if (cancelled) return
                 clearSession()
-                navigate('/login', { replace: true })
+                navigate('/welcome', { replace: true })
             })
         return () => {
             cancelled = true

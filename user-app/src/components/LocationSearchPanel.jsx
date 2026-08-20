@@ -14,7 +14,7 @@ const LocationSearchPanel = ({ suggestions, setPickup, setDestination, activeFie
     }
 
     return (
-        <div className="max-h-72 overflow-y-auto bg-white">
+        <div className="max-h-72 overflow-y-auto bg-night-900">
             {suggestions.map((elem, idx) => {
                 const display = typeof elem === 'string' ? elem : (elem?.name || elem?.description || '')
                 return (
@@ -22,19 +22,19 @@ const LocationSearchPanel = ({ suggestions, setPickup, setDestination, activeFie
                         key={idx}
                         type="button"
                         onClick={() => handleSuggestionClick(elem)}
-                        className="w-full text-left flex gap-4 border-b border-slate-100 px-3 py-2 hover:bg-slate-50 active:bg-slate-100 cursor-pointer"
+                        className="w-full text-left flex gap-4 border-b border-night-border px-3 py-2 hover:bg-night-800 active:bg-night-700 cursor-pointer"
                     >
-                        <div className="bg-emerald-50 text-emerald-600 h-8 flex items-center justify-center w-8 rounded-full">
+                        <div className="bg-brand/15 text-brand h-8 flex items-center justify-center w-8 rounded-full">
                             <i className="ri-map-pin-fill" />
                         </div>
-                        <h4 className="font-medium text-sm text-slate-900 truncate">
+                        <h4 className="font-medium text-sm text-white truncate">
                             {display}
                         </h4>
                     </button>
                 )
             })}
             {!suggestions.length && (
-                <div className="px-3 py-2 text-xs text-slate-400">
+                <div className="px-3 py-2 text-xs text-zinc-500">
                     Type an address — suggestions are biased to Kolhapur, Ichalkaranji, or Sangli (pick city above).
                 </div>
             )}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useContext, useCallback } from 'react'
 import 'remixicon/fonts/remixicon.css'
-import { apiClient, withAuth } from '../services/http'
+import { createRide as createRideRequest, getActiveRide, getPassengerOtp, getRide, cancelRide, retryAssign } from '../services/rideService'
+import { getFare } from '../services/fareService'
+import { getSuggestions, getCoordinates } from '../services/mapService'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
@@ -15,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import LiveTracking from '../components/LiveTracking';
 import RideMap from '../components/RideMap';
 import { getAppLogoUrl } from '../config/externalEndpoints'
+import welcomeBg from '../assets/rideeasy-welcome.png'
 import { SERVICE_AREA_USER_MESSAGE, SERVICE_AREAS } from '../utils/serviceArea'
 import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
@@ -57,12 +60,14 @@ const Home = () => {
     const [ destination, setDestination ] = useState('')
     const [ serviceCity, setServiceCity ] = useState(readStoredServiceCity)
     const [ panelOpen, setPanelOpen ] = useState(false)
+    const [ searchOpen, setSearchOpen ] = useState(false)
+    const homeMapRef = useRef(null)
+    const [ homePosition, setHomePosition ] = useState(null)
+    const [ flyToRequest, setFlyToRequest ] = useState(null)
     const vehiclePanelRef = useRef(null)
     const confirmRidePanelRef = useRef(null)
     const vehicleFoundRef = useRef(null)
     const waitingForDriverRef = useRef(null)
-    const panelRef = useRef(null)
-    const panelCloseRef = useRef(null)
     const [ vehiclePanel, setVehiclePanel ] = useState(false)
     const [ confirmRidePanel, setConfirmRidePanel ] = useState(false)
     const [ vehicleFound, setVehicleFound ] = useState(false)
@@ -110,8 +115,7 @@ const Home = () => {
                 setDriverCoords({ lat: loc.coordinates[1], lng: loc.coordinates[0] })
             }
         }
-        return apiClient
-            .get(`/rides/${id}`, withAuth())
+        return getRide(id)
             .then((res) => {
                 const { ride: data, confirmation: conf } = splitRideApiPayload(res.data)
                 setRide(data)
@@ -126,8 +130,7 @@ const Home = () => {
                 }
                 const st = normalizeRideStatus(data?.status)
                 if (st === 'accepted' || st === 'arrived') {
-                    return apiClient
-                        .get(`/rides/${id}/passenger-otp`, withAuth())
+                    return getPassengerOtp(id)
                         .then((r) => {
                             const o = otpFromPassengerOtpResponse(r)
                             if (o) setPassengerOtp(o)
@@ -192,25 +195,52 @@ const Home = () => {
     /** Restore active booking after refresh (ride id in sessionStorage). */
     useEffect(() => {
         if (ride?._id) return
-        const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
-        if (!id || !currentUser?._id) return
+        if (!currentUser?._id) return
         const token = localStorage.getItem('token')
         if (!token) return
-        /** Load ride into state (pickup/drop/OTP) but do NOT auto-open sheets — user stays on “Find a trip”. */
-        syncRideFromServer(id).then((data) => {
-            if (!data) {
-                try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-                return
+        /** Rides that already started resume on the full-screen /riding flow. */
+        const resumeStartedRide = (data) => {
+            const st = normalizeRideStatus(data?.status)
+            if (st === 'started' || st === 'completed') {
+                navigate('/riding', { state: { ride: data } })
+                return true
             }
-            const st = normalizeRideStatus(data.status)
-            if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
-                try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-                return
-            }
-            setVehicleFound(false)
-            setWaitingForDriver(false)
-        })
-    }, [ride, currentUser?._id, syncRideFromServer])
+            return false
+        }
+        const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
+        if (id) {
+            /** Load ride into state (pickup/drop/OTP) but do NOT auto-open sheets — user stays on “Find a trip”. */
+            syncRideFromServer(id).then((data) => {
+                if (!data) {
+                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    return
+                }
+                if (resumeStartedRide(data)) return
+                const st = normalizeRideStatus(data.status)
+                if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
+                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    return
+                }
+                setVehicleFound(false)
+                setWaitingForDriver(false)
+            })
+            return
+        }
+        /** No session hint (fresh tab / app restart) — ask the backend for the active ride. */
+        getActiveRide()
+            .then((res) => {
+                const raw = stripApiEnvelope(res.data)
+                if (!raw?._id) return
+                if (resumeStartedRide(raw)) return
+                const st = normalizeRideStatus(raw.status)
+                if (![ 'searching', 'accepted', 'arrived' ].includes(st)) return
+                try { sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(raw._id)) } catch { /* ignore */ }
+                setRide(raw)
+                setVehicleFound(false)
+                setWaitingForDriver(false)
+            })
+            .catch(() => {})
+    }, [ride, currentUser?._id, syncRideFromServer, navigate])
 
     useEffect(() => {
         if (!socket) return;
@@ -428,9 +458,9 @@ const Home = () => {
         const poll = async () => {
             try {
                 if (ride?.status === 'searching' && (!ride?.captain?._id && !ride?.captain)) {
-                    await apiClient.post(`/rides/${ride._id}/retry-assign`, {}, withAuth()).catch(() => {})
+                    await retryAssign(ride._id).catch(() => {})
                 }
-                const res = await apiClient.get(`/rides/${ride._id}`, withAuth())
+                const res = await getRide(ride._id)
                 if (cancelled) return
 
                 const { ride: data, confirmation: conf } = splitRideApiPayload(res.data)
@@ -478,9 +508,7 @@ const Home = () => {
             return
         }
         try {
-            const response = await apiClient.get('/maps/get-suggestions', withAuth({
-                params: { input: trimmed, city: serviceCity },
-            }))
+            const response = await getSuggestions(trimmed, serviceCity)
             setPickupSuggestions(response.data)
         } catch {
             setPickupSuggestions([])
@@ -496,9 +524,7 @@ const Home = () => {
             return
         }
         try {
-            const response = await apiClient.get('/maps/get-suggestions', withAuth({
-                params: { input: trimmed, city: serviceCity },
-            }))
+            const response = await getSuggestions(trimmed, serviceCity)
             setDestinationSuggestions(response.data)
         } catch {
             setDestinationSuggestions([])
@@ -508,9 +534,7 @@ const Home = () => {
     const fetchPickupCoords = async (address) => {
         if (!address?.trim()) return
         try {
-            const res = await apiClient.get('/maps/get-coordinates', withAuth({
-                params: { address: address.trim() },
-            }))
+            const res = await getCoordinates(address.trim())
             if (res.data?.lat != null && res.data?.lng != null) {
                 setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
             }
@@ -522,9 +546,7 @@ const Home = () => {
     const fetchDropCoords = async (address) => {
         if (!address?.trim()) return
         try {
-            const res = await apiClient.get('/maps/get-coordinates', withAuth({
-                params: { address: address.trim() },
-            }))
+            const res = await getCoordinates(address.trim())
             if (res.data?.lat != null && res.data?.lng != null) {
                 setDropCoords({ lat: res.data.lat, lng: res.data.lng })
             }
@@ -536,6 +558,7 @@ const Home = () => {
     const handleSelectPickup = (suggestion) => {
         const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
         if (!name) return
+        setPanelOpen(false)
         if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
             setPickupCoords({ lat: suggestion.lat, lng: suggestion.lng })
         } else {
@@ -546,6 +569,7 @@ const Home = () => {
     const handleSelectDestination = (suggestion) => {
         const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
         if (!name) return
+        setPanelOpen(false)
         if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
             setDropCoords({ lat: suggestion.lat, lng: suggestion.lng })
         } else {
@@ -635,10 +659,10 @@ const Home = () => {
         try {
             const pickPromise = (pickupCoords?.lat != null && pickupCoords?.lng != null)
                 ? Promise.resolve({ data: pickupCoords })
-                : apiClient.get('/maps/get-coordinates', withAuth({ params: { address: p } }))
+                : getCoordinates(p)
             const dropPromise = (dropCoords?.lat != null && dropCoords?.lng != null)
                 ? Promise.resolve({ data: dropCoords })
-                : apiClient.get('/maps/get-coordinates', withAuth({ params: { address: d } }))
+                : getCoordinates(d)
             const [ pickRes, dropRes ] = await Promise.all([ pickPromise, dropPromise ])
             const pu = pickRes.data?.lat != null && pickRes.data?.lng != null
                 ? { lat: pickRes.data.lat, lng: pickRes.data.lng }
@@ -652,16 +676,14 @@ const Home = () => {
                 setBookingError(t('could_not_resolve_location'))
                 return
             }
-            const response = await apiClient.get('/rides/get-fare', withAuth({
-                params: {
-                    pickup: p,
-                    destination: d,
-                    pickupLat: pu.lat,
-                    pickupLng: pu.lng,
-                    dropLat: du.lat,
-                    dropLng: du.lng,
-                },
-            }))
+            const response = await getFare({
+                pickup: p,
+                destination: d,
+                pickupLat: pu.lat,
+                pickupLng: pu.lng,
+                dropLat: du.lat,
+                dropLng: du.lng,
+            })
             setFare(stripApiEnvelope(response.data))
             setVehiclePanel(true)
         } catch (err) {
@@ -685,7 +707,7 @@ const Home = () => {
             setVehicleFound(true)
             setVehiclePanel(false)
             setConfirmRidePanel(false)
-            const response = await apiClient.post('/rides/create', {
+            const response = await createRideRequest({
                 pickupLocation: pickup,
                 dropLocation: destination,
                 ...(pickupCoords?.lat != null && pickupCoords?.lng != null
@@ -698,7 +720,7 @@ const Home = () => {
                 paymentMethod: paymentMethod || 'Cash',
                 price,
                 distanceKm: fare.distanceKm
-            }, withAuth())
+            })
             const raw = stripApiEnvelope(response.data)
             const ridePayload = { ...raw }
             delete ridePayload.otp
@@ -723,6 +745,32 @@ const Home = () => {
         setVehicleType(type)
     }
 
+    /** Cancel the active ride on the backend, clear local state, return to search. */
+    const cancelActiveRide = useCallback(async () => {
+        const id = ride?._id
+        if (!id) return
+        try {
+            await cancelRide(id, 'Cancelled by passenger')
+        } catch (err) {
+            alert(formatApiError(err))
+            return
+        }
+        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+        setRide(null)
+        setRideConfirmation(null)
+        setPassengerOtp('')
+        setDriverCoords(null)
+        setVehicleFound(false)
+        setWaitingForDriver(false)
+        setHasShownAcceptAlert(false)
+        setPickup('')
+        setDestination('')
+        setPickupCoords(null)
+        setDropCoords(null)
+        setFare({})
+        setVehicleType(null)
+    }, [ride?._id])
+
     const continueFromVehiclePanel = () => {
         if (!vehicleType) {
             alert(t('please_choose_ride'))
@@ -732,7 +780,27 @@ const Home = () => {
         setConfirmRidePanel(true)
     }
 
-    const showSearchPanel = !(vehiclePanel || confirmRidePanel || vehicleFound || waitingForDriver)
+    const openSearchFor = (field) => {
+        setSearchOpen(true)
+        setPanelOpen(true)
+        setActiveField(field)
+    }
+
+    const locateMe = () => {
+        if (homePosition?.lat != null && homePosition?.lng != null) {
+            setFlyToRequest({ center: [homePosition.lat, homePosition.lng], zoom: 15 })
+        }
+    }
+
+    const zoomMap = (delta) => {
+        const map = homeMapRef.current
+        if (!map) return
+        const c = map.getCenter()
+        setFlyToRequest({ center: [c.lat, c.lng], zoom: map.getZoom() + delta })
+    }
+
+    const inBookingFlow = vehiclePanel || confirmRidePanel || vehicleFound || waitingForDriver
+    const showLanding = !inBookingFlow && !searchOpen
 
     const trackingDriverToPickup =
         waitingForDriver
@@ -741,17 +809,166 @@ const Home = () => {
 
     return (
         <div className='h-screen relative overflow-hidden w-full max-w-full'>
+            {showLanding ? (
+                <div className="h-full w-full overflow-y-auto bg-night-950">
+                    <div className="mx-auto flex min-h-full max-w-lg flex-col px-4 pb-28 pt-4">
+                        <header className="flex items-center gap-3 animate-[rideeasy-fade-up_0.4s_ease-out_both]">
+                            <img
+                                className="h-11 w-11 rounded-xl border border-night-border bg-night-950/70 p-1"
+                                src={getAppLogoUrl()}
+                                alt="RideEasy"
+                            />
+                            <div className="leading-tight">
+                                <h1 className="text-xl font-bold text-white">
+                                    Ride<span className="text-brand">Easy</span>
+                                </h1>
+                                <p className="mt-0.5 text-xs text-zinc-500">{t('ride_anytime_anywhere')}</p>
+                            </div>
+                        </header>
+
+                        <button
+                            type="button"
+                            onClick={() => openSearchFor('pickup')}
+                            className="mt-4 animate-[rideeasy-fade-up_0.4s_ease-out_0.06s_both] rounded-2xl border border-night-border bg-night-900 p-4 text-left shadow-[0_4px_24px_rgba(0,0,0,0.35)] transition active:scale-[0.99]"
+                        >
+                            <div className="flex items-stretch gap-3">
+                                <span className="flex flex-col items-center py-0.5">
+                                    <span className="mt-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />
+                                    <span className="my-1 w-px flex-1 border-l-2 border-dotted border-zinc-600" />
+                                    <span className="mb-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-red-500" />
+                                </span>
+                                <span className="flex min-w-0 flex-1 flex-col justify-center gap-3 py-0.5">
+                                    <span className="min-w-0">
+                                        <span className="block text-xs text-zinc-500">{t('pickup_location')}</span>
+                                        <span className="block truncate text-sm font-medium text-white">{pickup || t('choose_pickup')}</span>
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block text-xs text-zinc-500">{t('drop_location')}</span>
+                                        <span className="block truncate text-sm font-medium text-white">{destination || t('choose_drop')}</span>
+                                    </span>
+                                </span>
+                                <span className="flex items-center text-zinc-400">
+                                    <i className="ri-arrow-down-s-line text-2xl" />
+                                </span>
+                            </div>
+                        </button>
+
+                        <div className="relative mt-4 h-[40dvh] min-h-[280px] animate-[rideeasy-fade-up_0.4s_ease-out_0.12s_both] overflow-hidden rounded-3xl border border-night-border">
+                            {pickupCoords || dropCoords ? (
+                                <RideMap
+                                    pickupCoords={pickupCoords}
+                                    dropCoords={dropCoords}
+                                    currentLocation={homePosition}
+                                    showRoute={!!(pickupCoords && dropCoords)}
+                                    mapRef={homeMapRef}
+                                    flyTo={flyToRequest}
+                                    zoomControl={false}
+                                />
+                            ) : (
+                                <LiveTracking
+                                    onPositionChange={setHomePosition}
+                                    mapRef={homeMapRef}
+                                    flyTo={flyToRequest}
+                                    zoomControl={false}
+                                />
+                            )}
+                            <div className="absolute right-3 top-3 z-[1000] flex flex-col gap-2">
+                                <button
+                                    type="button"
+                                    onClick={locateMe}
+                                    aria-label="Locate me"
+                                    className="flex h-11 w-11 items-center justify-center rounded-full border border-night-border bg-zinc-100 text-lg text-zinc-800 shadow-lg transition hover:bg-white active:scale-95"
+                                >
+                                    <i className="ri-crosshair-2-line" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => zoomMap(1)}
+                                    aria-label="Zoom in"
+                                    className="flex h-11 w-11 items-center justify-center rounded-full border border-night-border bg-zinc-100 text-lg text-zinc-800 shadow-lg transition hover:bg-white active:scale-95"
+                                >
+                                    <i className="ri-add-line" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => zoomMap(-1)}
+                                    aria-label="Zoom out"
+                                    className="flex h-11 w-11 items-center justify-center rounded-full border border-night-border bg-zinc-100 text-lg text-zinc-800 shadow-lg transition hover:bg-white active:scale-95"
+                                >
+                                    <i className="ri-subtract-line" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="mt-5 grid grid-cols-4 gap-2 animate-[rideeasy-fade-up_0.4s_ease-out_0.18s_both]">
+                            <button
+                                type="button"
+                                onClick={() => openSearchFor('pickup')}
+                                className="flex flex-col items-center gap-1.5 transition active:scale-95"
+                            >
+                                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand text-xl text-black shadow-[0_4px_16px_rgba(255,168,0,0.35)]">
+                                    <i className="ri-flashlight-line" />
+                                </span>
+                                <span className="text-xs font-medium text-white">{t('ride_now')}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => alert(t('coming_soon'))}
+                                className="flex flex-col items-center gap-1.5 transition active:scale-95"
+                            >
+                                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-night-border bg-night-800 text-xl text-zinc-300">
+                                    <i className="ri-calendar-line" />
+                                </span>
+                                <span className="text-xs font-medium text-zinc-300">{t('schedule')}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => alert(t('coming_soon'))}
+                                className="flex flex-col items-center gap-1.5 transition active:scale-95"
+                            >
+                                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-night-border bg-night-800 text-xl text-zinc-300">
+                                    <i className="ri-road-map-line" />
+                                </span>
+                                <span className="text-xs font-medium text-zinc-300">{t('outstation')}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => alert(t('coming_soon'))}
+                                className="flex flex-col items-center gap-1.5 transition active:scale-95"
+                            >
+                                <span className="flex h-14 w-14 items-center justify-center rounded-full border border-night-border bg-night-800 text-xl text-zinc-300">
+                                    <i className="ri-grid-fill" />
+                                </span>
+                                <span className="text-xs font-medium text-zinc-300">{t('more')}</span>
+                            </button>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between overflow-hidden rounded-2xl border border-night-border bg-night-900 pr-2 animate-[rideeasy-fade-up_0.4s_ease-out_0.24s_both]">
+                            <div className="px-4 py-4">
+                                <p className="text-base font-semibold text-white">{t('safe_rides')}</p>
+                                <p className="mt-0.5 text-sm font-medium text-zinc-400">{t('better_tomorrow')}</p>
+                                <p className="mt-1 text-xs text-zinc-500">{t('ride_with_verified_driver')}</p>
+                            </div>
+                            <img
+                                src={welcomeBg}
+                                alt="RideEasy vehicle"
+                                className="h-24 w-28 shrink-0 object-cover"
+                            />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+            <>
             <div className="absolute z-20 top-4 left-0 right-0 flex justify-center pointer-events-none">
                 <img
-                    className="w-16"
+                    className="w-16 rounded-2xl bg-night-950/70 p-1.5 backdrop-blur-sm"
                     src={getAppLogoUrl()}
                     alt="RideEasy"
                 />
             </div>
             <div className='h-screen w-full relative z-0'>
-                {showSearchPanel ? (
-                    <div className="h-full w-full bg-black" />
-                ) : (pickupCoords || dropCoords) ? (
+                {inBookingFlow ? (
+                    (pickupCoords || dropCoords) ? (
                     <RideMap
                         pickupCoords={pickupCoords}
                         dropCoords={dropCoords}
@@ -761,170 +978,205 @@ const Home = () => {
                         trackingFrom={trackingDriverToPickup ? driverCoords : null}
                         trackingTo={trackingDriverToPickup ? pickupCoords : null}
                     />
-                ) : (
+                    ) : (
                     <LiveTracking />
+                    )
+                ) : (
+                    <div className="h-full w-full bg-gradient-to-b from-night-800 via-night-950 to-black" />
                 )}
             </div>
-            <div className={`z-20 flex flex-col h-screen absolute top-0 left-0 right-0 mx-auto w-full max-w-lg ${showSearchPanel ? 'justify-center' : 'justify-end'}`}>
-                {showSearchPanel && (
-                    <div className='max-h-[min(42vh,45%)] shrink-0 overflow-y-auto p-6 rounded-t-3xl border border-zinc-700/80 bg-zinc-950/65 backdrop-blur-md text-zinc-100 relative'>
-                    <h5 ref={panelCloseRef} onClick={() => {
-                        setPanelOpen(false)
-                    }} className={`absolute right-6 top-6 text-2xl transition-opacity duration-300 ${panelOpen ? 'opacity-100' : 'opacity-0'}`}>
-                        <i className="ri-arrow-down-wide-line"></i>
-                    </h5>
-                    <h4 className='text-2xl font-semibold text-white'>{t('find_a_trip')}</h4>
-                    <p className="mt-1 text-xs text-slate-500">{SERVICE_AREA_USER_MESSAGE}</p>
-                    <div className="mt-3">
-                        <label htmlFor="user-service-city" className="mb-1 block text-xs font-medium text-zinc-500">{t('city_for_search')}</label>
-                        <select
-                            id="user-service-city"
-                            value={serviceCity}
-                            onChange={(e) => setServiceCity(e.target.value)}
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white"
-                        >
-                            {SERVICE_AREAS.map((z) => (
-                                <option key={`${z.key}-${z.name}`} value={z.key}>{z.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {bookingError ? (
-                        <div
-                            role="alert"
-                            className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 whitespace-pre-line"
-                        >
-                            {bookingError}
-                        </div>
-                    ) : null}
-                    <form className='relative py-3' onSubmit={(e) => {
-                        submitHandler(e)
-                    }}>
-                        <div className="mb-3">
-                            <label htmlFor="user-pickup" className="mb-1 block text-xs font-medium text-zinc-500">{t('from')}</label>
-                            <input
-                                id="user-pickup"
-                                onClick={() => {
-                                    setPanelOpen(true)
-                                    setActiveField('pickup')
-                                }}
-                                value={pickup}
-                                onChange={handlePickupChange}
-                                className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
-                                type="text"
-                                autoComplete="off"
-                                placeholder={t('pickup_address')}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="user-drop" className="mb-1 block text-xs font-medium text-zinc-500">{t('to')}</label>
-                            <input
-                                id="user-drop"
-                                onClick={() => {
-                                    setPanelOpen(true)
-                                    setActiveField('destination')
-                                }}
-                                value={destination}
-                                onChange={handleDestinationChange}
-                                className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
-                                type="text"
-                                autoComplete="off"
-                                placeholder={t('drop_destination')}
-                            />
-                        </div>
-                        {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {currentUser.savedAddresses?.home ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.home
-                                            setPickup(a)
-                                            fetchPickupCoords(a)
-                                        }}
-                                    >
-                                        {t('home_to_pickup')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.work ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.work
-                                            setDestination(a)
-                                            fetchDropCoords(a)
-                                        }}
-                                    >
-                                        {t('work_to_drop')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.home ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.home
-                                            setDestination(a)
-                                            fetchDropCoords(a)
-                                        }}
-                                    >
-                                        {t('home_to_drop')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.work ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.work
-                                            setPickup(a)
-                                            fetchPickupCoords(a)
-                                        }}
-                                    >
-                                        {t('work_to_pickup')}
-                                    </button>
-                                ) : null}
+            {searchOpen && (
+                <div className="absolute inset-0 z-20 mx-auto flex w-full max-w-lg flex-col px-4 pt-20 pb-4">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-night-border bg-night-900/95 backdrop-blur-md text-zinc-100 shadow-[0_8px_40px_rgba(0,0,0,0.6)]">
+                        <header className="shrink-0 border-b border-night-border px-6 pb-4 pt-5">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h4 className="text-2xl font-semibold text-white">{t('find_a_trip')}</h4>
+                                    <p className="mt-1 text-xs text-zinc-500">{SERVICE_AREA_USER_MESSAGE}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchOpen(false)}
+                                    aria-label={t('back')}
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-night-border bg-night-800 text-zinc-300 transition hover:text-white"
+                                >
+                                    <i className="ri-arrow-left-line text-lg" />
+                                </button>
                             </div>
-                        )}
-                    </form>
-                    <button
-                        type="button"
-                        onClick={findTrip}
-                        disabled={
-                            !(pickup || '').trim()
-                            || !(destination || '').trim()
-                        }
-                        className='bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl mt-3 w-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed'>
-                        {t('find_trip')}
-                    </button>
+                        </header>
+                        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+                            <label htmlFor="user-service-city" className="mb-1 block text-xs font-medium text-zinc-500">{t('city_for_search')}</label>
+                            <select
+                                id="user-service-city"
+                                value={serviceCity}
+                                onChange={(e) => setServiceCity(e.target.value)}
+                                className="w-full rounded-xl border border-night-border bg-night-800 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand/60"
+                            >
+                                {SERVICE_AREAS.map((z) => (
+                                    <option key={`${z.key}-${z.name}`} value={z.key}>{z.name}</option>
+                                ))}
+                            </select>
+                            {bookingError ? (
+                                <div
+                                    role="alert"
+                                    className="mt-3 rounded-lg border border-red-900/50 bg-red-950/40 px-3 py-2 text-sm text-red-200 whitespace-pre-line"
+                                >
+                                    {bookingError}
+                                </div>
+                            ) : null}
+                            <form className="mt-4" onSubmit={(e) => {
+                                submitHandler(e)
+                            }}>
+                                <div>
+                                    <label htmlFor="user-pickup" className="mb-1 block text-xs font-medium text-zinc-500">{t('from')}</label>
+                                    <input
+                                        id="user-pickup"
+                                        onClick={() => {
+                                            setPanelOpen(true)
+                                            setActiveField('pickup')
+                                        }}
+                                        value={pickup}
+                                        onChange={handlePickupChange}
+                                        className='bg-night-800 border border-night-border px-4 py-3 text-base rounded-xl w-full text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand/60 focus:border-brand'
+                                        type="text"
+                                        autoComplete="off"
+                                        placeholder={t('pickup_address')}
+                                    />
+                                </div>
+                                {panelOpen && activeField === 'pickup' ? (
+                                    <div className="mt-2 overflow-hidden rounded-xl border border-night-border bg-night-900">
+                                        <LocationSearchPanel
+                                            suggestions={pickupSuggestions}
+                                            setPickup={setPickup}
+                                            setDestination={setDestination}
+                                            activeField={activeField}
+                                            onSelectPickup={handleSelectPickup}
+                                            onSelectDestination={handleSelectDestination}
+                                        />
+                                    </div>
+                                ) : null}
+                                <div className="mt-3">
+                                    <label htmlFor="user-drop" className="mb-1 block text-xs font-medium text-zinc-500">{t('to')}</label>
+                                    <input
+                                        id="user-drop"
+                                        onClick={() => {
+                                            setPanelOpen(true)
+                                            setActiveField('destination')
+                                        }}
+                                        value={destination}
+                                        onChange={handleDestinationChange}
+                                        className='bg-night-800 border border-night-border px-4 py-3 text-base rounded-xl w-full text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand/60 focus:border-brand'
+                                        type="text"
+                                        autoComplete="off"
+                                        placeholder={t('drop_destination')}
+                                    />
+                                </div>
+                                {panelOpen && activeField === 'destination' ? (
+                                    <div className="mt-2 overflow-hidden rounded-xl border border-night-border bg-night-900">
+                                        <LocationSearchPanel
+                                            suggestions={destinationSuggestions}
+                                            setPickup={setPickup}
+                                            setDestination={setDestination}
+                                            activeField={activeField}
+                                            onSelectPickup={handleSelectPickup}
+                                            onSelectDestination={handleSelectDestination}
+                                        />
+                                    </div>
+                                ) : null}
+                                {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        {currentUser.savedAddresses?.home ? (
+                                            <button
+                                                type="button"
+                                                className="rounded-full border border-night-border bg-night-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-night-700"
+                                                onClick={() => {
+                                                    const a = currentUser.savedAddresses.home
+                                                    setPickup(a)
+                                                    fetchPickupCoords(a)
+                                                }}
+                                            >
+                                                {t('home_to_pickup')}
+                                            </button>
+                                        ) : null}
+                                        {currentUser.savedAddresses?.work ? (
+                                            <button
+                                                type="button"
+                                                className="rounded-full border border-night-border bg-night-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-night-700"
+                                                onClick={() => {
+                                                    const a = currentUser.savedAddresses.work
+                                                    setDestination(a)
+                                                    fetchDropCoords(a)
+                                                }}
+                                            >
+                                                {t('work_to_drop')}
+                                            </button>
+                                        ) : null}
+                                        {currentUser.savedAddresses?.home ? (
+                                            <button
+                                                type="button"
+                                                className="rounded-full border border-night-border bg-night-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-night-700"
+                                                onClick={() => {
+                                                    const a = currentUser.savedAddresses.home
+                                                    setDestination(a)
+                                                    fetchDropCoords(a)
+                                                }}
+                                            >
+                                                {t('home_to_drop')}
+                                            </button>
+                                        ) : null}
+                                        {currentUser.savedAddresses?.work ? (
+                                            <button
+                                                type="button"
+                                                className="rounded-full border border-night-border bg-night-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-night-700"
+                                                onClick={() => {
+                                                    const a = currentUser.savedAddresses.work
+                                                    setPickup(a)
+                                                    fetchPickupCoords(a)
+                                                }}
+                                            >
+                                                {t('work_to_pickup')}
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                )}
+                            </form>
+                        </div>
+                        <footer className="shrink-0 border-t border-night-border px-6 py-4">
+                            <button
+                                type="button"
+                                onClick={findTrip}
+                                disabled={
+                                    !(pickup || '').trim()
+                                    || !(destination || '').trim()
+                                }
+                                className='w-full rounded-xl bg-brand px-4 py-3.5 text-base font-bold text-black hover:bg-brand-light disabled:opacity-50 disabled:cursor-not-allowed transition'>
+                                {t('find_trip')}
+                                <i className="ri-arrow-right-line ml-2" aria-hidden />
+                            </button>
+                        </footer>
+                    </div>
                 </div>
-                )}
-                <div
-                    ref={panelRef}
-                    className={`bg-zinc-950 text-zinc-100 overflow-y-auto transition-all duration-300 ease-in-out ${showSearchPanel ? '' : 'hidden'} ${panelOpen ? 'h-[70%] p-6' : 'h-0 p-0'}`}
-                >
-                    <LocationSearchPanel
-                        suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
-                        setPickup={setPickup}
-                        setDestination={setDestination}
-                        activeField={activeField}
-                        onSelectPickup={handleSelectPickup}
-                        onSelectDestination={handleSelectDestination}
-                    />
-                </div>
-            </div>
-            <div ref={vehiclePanelRef} className={`absolute inset-x-0 w-full z-40 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 pt-10 pb-20 rounded-t-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-in-out ${(vehiclePanel && !confirmRidePanel) ? 'translate-y-0' : 'translate-y-full'}`}>
+            )}
+            <div ref={vehiclePanelRef} className={`absolute inset-x-0 w-full z-40 bottom-0 bg-night-900 border-t border-night-border text-zinc-100 px-6 pt-10 pb-20 rounded-t-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-in-out ${(vehiclePanel && !confirmRidePanel) ? 'translate-y-0' : 'translate-y-full'}`}>
                 <div className="flex min-h-0 flex-1 flex-col">
                     <VehiclePanel
                         selectedVehicle={vehicleType}
                         onSelectVehicle={handleVehicleTap}
                         onContinue={continueFromVehiclePanel}
                         city={String(serviceCity || 'Kolhapur').toLowerCase()}
-                        fare={fare} setConfirmRidePanel={setConfirmRidePanel} setVehiclePanel={setVehiclePanel} />
+                        fare={fare}
+                        setConfirmRidePanel={setConfirmRidePanel}
+                        setVehiclePanel={(v) => {
+                            setVehiclePanel(v)
+                            if (!v) {
+                                setSearchOpen(true)
+                                setPanelOpen(false)
+                                setActiveField(null)
+                            }
+                        }} />
                 </div>
             </div>
-            <div ref={confirmRidePanelRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl max-h-[92dvh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${confirmRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={confirmRidePanelRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-night-900 border-t border-night-border text-zinc-100 px-6 py-6 pt-12 pb-24 rounded-t-3xl max-h-[92dvh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${confirmRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
                 <ConfirmRide
                     createRide={createRide}
                     pickup={pickup}
@@ -932,9 +1184,16 @@ const Home = () => {
                     fare={fare}
                     vehicleType={vehicleType}
 
-                    setConfirmRidePanel={setConfirmRidePanel} setVehicleFound={setVehicleFound} />
+                    setConfirmRidePanel={(v) => {
+                        setConfirmRidePanel(v)
+                        if (!v) {
+                            setSearchOpen(true)
+                            setPanelOpen(false)
+                            setActiveField(null)
+                        }
+                    }} setVehicleFound={setVehicleFound} />
             </div>
-            <div ref={vehicleFoundRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${vehicleFound ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={vehicleFoundRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-night-900 border-t border-night-border text-zinc-100 px-6 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${vehicleFound ? 'translate-y-0' : 'translate-y-full'}`}>
                 <LookingForDriver
                     createRide={createRide}
                     pickup={pickup}
@@ -944,13 +1203,20 @@ const Home = () => {
                     ride={ride}
                     passengerOtp={passengerOtp}
                     setVehicleFound={setVehicleFound}
+                    onCancelRide={cancelActiveRide}
+                    onCollapse={() => {
+                        setSearchOpen(true)
+                        setPanelOpen(false)
+                        setActiveField(null)
+                    }}
                     onEditLocations={() => {
                         setVehicleFound(false)
+                        setSearchOpen(true)
                         setPanelOpen(true)
                         setActiveField('pickup')
                     }} />
             </div>
-            <div ref={waitingForDriverRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={waitingForDriverRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-night-900 border-t border-night-border text-zinc-100 px-6 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
                 <WaitingForDriver
                     ride={ride}
                     confirmation={rideConfirmation}
@@ -958,9 +1224,17 @@ const Home = () => {
                     driverCoords={driverCoords}
                     pickupCoords={pickupCoords}
                     setVehicleFound={setVehicleFound}
-                    setWaitingForDriver={setWaitingForDriver}
+                    onCloseWaiting={() => {
+                        setWaitingForDriver(false)
+                        setSearchOpen(true)
+                        setPanelOpen(false)
+                        setActiveField(null)
+                    }}
+                    onCancelRide={cancelActiveRide}
                     waitingForDriver={waitingForDriver} />
             </div>
+            </>
+            )}
         </div>
     )
 }

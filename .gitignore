@@ -38,3 +38,9 @@ android/capacitor/build
 frontend/test-results/
 frontend/playwright-report/
 frontend/playwright/.cache/
+
+# Playwright test artifacts
+test-results/
+user-app/test-results/
+playwright-report/
+user-app/playwright-report/

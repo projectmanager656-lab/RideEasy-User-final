@@ -1,9 +1,8 @@
 import React, { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { CaptainDataContext } from '../context/CaptainContext'
-import { API_BASE_URL } from '../config/apiBaseUrl'
+import { captainLogin, captainSendPhoneOtp, captainVerifyPhoneOtp } from '../services/captainService'
 
 const Captainlogin = () => {
 
@@ -24,18 +23,15 @@ const Captainlogin = () => {
   const submitHandler = async (e) => {
     e.preventDefault();
     setError('')
-    const captain = {
-      email: String(email || '').trim().toLowerCase(),
-      password
-    }
 
     try {
       setLoading(true)
-      const response = await axios.post(`${API_BASE_URL}/captains/login`, captain)
+      const data = await captainLogin({
+        email: String(email || '').trim().toLowerCase(),
+        password
+      })
 
-      if (response.status === 200) {
-        const data = response.data
-
+      if (data?.token) {
         setCaptain(data.captain)
         localStorage.setItem('captainToken', data.token)
         navigate('/captain-home')
@@ -54,9 +50,7 @@ const Captainlogin = () => {
     try {
       setError('')
       setOtpLoading(true)
-      await axios.post(`${API_BASE_URL}/captains/phone/send-otp`, {
-        phone: String(phone || '').trim()
-      })
+      await captainSendPhoneOtp(String(phone || '').trim())
       setOtpSent(true)
     } catch (err) {
       setError(err.response?.data?.message || 'Could not send OTP')
@@ -69,12 +63,8 @@ const Captainlogin = () => {
     try {
       setError('')
       setOtpLoading(true)
-      const response = await axios.post(`${API_BASE_URL}/captains/phone/verify-otp`, {
-        phone: String(phone || '').trim(),
-        otp: String(otp || '').trim()
-      })
-      if (response.status === 200) {
-        const data = response.data
+      const data = await captainVerifyPhoneOtp(String(phone || '').trim(), String(otp || '').trim())
+      if (data?.token) {
         setCaptain(data.captain)
         localStorage.setItem('captainToken', data.token)
         navigate('/captain-home')

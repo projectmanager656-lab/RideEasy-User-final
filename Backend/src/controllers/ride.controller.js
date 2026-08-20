@@ -887,6 +887,39 @@ module.exports.getRideById = async (req, res) => {
     }
 };
 
+/** Latest non-terminal ride for the passenger (app-restart recovery). */
+module.exports.getActiveRideByUser = async (req, res) => {
+    const userObjectId = historyUserObjectId(req.user?._id ?? req.userId);
+    if (!userObjectId) return fail(res, req, 401, 'Unauthorized');
+    try {
+        const ride = await rideModel
+            .findOne({
+                user: userObjectId,
+                $or: [
+                    { status: { $in: [ 'searching', 'accepted', 'arrived', 'started' ] } },
+                    { status: 'completed', paymentStatus: { $ne: 'success' } },
+                ],
+            })
+            .sort({ createdAt: -1 })
+            .populate('captain');
+
+        if (!ride) {
+            return res.status(200).json({ ok: true, ride: null, message: 'No active ride', requestId: req.requestId });
+        }
+
+        const confirmation = buildPassengerConfirmation(ride, null, await computeEtaCaptainToPickup(ride));
+        return res.status(200).json({
+            ...publicRide(ride),
+            confirmation,
+            ok: true,
+            message: 'Active ride fetched',
+            requestId: req.requestId,
+        });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to fetch active ride');
+    }
+};
+
 /** Passenger-only: OTP never emitted on sockets. */
 module.exports.getPassengerOtp = async (req, res) => {
     const rideId = req.params.id;

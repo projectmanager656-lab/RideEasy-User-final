@@ -4,16 +4,17 @@ import gsap from 'gsap'
 import AuthShell from '../components/auth/AuthShell'
 import { useLanguage } from '../i18n'
 import { markOnboardingComplete } from '../utils/onboarding'
+import { useUserData } from '../context/UserContext'
 
 /**
  * First-launch welcome screen: RideEasy branding, night-city hero art and a
- * swipe/tap gesture that transitions into the Login page. Shown only once —
- * after swiping, the flag is stored so future launches go straight to Login
- * (or Home when already authenticated).
+ * swipe/tap gesture that transitions into the Login page (or Home when the
+ * user is already signed in).
  */
 const Welcome = () => {
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const { token } = useUserData()
   const rootRef = useRef(null)
   const touchStart = useRef(null)
   const leaving = useRef(false)
@@ -28,7 +29,13 @@ const Welcome = () => {
       scale: 0.96,
       duration: 0.45,
       ease: 'power2.inOut',
-      onComplete: () => navigate('/login', { replace: true, state: { fromWelcome: true } }),
+      onComplete: () => {
+        if (token) {
+          navigate('/home', { replace: true })
+          return
+        }
+        navigate('/login', { replace: true, state: { fromWelcome: true } })
+      },
     })
   }
 

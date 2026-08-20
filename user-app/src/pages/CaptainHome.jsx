@@ -9,11 +9,9 @@ import { useSocket } from '../hooks/useSocket'
 import { CaptainDataContext } from '../context/CaptainContext'
 import LiveTracking from '../components/LiveTracking'
 import RideMap from '../components/RideMap'
-import axios from 'axios'
-import { API_BASE_URL } from '../config/apiBaseUrl'
 import { RIDE_REQUEST, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
 import { stripApiEnvelope } from '../utils/apiBody'
-import { getCaptainToken } from '../utils/authTokens'
+import { getPendingRides, getMySubscriptionStatus, acceptRide, rejectRide as rejectRideRequest } from '../services/captainService'
 
 const LOCATION_EMIT_MS = 2000
 const PENDING_POLL_MS = 4000
@@ -99,15 +97,8 @@ const CaptainHome = () => {
         }
         doJoin()
         socket.on('connect', doJoin)
-        const token = getCaptainToken()
-        const fetchPending = () => axios.get(`${API_BASE_URL}/rides/pending`, {
-            headers: {
-                Authorization: `Bearer ${token}`,
-            },
-            params: { _ts: Date.now() },
-        })
-            .then((res) => {
-                const list = Array.isArray(res.data) ? res.data : []
+        const fetchPending = () => getPendingRides()
+            .then((list) => {
                 setPendingRides(list)
                 if (!ridePopupOpenRef.current && !confirmRideOpenRef.current && list.length > 0) {
                     setRide(list[0])
@@ -118,8 +109,8 @@ const CaptainHome = () => {
         fetchPending()
         const bootFetch = setTimeout(fetchPending, 300)
         socket.on('connect', fetchPending)
-        axios.get(`${API_BASE_URL}/driver-subscriptions/my-status`, { headers: { Authorization: `Bearer ${token}` } })
-            .then((res) => setSubscriptionStatus(res.data))
+        getMySubscriptionStatus()
+            .then((data) => setSubscriptionStatus(data))
             .catch(() => setSubscriptionStatus({ active: false }))
         let locationEmitTimer
         let locationWatchId
@@ -218,10 +209,8 @@ const CaptainHome = () => {
     async function confirmRide() {
         if (!ride?._id) return
         try {
-            const res = await axios.patch(`${API_BASE_URL}/rides/${ride._id}/accept`, {}, {
-                headers: { Authorization: `Bearer ${getCaptainToken()}` }
-            })
-            setRide(stripApiEnvelope(res.data))
+            const res = await acceptRide(ride._id)
+            setRide(stripApiEnvelope(res))
             setRidePopupPanel(false)
             setConfirmRidePopupPanel(true)
         } catch (err) {
@@ -233,9 +222,7 @@ const CaptainHome = () => {
     async function rejectRide() {
         if (!ride?._id) return
         try {
-            await axios.patch(`${API_BASE_URL}/rides/${ride._id}/reject`, {}, {
-                headers: { Authorization: `Bearer ${getCaptainToken()}` }
-            })
+            await rejectRideRequest(ride._id)
             setRidePopupPanel(false)
             setRide(null)
         } catch (err) {

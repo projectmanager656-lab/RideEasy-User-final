@@ -27,7 +27,7 @@ import { useLanguage } from '../i18n'
         <NavLink
           to="/home"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-brand' : 'text-zinc-500'}`
           }
         >
           <i className="ri-map-pin-line text-xl" />
@@ -36,7 +36,7 @@ import { useLanguage } from '../i18n'
         <NavLink
           to="/riding"
           className={() =>
-            `${base} ${path === '/riding' ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${path === '/riding' ? 'text-brand' : 'text-zinc-500'}`
           }
         >
           <i className="ri-roadster-line text-xl" />
@@ -46,7 +46,7 @@ import { useLanguage } from '../i18n'
         <NavLink
           to="/history"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-brand' : 'text-zinc-500'}`
           }
         >
           <i className="ri-history-line text-xl" />
@@ -55,7 +55,7 @@ import { useLanguage } from '../i18n'
         <NavLink
           to="/profile"
           className={({ isActive }) =>
-            `${base} ${isActive ? 'text-emerald-400' : 'text-zinc-500'}`
+            `${base} ${isActive ? 'text-brand' : 'text-zinc-500'}`
           }
         >
           <i className="ri-user-3-line text-xl" />

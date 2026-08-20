@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../../i18n'
-import { apiClient } from '../../services/http'
+import { googleLogin } from '../../services/authService'
 import { formatApiError } from '../../utils/apiError'
 import { stripApiEnvelope } from '../../utils/apiBody'
 import { dividerClass } from './classes'
@@ -83,7 +83,7 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
             }
             setNotice('')
             try {
-              const api = await apiClient.post('/users/google', { idToken: response.credential })
+              const api = await googleLogin(response.credential)
               const data = stripApiEnvelope(api.data)
               const user = data?.user ?? data
               const token = data?.token

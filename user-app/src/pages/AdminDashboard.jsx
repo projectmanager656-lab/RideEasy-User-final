@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { API_BASE_URL } from '../config/apiBaseUrl'
-import { getAdminToken } from '../utils/authTokens'
 import { stripApiEnvelope } from '../utils/apiBody'
-
-const getAuthHeader = () => ({ Authorization: `Bearer ${getAdminToken() || ''}` })
+import { getAdminAnalytics, getAdminUsers, getAdminDrivers, getAdminRides, getAdminPayments, getAdminPricing, putAdminPricing, approveDriver, rejectDriver, blockUser, blockDriver } from '../services/adminService'
 
 const TAB_LABELS = {
   analytics: 'Overview',
@@ -59,9 +55,9 @@ const AdminDashboard = () => {
   const loadAnalytics = useCallback(() => {
     setAnalyticsError('')
     setAnalyticsLoading(true)
-    axios.get(`${API_BASE_URL}/admin/analytics`, { headers: getAuthHeader() })
-      .then((res) => {
-        setAnalytics(stripApiEnvelope(res.data))
+    getAdminAnalytics()
+      .then((data) => {
+        setAnalytics(stripApiEnvelope(data))
         setAnalyticsError('')
       })
       .catch((err) => {
@@ -77,40 +73,33 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     setTabError('')
-    const h = { headers: getAuthHeader() }
     if (tab === 'users') {
-      axios.get(`${API_BASE_URL}/admin/users`, h)
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      getAdminUsers()
+        .then((d) => {
           setUsers(Array.isArray(d) ? d : (d.users || []))
         })
         .catch((e) => setTabError(e.response?.data?.message || e.message || 'Failed'))
     } else if (tab === 'drivers') {
-      axios.get(`${API_BASE_URL}/admin/drivers`, h)
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      getAdminDrivers()
+        .then((d) => {
           setDrivers(Array.isArray(d) ? d : (d.drivers || []))
         })
         .catch((e) => setTabError(e.response?.data?.message || e.message || 'Failed'))
     } else if (tab === 'rides') {
-      const q = rideStatusFilter ? `?status=${encodeURIComponent(rideStatusFilter)}` : ''
-      axios.get(`${API_BASE_URL}/admin/rides${q}`, h)
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      getAdminRides(rideStatusFilter)
+        .then((d) => {
           setRides(Array.isArray(d) ? d : (d.rides || []))
         })
         .catch((e) => setTabError(e.response?.data?.message || e.message || 'Failed'))
     } else if (tab === 'payments') {
-      axios.get(`${API_BASE_URL}/admin/payments`, h)
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      getAdminPayments()
+        .then((d) => {
           setPayments(Array.isArray(d) ? d : (d.payments || []))
         })
         .catch((e) => setTabError(e.response?.data?.message || e.message || 'Failed'))
     } else if (tab === 'pricing') {
-      axios.get(`${API_BASE_URL}/admin/pricing`, h)
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      getAdminPricing()
+        .then((d) => {
           setPricingJson(JSON.stringify({
             rates: d.rates || {},
             driverPlans: d.driverPlans || {},
@@ -129,29 +118,29 @@ const AdminDashboard = () => {
     setDrivers((list) => list.map((x) => (String(x._id) === id ? { ...x, ...doc } : x)))
   }
 
-  const approveDriver = (driverId) => {
-    axios.put(`${API_BASE_URL}/admin/drivers/${driverId}/approve`, {}, { headers: getAuthHeader() })
-      .then((res) => {
-        const d = stripApiEnvelope(res.data).driver
+  const approveDriverAction = (driverId) => {
+    approveDriver(driverId)
+      .then((data) => {
+        const d = stripApiEnvelope(data).driver
         if (d) mergeDriver(d)
       })
       .catch((e) => alert(e.response?.data?.message || 'Failed'))
   }
 
-  const rejectDriver = (driverId) => {
+  const rejectDriverAction = (driverId) => {
     if (!window.confirm('Remove driver approval? They will need approval again before going online.')) return
-    axios.put(`${API_BASE_URL}/admin/drivers/${driverId}/reject`, {}, { headers: getAuthHeader() })
-      .then((res) => {
-        const d = stripApiEnvelope(res.data).driver
+    rejectDriver(driverId)
+      .then((data) => {
+        const d = stripApiEnvelope(data).driver
         if (d) mergeDriver(d)
       })
       .catch((e) => alert(e.response?.data?.message || 'Failed'))
   }
 
   const toggleUserBlock = (userId, blocked) => {
-    axios.patch(`${API_BASE_URL}/admin/users/${userId}/block`, { blocked }, { headers: getAuthHeader() })
-      .then((res) => {
-        const u = stripApiEnvelope(res.data).user
+    blockUser(userId, blocked)
+      .then((data) => {
+        const u = stripApiEnvelope(data).user
         if (u?._id) {
           setUsers((list) => list.map((x) => (String(x._id) === String(u._id) ? { ...x, ...u } : x)))
         }
@@ -160,9 +149,9 @@ const AdminDashboard = () => {
   }
 
   const toggleDriverBlock = (driverId, blocked) => {
-    axios.patch(`${API_BASE_URL}/admin/drivers/${driverId}/block`, { blocked }, { headers: getAuthHeader() })
-      .then((res) => {
-        const d = stripApiEnvelope(res.data).driver
+    blockDriver(driverId, blocked)
+      .then((data) => {
+        const d = stripApiEnvelope(data).driver
         if (d) mergeDriver(d)
       })
       .catch((e) => alert(e.response?.data?.message || 'Failed'))
@@ -180,9 +169,9 @@ const AdminDashboard = () => {
                 : {}),
             }
           : { rates: parsed }
-      axios.put(`${API_BASE_URL}/admin/pricing`, payload, { headers: getAuthHeader() })
-        .then((res) => {
-          const d = stripApiEnvelope(res.data)
+      putAdminPricing(payload)
+        .then((data) => {
+          const d = stripApiEnvelope(data)
           setPricingJson(JSON.stringify({
             rates: d.rates || {},
             driverPlans: d.driverPlans || {},
@@ -406,12 +395,12 @@ const AdminDashboard = () => {
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
                             {!d.approved && (
-                              <button type="button" onClick={() => approveDriver(d._id)} className="text-left text-sm font-medium text-emerald-400 hover:text-emerald-300">
+                              <button type="button" onClick={() => approveDriverAction(d._id)} className="text-left text-sm font-medium text-emerald-400 hover:text-emerald-300">
                                 Approve
                               </button>
                             )}
                             {d.approved && (
-                              <button type="button" onClick={() => rejectDriver(d._id)} className="text-left text-sm font-medium text-amber-400 hover:text-amber-300">
+                              <button type="button" onClick={() => rejectDriverAction(d._id)} className="text-left text-sm font-medium text-amber-400 hover:text-amber-300">
                                 Reject
                               </button>
                             )}

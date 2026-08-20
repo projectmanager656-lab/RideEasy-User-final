@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getAdminToken } from '../utils/authTokens'
 import { isAdminRoleToken } from '../utils/jwtPayload'
+import { getAdminAnalytics } from '../services/adminService'
 
 const AdminProtectWrapper = ({ children }) => {
   const token = getAdminToken()
@@ -20,9 +19,7 @@ const AdminProtectWrapper = ({ children }) => {
       navigate('/admin')
       return
     }
-    axios.get(`${API_BASE_URL}/admin/analytics`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    getAdminAnalytics()
       .then(() => setAllowed(true))
       .catch((err) => {
         // Only invalid/expired token should log out; network / 500 still show dashboard with error.

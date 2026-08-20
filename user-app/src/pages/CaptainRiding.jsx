@@ -1,16 +1,15 @@
 import React, { useRef, useState, useEffect, useContext } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import FinishRide from '../components/FinishRide'
 import { useGSAP } from '@gsap/react'
 import gsap from 'gsap'
 import RideMap from '../components/RideMap'
 import LiveTracking from '../components/LiveTracking'
-import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { useSocket } from '../hooks/useSocket'
 import { CaptainDataContext } from '../context/CaptainContext'
 import { RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { getCoordinates } from '../services/captainService'
 import { getCaptainToken } from '../utils/authTokens'
 
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }
@@ -70,22 +69,18 @@ const CaptainRiding = () => {
 
     useEffect(() => {
         if (!rideData?.pickupLocation?.trim()) return
-        axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: rideData.pickupLocation.trim() },
-            headers: { Authorization: `Bearer ${getCaptainToken()}` }
-        }).then((res) => {
-            if (res.data?.lat != null && res.data?.lng != null) setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
-        }).catch(() => {})
+        getCoordinates(rideData.pickupLocation.trim())
+            .then((data) => {
+                if (data?.lat != null && data?.lng != null) setPickupCoords({ lat: data.lat, lng: data.lng })
+            }).catch(() => {})
     }, [ rideData?.pickupLocation ])
 
     useEffect(() => {
         if (!rideData?.dropLocation?.trim()) return
-        axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: rideData.dropLocation.trim() },
-            headers: { Authorization: `Bearer ${getCaptainToken()}` }
-        }).then((res) => {
-            if (res.data?.lat != null && res.data?.lng != null) setDropCoords({ lat: res.data.lat, lng: res.data.lng })
-        }).catch(() => {})
+        getCoordinates(rideData.dropLocation.trim())
+            .then((data) => {
+                if (data?.lat != null && data?.lng != null) setDropCoords({ lat: data.lat, lng: data.lng })
+            }).catch(() => {})
     }, [ rideData?.dropLocation ])
 
     const captainId =

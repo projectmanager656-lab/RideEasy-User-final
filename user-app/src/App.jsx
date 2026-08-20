@@ -5,7 +5,8 @@ import BottomNav from './components/BottomNav'
 import NativeAndroidFlavorRedirect from './components/NativeAndroidFlavorRedirect'
 import RidingRouteGuard from './components/RidingRouteGuard'
 import { UserDataContext } from './context/UserContext'
-import { hasCompletedOnboarding, syncOnboardingFromServer } from './utils/onboarding'
+import { getActiveRide } from './services/rideService'
+import { stripApiEnvelope } from './utils/apiBody'
 import 'remixicon/fonts/remixicon.css'
 
 const UserLogin = lazy(() => import('./pages/UserLogin'))
@@ -28,39 +29,45 @@ const authShellLoader = (
   </div>
 )
 
-// TODO: TEMPORARY — remove after project completion.
-// Every page refresh jumps to the Welcome ("Get started") page.
-const TEMP_RELOAD_TO_WELCOME = true
-
 const UserAppRoot = () => {
   const { authLoading, token } = useContext(UserDataContext)
-  const [ serverSynced, setServerSynced ] = useState(false)
+  // 'loading' | null | ride doc — lets the app recover an in-progress ride
+  // after a refresh/restart instead of dropping it.
+  const [ activeRide, setActiveRide ] = useState('loading')
 
-  // Restore this device's server-side onboarding state (if the local flag
-  // was lost) before deciding where to redirect.
   useEffect(() => {
-    let mounted = true
-    syncOnboardingFromServer().then(() => {
-      if (mounted) setServerSynced(true)
-    })
-    return () => { mounted = false }
-  }, [])
+    if (authLoading || !token) {
+      setActiveRide(null)
+      return
+    }
+    let cancelled = false
+    getActiveRide()
+      .then((res) => {
+        if (cancelled) return
+        const body = stripApiEnvelope(res.data)
+        setActiveRide(body && body._id ? body : null)
+      })
+      .catch(() => {
+        if (!cancelled) setActiveRide(null)
+      })
+    return () => { cancelled = true }
+  }, [authLoading, token])
 
-  void serverSynced
-
-  if (authLoading) {
+  if (authLoading || (token && activeRide === 'loading')) {
     return authShellLoader
   }
 
-  if (!token) {
-    // First launch → Welcome (swipe to Login). Returning users go straight
-    // to the Login page.
-    if (!hasCompletedOnboarding()) {
-      return <Navigate to="/welcome" replace />
-    }
-    return <Navigate to="/login" replace />
+  if (!activeRide) {
+    // Start page first — everyone lands on Welcome (Get started → Login/Home).
+    return <Navigate to="/welcome" replace />
   }
 
+  const st = String(activeRide.status || '').trim().toLowerCase()
+  // Started / completed-but-unpaid rides resume on the full /riding flow.
+  if (st === 'started' || st === 'completed') {
+    return <Navigate to="/riding" replace state={{ ride: activeRide }} />
+  }
+  // searching / accepted / arrived resume on Home's matching panels.
   return <Navigate to="/home" replace />
 }
 
@@ -68,12 +75,12 @@ const App = () => {
   const location = useLocation()
   const isAuthRoute = location.pathname === '/login' || location.pathname === '/signup' || location.pathname === '/welcome'
 
-  // TEMP: on a fresh page load (refresh) always land on the Welcome page.
+  // On a fresh page load (refresh) always land on the Welcome start page.
   // The ref is consumed only on the very first render, so in-app
-  // navigation (swipe/tap Get started, login) is never redirected.
+  // navigation (tap, swipe, login, ride flow) is never redirected.
   const isInitialRender = useRef(true)
   useEffect(() => { isInitialRender.current = false }, [])
-  if (TEMP_RELOAD_TO_WELCOME && isInitialRender.current && location.pathname !== '/welcome') {
+  if (isInitialRender.current && location.pathname !== '/welcome') {
     return <Navigate to="/welcome" replace />
   }
 

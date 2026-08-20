@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import RideStatusStepper from './RideStatusStepper'
 
 function rideStatusNorm(s) {
@@ -6,6 +6,7 @@ function rideStatusNorm(s) {
 }
 
 const LookingForDriver = (props) => {
+    const [cancelling, setCancelling] = useState(false)
     const st = rideStatusNorm(props.ride?.status)
     const isSearching = !st || st === 'searching'
     const showOtp =
@@ -13,9 +14,21 @@ const LookingForDriver = (props) => {
         || st === 'accepted'
         || st === 'arrived'
 
+    const handleCancel = async () => {
+        if (typeof props.onCancelRide !== 'function') return
+        if (!window.confirm('Cancel this ride? Your driver search will stop.')) return
+        setCancelling(true)
+        try {
+            await props.onCancelRide()
+        } finally {
+            setCancelling(false)
+        }
+    }
+
     return (
         <div>
             <h5 className='p-1 text-center w-[93%] absolute top-0' onClick={() => {
+                props.onCollapse?.()
                 props.setVehicleFound(false)
             }}><i className="text-3xl text-zinc-400 ri-arrow-down-wide-line"></i></h5>
             <h3 className='text-2xl font-semibold mb-5 text-white'>Looking for a Driver</h3>
@@ -47,7 +60,7 @@ const LookingForDriver = (props) => {
                 </div>
                 <div className='w-full mt-5 rounded-xl border border-zinc-800 overflow-hidden'>
                     <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
-                        <i className="ri-map-pin-user-fill text-emerald-400"></i>
+                        <i className="ri-map-pin-user-fill text-brand"></i>
                         <div className="min-w-0 flex-1">
                             <h3 className='text-lg font-medium text-white'>Pickup</h3>
                             <p className='text-sm -mt-1 text-zinc-400 break-words'>
@@ -56,7 +69,7 @@ const LookingForDriver = (props) => {
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
-                        <i className="text-lg ri-map-pin-2-fill text-emerald-400"></i>
+                        <i className="text-lg ri-map-pin-2-fill text-brand"></i>
                         <div className="min-w-0 flex-1">
                             <h3 className='text-lg font-medium text-white'>Drop-off</h3>
                             <p className='text-sm -mt-1 text-zinc-400 break-words'>
@@ -65,7 +78,7 @@ const LookingForDriver = (props) => {
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3'>
-                        <i className="ri-currency-line text-emerald-400"></i>
+                        <i className="ri-currency-line text-brand"></i>
                         <div>
                             <h3 className='text-lg font-medium text-white'>
                                 ₹{props.ride?.price ?? props.fare?.[props.vehicleType] ?? props.fare?.price ?? '—'}
@@ -81,6 +94,16 @@ const LookingForDriver = (props) => {
                         onClick={() => props.onEditLocations()}
                     >
                         Edit pickup &amp; drop — search again
+                    </button>
+                ) : null}
+                {typeof props.onCancelRide === 'function' ? (
+                    <button
+                        type="button"
+                        disabled={cancelling}
+                        onClick={handleCancel}
+                        className="mt-3 w-full rounded-xl border border-red-800/70 bg-red-950/40 py-3 text-sm font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-50"
+                    >
+                        {cancelling ? 'Cancelling…' : 'Cancel ride'}
                     </button>
                 ) : null}
             </div>

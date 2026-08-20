@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useLanguage } from '../../i18n'
-import { apiClient } from '../../services/http'
+import { sendLoginOtp, verifyLoginOtp, sendPhoneOtp, verifyPhoneOtp } from '../../services/authService'
 import { formatApiError } from '../../utils/apiError'
 import { stripApiEnvelope } from '../../utils/apiBody'
 import { errorBoxClass } from './classes'
@@ -48,15 +48,13 @@ const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack
     setError('')
     setResendNotice('')
     try {
-      const response = await apiClient.post(
-        isLogin ? '/users/login/send-otp' : '/users/phone/send-otp',
-        isLogin
-          ? { identifier: String(loginIdentifier).trim() }
-          : {
-              phone: String(phone).trim(),
-              ...(email ? { email } : {}),
-              ...(name ? { name } : {}),
-            }
+      const response = await (isLogin
+        ? sendLoginOtp(String(loginIdentifier).trim())
+        : sendPhoneOtp({
+            phone: String(phone).trim(),
+            ...(email ? { email } : {}),
+            ...(name ? { name } : {}),
+          })
       )
       const data = stripApiEnvelope(response.data)
       if (data?.debugOtp) setDevOtp(String(data.debugOtp))
@@ -71,16 +69,15 @@ const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack
     if (!otpReady || loading) return
     setError('')
     setLoading(true)
+    const otpDigits = String(otp).replace(/\D/g, '')
     try {
-      const response = await apiClient.post(
-        isLogin ? '/users/login/verify-otp' : '/users/phone/verify-otp',
-        isLogin
-          ? { identifier: String(loginIdentifier).trim(), otp: String(otp).replace(/\D/g, '') }
-          : {
-              phone: String(phone).trim(),
-              otp: String(otp).replace(/\D/g, ''),
-              ...(name ? { name } : {}),
-            }
+      const response = await (isLogin
+        ? verifyLoginOtp(String(loginIdentifier).trim(), otpDigits)
+        : verifyPhoneOtp({
+            phone: String(phone).trim(),
+            otp: otpDigits,
+            ...(name ? { name } : {}),
+          })
       )
       const data = stripApiEnvelope(response.data)
       const user = data?.user ?? data

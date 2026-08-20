@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { UserDataContext } from '../../context/UserContext'
-import { apiClient } from '../../services/http'
+import { checkUserExists, login, sendPhoneOtp } from '../../services/authService'
 import { formatApiError } from '../../utils/apiError'
 import { stripApiEnvelope } from '../../utils/apiBody'
 import AuthShell from '../../components/auth/AuthShell'
@@ -149,7 +149,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setCheckingAccount(true)
     setLoginError('')
     try {
-      const response = await apiClient.post('/users/check-user', { identifier: cleanId })
+      const response = await checkUserExists(cleanId)
       const data = stripApiEnvelope(response.data)
       if (data?.exists) {
         setAccountState('existing')
@@ -186,10 +186,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setLoginError('')
     setLoginLoading(true)
     try {
-      const response = await apiClient.post('/users/login', {
-        identifier: id,
-        password,
-      })
+      const response = await login(id, password)
       const data = stripApiEnvelope(response.data)
       // Password verified → backend sent an OTP → open the OTP pane.
       if (data?.passwordVerified) {
@@ -214,7 +211,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setLoginOtpIdentifier('')
     setLoginOtpDevOtp('')
     try {
-      const response = await apiClient.post('/users/phone/send-otp', payload)
+      const response = await sendPhoneOtp(payload)
       const data = stripApiEnvelope(response.data)
       if (data?.debugOtp) setRegDebugOtp(String(data.debugOtp))
       setOtpOpen(true)

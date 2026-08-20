@@ -76,6 +76,19 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
     return null
 }
 
+/** Exposes the Leaflet map instance and honours external "fly to" requests. */
+function MapBridge({ mapRef, flyTo }) {
+    const map = useMap()
+    useEffect(() => {
+        if (mapRef) mapRef.current = map
+    }, [map, mapRef])
+    useEffect(() => {
+        if (!flyTo?.center) return
+        map.setView(flyTo.center, flyTo.zoom ?? map.getZoom(), { animate: true })
+    }, [flyTo, map])
+    return null
+}
+
 const RideMap = ({
     pickupCoords = null,
     dropCoords = null,
@@ -90,6 +103,11 @@ const RideMap = ({
     trackingTo = null,
     /** Show ETA chip for the tracking leg (requires trackingFrom/To). */
     showTrackingEta = true,
+    /** External map handle + "fly to" request (e.g. locate-me controls). */
+    mapRef = null,
+    flyTo = null,
+    /** Hide Leaflet's built-in zoom control when custom controls are rendered. */
+    zoomControl = true,
 }) => {
     const [routeLine, setRouteLine] = useState([])
     const [trackingLine, setTrackingLine] = useState([])
@@ -204,7 +222,8 @@ const RideMap = ({
                     ETA ~{trackingEtaMin} min
                 </div>
             )}
-            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl>
+            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl={zoomControl !== false}>
+                <MapBridge mapRef={mapRef} flyTo={flyTo} />
                 <MapBoundsSync
                     pickupCoords={pickupCoords}
                     dropCoords={dropCoords}

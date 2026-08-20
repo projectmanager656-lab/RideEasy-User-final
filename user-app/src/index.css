@@ -13,3 +13,14 @@
     @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full bg-black shadow-2xl overflow-x-hidden;
   }
 }
+
+@keyframes rideeasy-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

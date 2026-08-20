@@ -1,8 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { CaptainDataContext } from '../context/CaptainContext'
-import { API_BASE_URL } from '../config/apiBaseUrl'
+import { getSubscriptionPlans, captainRegister } from '../services/captainService'
 
 const FALLBACK_PLANS = {
   BIKE: { weekly: 29, monthly: 99, yearly: 899 },
@@ -33,8 +32,8 @@ const CaptainSignup = () => {
   const currentPlanPrices = planTiers?.[selectedVehicle] || FALLBACK_PLANS[selectedVehicle] || FALLBACK_PLANS.AUTO
 
   useEffect(() => {
-    axios.get(`${API_BASE_URL}/driver-subscriptions/plans`)
-      .then((r) => setPlanTiers(r.data?.plans || null))
+    getSubscriptionPlans()
+      .then((data) => setPlanTiers(data?.plans || null))
       .catch(() => setPlanTiers(null))
   }, [])
 
@@ -68,9 +67,8 @@ const CaptainSignup = () => {
           upiId: (bankUpiId.trim() || upiId.trim()).toLowerCase(),
         }
       }
-      const response = await axios.post(`${API_BASE_URL}/captains/register`, payload)
-      if (response.status === 201) {
-        const data = response.data
+      const data = await captainRegister(payload)
+      if (data?.token) {
         setCaptain(data.captain)
         localStorage.setItem('captainToken', data.token)
         navigate('/captain-home')

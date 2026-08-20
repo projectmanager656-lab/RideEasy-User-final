@@ -82,12 +82,12 @@ const VehiclePanel = (props) => {
                                     disabled={price == null}
                                     className={[
                                         'w-full rounded-2xl border p-3 flex items-center justify-between gap-3 transition',
-                                        active ? 'border-emerald-500 bg-emerald-950/40' : 'border-zinc-700 bg-zinc-900/80 hover:border-zinc-500',
+                                        active ? 'border-brand bg-brand/10' : 'border-night-border bg-night-800/80 hover:border-zinc-500',
                                         price == null ? 'opacity-50 cursor-not-allowed' : ''
                                     ].join(' ')}
                                 >
                                     <div className="flex min-w-0 items-center gap-3">
-                                        <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${active ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-200'}`}>
+                                        <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${active ? 'bg-brand text-black' : 'bg-night-800 text-zinc-200'}`}>
                                             <i className={`${iconFor(v.id)} text-xl`} />
                                         </div>
                                         <div className="min-w-0 text-left">
@@ -105,12 +105,12 @@ const VehiclePanel = (props) => {
                     </div>
                 </div>
 
-                <div className="mx-auto w-full max-w-md shrink-0 border-t border-zinc-800 bg-zinc-950 pt-3 pb-1">
+                <div className="mx-auto w-full max-w-md shrink-0 border-t border-night-border bg-night-900 pt-3 pb-1">
                     <button
                         type="button"
                         disabled={!selected}
                         onClick={() => props.onContinue?.()}
-                        className={`w-full rounded-2xl py-3 font-semibold ${selected ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-zinc-800 text-zinc-500'}`}
+                        className={`w-full rounded-2xl py-3 font-semibold ${selected ? 'bg-brand text-black hover:bg-brand-light' : 'bg-night-800 text-zinc-500'}`}
                     >
                         {primaryLabel}
                     </button>

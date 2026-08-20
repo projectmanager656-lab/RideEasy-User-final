@@ -95,9 +95,9 @@ const en = {
   user_not_found_error: 'No account found with this email/phone. Please sign up instead.',
 
   // --- BottomNav.jsx ---
-  book: 'Book',
-  live: 'Live',
-  trips: 'Trips',
+  book: 'Home',
+  live: 'Ride',
+  trips: 'History',
   profile: 'Profile',
 
   // --- Home.jsx ---
@@ -111,6 +111,19 @@ const en = {
   work_to_drop: 'Work → Drop',
   home_to_drop: 'Home → Drop',
   work_to_pickup: 'Work → Pickup',
+  pickup_location: 'Pickup location',
+  drop_location: 'Drop location',
+  choose_pickup: 'Choose pickup point',
+  choose_drop: 'Choose drop point',
+  ride_now: 'Ride Now',
+  schedule: 'Schedule',
+  outstation: 'Outstation',
+  more: 'More',
+  safe_rides: 'Safe Rides',
+  better_tomorrow: 'Better Tomorrow',
+  ride_with_verified_driver: 'Ride with verified driver',
+  coming_soon: 'Coming soon',
+  back: 'Back',
 
   // --- UserProfile.jsx ---
   display_name: 'Display name',
@@ -231,9 +244,9 @@ const hi = {
   user_not_found_error: 'इस ईमेल/फ़ोन के साथ कोई खाता नहीं मिला। कृपया साइन अप करें।',
 
   // --- BottomNav.jsx ---
-  book: 'बुक करें',
-  live: 'लाइव',
-  trips: 'ट्रिप्स',
+  book: 'होम',
+  live: 'राइड',
+  trips: 'इतिहास',
   profile: 'प्रोफ़ाइल',
 
   // --- Home.jsx ---
@@ -247,6 +260,19 @@ const hi = {
   work_to_drop: 'कार्यालय → ड्रॉप',
   home_to_drop: 'घर → ड्रॉप',
   work_to_pickup: 'कार्यालय → पिकअप',
+  pickup_location: 'पिकअप स्थान',
+  drop_location: 'ड्रॉप स्थान',
+  choose_pickup: 'पिकअप पॉइंट चुनें',
+  choose_drop: 'ड्रॉप पॉइंट चुनें',
+  ride_now: 'अभी राइड करें',
+  schedule: 'शेड्यूल',
+  outstation: 'आउटस्टेशन',
+  more: 'और',
+  safe_rides: 'सुरक्षित राइड्स',
+  better_tomorrow: 'बेहतर कल',
+  ride_with_verified_driver: 'वेरिफाइड ड्राइवर के साथ राइड करें',
+  coming_soon: 'जल्द आ रहा है',
+  back: 'वापस',
 
   // --- UserProfile.jsx ---
   display_name: 'प्रदर्शित नाम',
@@ -367,9 +393,9 @@ const mr = {
   user_not_found_error: 'या ईमेल/फोनसह खाते सापडले नाही. कृपया साइन अप करा.',
 
   // --- BottomNav.jsx ---
-  book: 'बुक करा',
-  live: 'लाइव्ह',
-  trips: 'ट्रिप्स',
+  book: 'होम',
+  live: 'राइड',
+  trips: 'इतिहास',
   profile: 'प्रोफाइल',
 
   // --- Home.jsx ---
@@ -383,6 +409,19 @@ const mr = {
   work_to_drop: 'ऑफिस → ड्रॉप',
   home_to_drop: 'घर → ड्रॉप',
   work_to_pickup: 'ऑफिस → पिकअप',
+  pickup_location: 'पिकअप ठिकाण',
+  drop_location: 'ड्रॉप ठिकाण',
+  choose_pickup: 'पिकअप पॉइंट निवडा',
+  choose_drop: 'ड्रॉप पॉइंट निवडा',
+  ride_now: 'आता राइड करा',
+  schedule: 'शेड्यूल',
+  outstation: 'आउटस्टेशन',
+  more: 'अधिक',
+  safe_rides: 'सुरक्षित राइड्स',
+  better_tomorrow: 'चांगला उद्या',
+  ride_with_verified_driver: 'व्हेरिफाइड ड्रायव्हरसह राइड करा',
+  coming_soon: 'लवकरच',
+  back: 'मागे',
 
   // --- UserProfile.jsx ---
   display_name: 'दाखवले जाणारे नाव',

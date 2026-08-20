@@ -25,6 +25,55 @@ export function requestPath (config) {
   return url.startsWith('/') ? url : `/${url}`
 }
 
+/**
+ * Centralized 401/session-expiry handling.
+ * A single handler can be registered (e.g. UserContext) to clear in-memory
+ * auth state; the hard redirect to /login is the fallback when no handler is
+ * registered. Screens must NOT implement their own 401 logic.
+ */
+let unauthorizedHandler = null
+
+export function setUnauthorizedHandler (handler) {
+  unauthorizedHandler = typeof handler === 'function' ? handler : null
+}
+
+/** Role of the request based on the Authorization header actually attached. */
+function requestRole (config) {
+  const auth = String(config?.headers?.Authorization || '')
+  const cap = getCaptainToken()
+  const adm = getAdminToken()
+  if (cap && auth === `Bearer ${cap}`) return 'captain'
+  if (adm && auth === `Bearer ${adm}`) return 'admin'
+  return 'passenger'
+}
+
+function redirectTo (path, current) {
+  const p = typeof window !== 'undefined' ? window.location.pathname : ''
+  if (p !== path && p !== current) {
+    window.location.replace(path)
+  }
+}
+
+function redirectToLogin () {
+  redirectTo('/login', '/welcome')
+}
+
+/** Clear the given role's stored JWT (keys match utils/authTokens). */
+function clearRoleSession (role) {
+  try {
+    if (role === 'captain') {
+      localStorage.removeItem('captainToken')
+      localStorage.removeItem('captain-token')
+    } else if (role === 'admin') {
+      localStorage.removeItem('adminToken')
+    } else {
+      localStorage.removeItem('token')
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Clear session on expired/invalid JWT (all authed API calls use Bearer token). */
 apiClient.interceptors.response.use(
   (res) => res,
@@ -34,39 +83,48 @@ apiClient.interceptors.response.use(
     const method = String(cfg?.method || 'get').toLowerCase()
     const path = requestPath(cfg || {})
     const isAuthPublic =
-      (method === 'post' && /^\/users\/(login|register)/i.test(path))
+      (method === 'post'
+        && /^\/(users\/(login|register)|captains\/(login|register|phone\/send-otp|phone\/verify-otp)|admin\/login)/i.test(path))
       || (method === 'get' && /^\/users\/logout/i.test(path))
     if (
       import.meta.env.VITE_APP_ROLE === 'user'
       && status === 401
       && !isAuthPublic
     ) {
-      try {
-        localStorage.removeItem('token')
-      } catch {
-        /* ignore */
-      }
-      const p = typeof window !== 'undefined' ? window.location.pathname : ''
-      if (p !== '/login' && p !== '/signup') {
-        window.location.replace('/login')
+      const role = requestRole(cfg || {})
+      if (role === 'captain') {
+        clearRoleSession('captain')
+        redirectTo('/captain-login')
+      } else if (role === 'admin') {
+        clearRoleSession('admin')
+        redirectTo('/admin')
+      } else if (unauthorizedHandler) {
+        unauthorizedHandler()
+      } else {
+        clearRoleSession('passenger')
+        redirectToLogin()
       }
     }
     return Promise.reject(err)
   }
 )
 
-/** Passenger app: users, rides, maps, health only (no captain/admin namespaces). */
-const PASSENGER_ALLOWED = [
-  /^\/users(\/|$)/i,
-  /^\/rides(\/|$)/i,
-  /^\/maps(\/|$)/i,
-  /^\/health(\/|$)/i,
-]
+/** Namespace allowlists per role (mirror of the backend route prefixes). */
+const ROLE_ALLOWED = {
+  passenger: [ /^\/users(\/|$)/i, /^\/rides(\/|$)/i, /^\/maps(\/|$)/i, /^\/health(\/|$)/i ],
+  captain: [ /^\/captains(\/|$)/i, /^\/rides(\/|$)/i, /^\/maps(\/|$)/i, /^\/driver-subscriptions(\/|$)/i, /^\/health(\/|$)/i ],
+  admin: [ /^\/admin(\/|$)/i ],
+}
 
 apiClient.interceptors.request.use((config) => {
   if (import.meta.env.VITE_APP_ROLE !== 'user') return config
   const path = requestPath(config)
-  if (!PASSENGER_ALLOWED.some((re) => re.test(path))) {
+  /* Public captain/admin calls carry no token → infer role from the namespace. */
+  const role = requestRole(config) === 'passenger'
+    ? (ROLE_ALLOWED.captain.some((re) => re.test(path)) ? 'captain'
+      : (ROLE_ALLOWED.admin.some((re) => re.test(path)) ? 'admin' : 'passenger'))
+    : requestRole(config)
+  if (!ROLE_ALLOWED[role].some((re) => re.test(path))) {
     return Promise.reject(new Error(`[Passenger app] This endpoint is not used here: ${path}`))
   }
   return config

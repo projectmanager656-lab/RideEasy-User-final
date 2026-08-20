@@ -1,9 +1,7 @@
 import React from 'react'
-import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
-import { API_BASE_URL } from '../config/apiBaseUrl'
-import { getCaptainToken } from '../utils/authTokens'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
+import { endRide as endRideRequest } from '../services/captainService'
 
 function normalizeLocationText(value, fallback = '—') {
     if (typeof value === 'string') return value
@@ -30,17 +28,8 @@ const FinishRide = (props) => {
 
     async function endRide() {
         try {
-            const response = await axios.post(`${API_BASE_URL}/rides/end-ride`, {
-                rideId: props.ride._id
-            }, {
-                headers: {
-                    Authorization: `Bearer ${getCaptainToken()}`
-                }
-            })
-
-            if (response.status === 200) {
-                navigate('/captain-home')
-            }
+            await endRideRequest(props.ride._id)
+            navigate('/captain-home')
         } catch (err) {
             alert(err.response?.data?.message || 'Could not complete ride. Please start ride first.')
         }

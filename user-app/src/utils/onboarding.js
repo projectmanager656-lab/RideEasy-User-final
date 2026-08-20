@@ -1,4 +1,4 @@
-import { apiClient } from '../services/http'
+import { completeOnboarding, getOnboardingStatus } from '../services/userService'
 import { getDeviceId } from './deviceId'
 
 // Vite replaces __BUILD_STAMP__ with a unique build timestamp
@@ -21,7 +21,7 @@ const persistToServer = () => {
     try {
         const deviceId = getDeviceId()
         if (!deviceId) return
-        apiClient.post('/users/onboarding/complete', { deviceId }).catch(() => {})
+        completeOnboarding(deviceId).catch(() => {})
     } catch {
         /* best-effort — the local flag is the source of truth */
     }
@@ -45,9 +45,7 @@ export const syncOnboardingFromServer = async () => {
     try {
         const deviceId = getDeviceId()
         if (!deviceId) return false
-        const response = await apiClient.get('/users/onboarding/status', {
-            params: { deviceId },
-        })
+        const response = await getOnboardingStatus(deviceId)
         const onboarded = Boolean(response.data?.data?.onboarded ?? response.data?.onboarded)
         if (onboarded) {
             try {

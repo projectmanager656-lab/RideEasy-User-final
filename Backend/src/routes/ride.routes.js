@@ -90,6 +90,9 @@ router.post('/rate',
 
 router.post('/:id/retry-assign', auth.authUser, rideController.retryAssign);
 
+/** Must be registered before /:id. */
+router.get('/active', auth.authUser, rideController.getActiveRideByUser);
+
 router.get('/:id', auth.authUserOrCaptain, rideController.getRideById); // keep after /:id/passenger-otp
 
 module.exports = router;

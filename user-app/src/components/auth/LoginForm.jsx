@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useLanguage } from '../../i18n'
-import { apiClient } from '../../services/http'
+import { sendPhoneOtp, verifyPhoneOtp } from '../../services/authService'
 import { formatApiError } from '../../utils/apiError'
 import { stripApiEnvelope } from '../../utils/apiBody'
 import { inputBase, labelClass, errorBoxClass } from './classes'
@@ -50,7 +50,7 @@ const LoginForm = ({
     setOtpError('')
     setOtpLoading(true)
     try {
-      const response = await apiClient.post('/users/phone/send-otp', { phone: forgotPhone })
+      const response = await sendPhoneOtp({ phone: forgotPhone })
       const data = stripApiEnvelope(response.data)
       if (data?.debugOtp) setDevOtp(String(data.debugOtp))
       setOtp('')
@@ -68,7 +68,7 @@ const LoginForm = ({
     setOtpError('')
     setOtpLoading(true)
     try {
-      const response = await apiClient.post('/users/phone/verify-otp', {
+      const response = await verifyPhoneOtp({
         phone: forgotPhone,
         otp: String(otp).replace(/\D/g, ''),
       })

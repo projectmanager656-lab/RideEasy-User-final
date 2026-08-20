@@ -27,5 +27,8 @@
     "@capacitor/core": "^8.2.0",
     "@wdio/cli": "^9.30.1",
     "mongoose": "^9.9.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

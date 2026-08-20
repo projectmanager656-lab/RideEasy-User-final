@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { useSocket } from '../hooks/useSocket'
 import RideMap from '../components/RideMap'
 import LiveTracking from '../components/LiveTracking'
 import RideStatusStepper from '../components/RideStatusStepper'
 import RideCompletionFlow from '../components/ride/RideCompletionFlow'
-import { API_BASE_URL } from '../config/apiBaseUrl'
+import { getRide, rateRide } from '../services/rideService'
+import { getCoordinates } from '../services/mapService'
+import { payMock } from '../services/paymentService'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
@@ -146,20 +147,14 @@ const Riding = () => {
 
     useEffect(() => {
         if (!ride?.pickupLocation?.trim()) return
-        axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.pickupLocation.trim() },
-            headers: { Authorization: `Bearer ${getPassengerToken()}` }
-        }).then((res) => {
+        getCoordinates(ride.pickupLocation.trim()).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
         }).catch(() => {})
     }, [ride?.pickupLocation])
 
     useEffect(() => {
         if (!ride?.dropLocation?.trim()) return
-        axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.dropLocation.trim() },
-            headers: { Authorization: `Bearer ${getPassengerToken()}` }
-        }).then((res) => {
+        getCoordinates(ride.dropLocation.trim()).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setDropCoords({ lat: res.data.lat, lng: res.data.lng })
         }).catch(() => {})
     }, [ride?.dropLocation])
@@ -167,9 +162,8 @@ const Riding = () => {
     useEffect(() => {
         if (!ride?._id || ride?.status === 'completed') return
         if (![ 'accepted', 'arrived', 'started' ].includes(ride?.status)) return
-        const token = getPassengerToken()
         const poll = () => {
-            axios.get(`${API_BASE_URL}/rides/${ride._id}`, { headers: { Authorization: `Bearer ${token}` } })
+            getRide(ride._id)
                 .then((res) => {
                     setRideFetchError('')
                     setRide(res.data)
@@ -199,9 +193,7 @@ const Riding = () => {
         if (ride?.status !== 'completed' || !ride?._id) return
         if (completedSyncDoneForId.current === ride._id) return
         completedSyncDoneForId.current = ride._id
-        const token = getPassengerToken()
-        axios
-            .get(`${API_BASE_URL}/rides/${ride._id}`, { headers: { Authorization: `Bearer ${token}` } })
+        getRide(ride._id)
             .then((res) => {
                 setRideFetchError('')
                 setRide(res.data)
@@ -237,9 +229,7 @@ const Riding = () => {
         setPaying(true)
         setPayError('')
         try {
-            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method }, {
-                headers: { Authorization: `Bearer ${getPassengerToken()}` }
-            })
+            const { data } = await payMock(ride._id, method)
             if (data?.ride) setRide(data.ride)
         } catch (e) {
             const message = e.response?.data?.message || e.message || t('payment_failed')
@@ -254,12 +244,10 @@ const Riding = () => {
         setSubmittingRating(true)
         setRateError('')
         try {
-            const res = await axios.post(`${API_BASE_URL}/rides/rate`, {
+            const res = await rateRide({
                 rideId: ride._id,
                 rating: value,
                 comment: comment || '',
-            }, {
-                headers: { Authorization: `Bearer ${getPassengerToken()}` }
             })
             setRide(res.data)
         } catch (err) {

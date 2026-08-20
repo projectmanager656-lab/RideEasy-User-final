@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { UserDataContext } from '../context/UserContext'
-import { apiClient, withAuth } from '../services/http'
+import { updateProfile } from '../services/userService'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { useLanguage } from '../i18n'
@@ -45,10 +45,10 @@ const UserProfile = () => {
     setError('')
     setMessage('')
     try {
-      const { data } = await apiClient.patch('/users/profile', {
+      const { data } = await updateProfile({
         name: name.trim(),
         savedAddresses: { home: home.trim(), work: work.trim() },
-      }, withAuth())
+      })
       const body = stripApiEnvelope(data)
       const u = body?.user ?? body
       if (u && typeof u === 'object') setUser(u)

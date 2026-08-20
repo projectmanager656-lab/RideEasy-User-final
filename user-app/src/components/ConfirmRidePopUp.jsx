@@ -1,10 +1,8 @@
 import React, { useMemo, useState } from 'react'
-import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
-import { API_BASE_URL } from '../config/apiBaseUrl'
 import { stripApiEnvelope } from '../utils/apiBody'
-import { getCaptainToken } from '../utils/authTokens'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
+import { arriveRide, startRide } from '../services/captainService'
 
 const ConfirmRidePopUp = (props) => {
     const [ otp, setOtp ] = useState('')
@@ -19,9 +17,7 @@ const ConfirmRidePopUp = (props) => {
         if (!rideId) return
         setMarkingArrived(true)
         try {
-            await axios.post(`${API_BASE_URL}/rides/arrive`, { rideId }, {
-                headers: { Authorization: `Bearer ${getCaptainToken()}` }
-            })
+            await arriveRide(rideId)
             setArrived(true)
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to mark arrived')
@@ -32,11 +28,6 @@ const ConfirmRidePopUp = (props) => {
 
     const submitHander = async (e) => {
         e.preventDefault()
-        const token = getCaptainToken()
-        if (!token) {
-            alert('Please log in again.')
-            return
-        }
         const rid = props.ride?._id != null ? String(props.ride._id) : ''
         const code = String(otp || '').trim()
         if (!rid || code.length !== 6) {
@@ -44,18 +35,13 @@ const ConfirmRidePopUp = (props) => {
             return
         }
         try {
-            const response = await axios.get(`${API_BASE_URL}/rides/start-ride`, {
-                params: { rideId: rid, otp: code },
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (response.status === 200) {
-                props.setConfirmRidePopupPanel(false)
-                props.setRidePopupPanel(false)
-                const raw = stripApiEnvelope(response.data)
-                const rideState = { ...raw }
-                delete rideState.confirmation
-                navigate('/captain-riding', { state: { ride: rideState } })
-            }
+            const data = await startRide(rid, code)
+            props.setConfirmRidePopupPanel(false)
+            props.setRidePopupPanel(false)
+            const raw = stripApiEnvelope(data)
+            const rideState = { ...raw }
+            delete rideState.confirmation
+            navigate('/captain-riding', { state: { ride: rideState } })
         } catch (err) {
             const msg =
                 err.response?.data?.message

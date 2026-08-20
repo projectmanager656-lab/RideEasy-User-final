@@ -194,9 +194,9 @@ const Payment = ({
         (!waitingForConfirmation && !paymentSuccess)
 
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-800">Payment</p>
-            <p className="text-xs text-slate-500 mt-1">Complete payment to confirm your ride</p>
+        <div className="rounded-2xl border border-night-border bg-night-800/60 p-4">
+            <p className="text-sm font-semibold text-white">Payment</p>
+            <p className="text-xs text-zinc-500 mt-1">Complete payment to confirm your ride</p>
 
             <div className="mt-3 grid grid-cols-3 gap-2">
                 {['Cash', 'UPI', 'Online'].map((m) => (
@@ -214,7 +214,7 @@ const Payment = ({
                             }
                         }}
                         className={`rounded-lg border px-2 py-2 text-xs font-medium sm:text-sm ${
-                            method === m ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700'
+                            method === m ? 'border-brand bg-brand text-black' : 'border-night-border text-zinc-300'
                         }`}
                     >
                         {m}
@@ -222,10 +222,10 @@ const Payment = ({
                 ))}
             </div>
 
-            <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="mt-3 rounded-lg bg-night-900 p-3 text-sm text-zinc-200">
                 Amount: <span className="font-semibold">₹{amount}</span>
                 {isUpiLike && (
-                    <p className="mt-1 text-xs text-slate-500">UPI Payee: {upiPayeeName}</p>
+                    <p className="mt-1 text-xs text-zinc-500">UPI Payee: {upiPayeeName}</p>
                 )}
             </div>
 
@@ -235,12 +235,12 @@ const Payment = ({
                         type="button"
                         onClick={openUpiApp}
                         disabled={paymentSuccess}
-                        className="mt-3 w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                        className="mt-3 w-full rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-black hover:bg-brand-light disabled:opacity-60"
                     >
                         {method === 'Online' ? 'Pay online (UPI apps)' : 'Pay with UPI (PhonePe/GPay)'} — ₹{amount}
                     </button>
                     {waitingForConfirmation && !paymentSuccess && (
-                        <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                        <div className="mt-2 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-xs text-brand">
                             Waiting for payment confirmation.
                         </div>
                     )}
@@ -250,14 +250,14 @@ const Payment = ({
                         </div>
                     )}
                     {launchHint && (
-                        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <div className="mt-2 rounded-lg border border-night-border bg-night-900 px-3 py-2 text-xs text-zinc-400">
                             {launchHint}
                         </div>
                     )}
                     {!!upiQrUrl && (
-                        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-center">
-                            <p className="text-xs text-slate-600 mb-2">UPI QR fallback (scan in PhonePe/GPay)</p>
-                            <img src={upiQrUrl} alt="UPI QR" className="mx-auto h-44 w-44 rounded-md border border-slate-100" />
+                        <div className="mt-3 rounded-lg border border-night-border bg-night-900 p-3 text-center">
+                            <p className="text-xs text-zinc-400 mb-2">UPI QR fallback (scan in PhonePe/GPay)</p>
+                            <img src={upiQrUrl} alt="UPI QR" className="mx-auto h-44 w-44 rounded-md border border-night-border" />
                         </div>
                     )}
                 </>
@@ -274,7 +274,7 @@ const Payment = ({
                             amount: Number(amount || 0),
                         })
                     }
-                    className="mt-3 w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
+                    className="mt-3 w-full rounded-lg bg-brand px-4 py-3 text-sm font-semibold text-black hover:bg-brand-light"
                 >
                     Confirm Ride (₹{amount})
                 </button>

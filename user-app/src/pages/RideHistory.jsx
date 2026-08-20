@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { apiClient, withAuth } from '../services/http'
+import { getRideHistory } from '../services/rideService'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { passengerRideStatusLabel, passengerRideStatusBadgeClass } from '../utils/rideStatusLabel'
@@ -23,8 +23,7 @@ const RideHistory = () => {
   const loadRides = useCallback(() => {
     setLoading(true)
     setError('')
-    return apiClient
-      .get('/rides/history', withAuth({ params: { limit: 50 } }))
+    return getRideHistory(50)
       .then((res) => {
         if (!mountedRef.current) return
         const raw = stripApiEnvelope(res.data)

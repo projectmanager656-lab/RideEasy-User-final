@@ -6,7 +6,8 @@ import React, {
   useMemo,
   useState,
 } from 'react'
-import { apiClient, withAuth } from '../services/http'
+import { setUnauthorizedHandler } from '../services/apiClient'
+import { getProfile } from '../services/userService'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { getPassengerToken } from '../utils/authTokens'
 
@@ -86,10 +87,7 @@ const UserContext = ({ children }) => {
     setToken(t)
     setProfileError('')
     try {
-      const res = await apiClient.get('/users/profile', {
-        ...withAuth(),
-        timeout: 18000,
-      })
+      const res = await getProfile({ timeout: 18000 })
       if (res.status !== 200) {
         setUser(null)
         setProfileError('Could not load profile.')
@@ -139,10 +137,7 @@ const UserContext = ({ children }) => {
       }
 
       try {
-        const res = await apiClient.get('/users/profile', {
-          ...withAuth(),
-          timeout: 18000,
-        })
+        const res = await getProfile({ timeout: 18000 })
         if (cancelled) return
 
         if (res.status !== 200) {
@@ -187,6 +182,15 @@ const UserContext = ({ children }) => {
 
   const isAuthenticated = Boolean(user && (user._id || user.email))
   const hasSessionToken = Boolean(token)
+
+  /* Centralized 401 handling — the apiClient interceptor clears the whole
+     session (storage + state) instead of only deleting the raw token. */
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      clearSession()
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [ clearSession ])
 
   const value = useMemo(
     () => ({

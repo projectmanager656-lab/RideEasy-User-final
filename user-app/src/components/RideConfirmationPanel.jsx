@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import RideStatusStepper from './RideStatusStepper'
 
 /**
@@ -11,7 +11,9 @@ export default function RideConfirmationPanel ({
   driverCoords,
   pickupCoords: _pickupCoords,
   onCloseWaiting,
+  onCancelRide,
 }) {
+  const [ cancelling, setCancelling ] = useState(false)
   const c = confirmation || {}
   const captain = ride?.captain
   const name = c.driverName || captain?.name || 'Your driver'
@@ -31,8 +33,19 @@ export default function RideConfirmationPanel ({
   const live = c.liveLocation
     || (driverCoords?.lat != null ? { lat: driverCoords.lat, lng: driverCoords.lng } : null)
 
+  const handleCancel = async () => {
+    if (typeof onCancelRide !== 'function') return
+    if (!window.confirm('Cancel this ride? You may be charged a cancellation fee.')) return
+    setCancelling(true)
+    try {
+      await onCancelRide()
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   return (
-    <div className="text-slate-900">
+    <div className="text-zinc-100">
       <h5
         className="p-1 text-center w-[93%] absolute top-0 cursor-pointer"
         onClick={() => onCloseWaiting?.(false)}
@@ -40,7 +53,7 @@ export default function RideConfirmationPanel ({
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && onCloseWaiting?.(false)}
       >
-        <i className="text-3xl text-gray-200 ri-arrow-down-wide-line" />
+        <i className="text-3xl text-zinc-400 ri-arrow-down-wide-line" />
       </h5>
 
       <div className="mb-4">
@@ -48,7 +61,7 @@ export default function RideConfirmationPanel ({
       </div>
 
       {status === 'accepted' && (
-        <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-emerald-800 text-sm">
+        <div className="mb-3 rounded-lg bg-brand/10 border border-brand/30 p-3 text-brand text-sm">
           Driver assigned. Track live location on the map. Share OTP only when the driver arrives.
         </div>
       )}
@@ -58,38 +71,38 @@ export default function RideConfirmationPanel ({
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Driver</p>
+      <div className="rounded-xl border border-night-border bg-night-800/60 p-4 mb-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Driver</p>
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold capitalize">{name}</h2>
-            <p className="text-sm text-slate-600">{phone}</p>
+            <p className="text-sm text-zinc-400">{phone}</p>
             {rating != null && Number.isFinite(rating) ? (
-              <p className="text-sm text-amber-700 mt-1">
+              <p className="text-sm text-brand mt-1">
                 <i className="ri-star-fill" /> {rating.toFixed(1)}
               </p>
             ) : null}
           </div>
           <div className="text-right text-sm">
-            <p className="font-medium text-slate-800">{vModel}</p>
-            <p className="text-slate-600">{vType}</p>
+            <p className="font-medium text-white">{vModel}</p>
+            <p className="text-zinc-400">{vType}</p>
             <p className="font-mono font-semibold mt-1">{vNum}</p>
           </div>
         </div>
         {(etaText || live) && (
-          <div className="mt-3 pt-3 border-t border-slate-200 text-sm text-slate-700 flex flex-wrap gap-x-4 gap-y-1">
+          <div className="mt-3 pt-3 border-t border-night-border text-sm text-zinc-400 flex flex-wrap gap-x-4 gap-y-1">
             {etaText ? <span>ETA to pickup: <strong>{etaText}</strong></span> : null}
             {live?.lat != null && live?.lng != null ? (
-              <span className="text-xs text-slate-500">Live GPS updating on map</span>
+              <span className="text-xs text-zinc-500">Live GPS updating on map</span>
             ) : null}
           </div>
         )}
       </div>
 
-      <div className="mb-4 rounded-xl border-2 border-slate-900 bg-slate-900 px-4 py-3 text-center shadow-md">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Your ride OTP</p>
+      <div className="mb-4 rounded-xl border border-night-border bg-night-800 px-4 py-3 text-center shadow-md">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Your ride OTP</p>
         <p
-          className={`mt-1 font-mono text-3xl font-bold tracking-[0.2em] select-all ${otp ? 'text-white' : 'text-slate-500'}`}
+          className={`mt-1 font-mono text-3xl font-bold tracking-[0.2em] select-all ${otp ? 'text-white' : 'text-zinc-500'}`}
           title={otp ? 'Share this code with your driver to start the ride' : ''}
         >
           {otp || 'Loading OTP…'}
@@ -97,28 +110,39 @@ export default function RideConfirmationPanel ({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-3 p-3 border-b border-slate-200">
-          <i className="ri-map-pin-user-fill text-xl text-emerald-600" />
+        <div className="flex items-center gap-3 p-3 border-b border-night-border">
+          <i className="ri-map-pin-user-fill text-xl text-brand" />
           <div>
             <h3 className="text-base font-medium">Pickup</h3>
-            <p className="text-sm text-slate-600">{ride?.pickupLocation || ride?.pickup}</p>
+            <p className="text-sm text-zinc-400">{ride?.pickupLocation || ride?.pickup}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 p-3 border-b border-slate-200">
-          <i className="ri-map-pin-2-fill text-xl text-rose-600" />
+        <div className="flex items-center gap-3 p-3 border-b border-night-border">
+          <i className="ri-map-pin-2-fill text-xl text-rose-400" />
           <div>
             <h3 className="text-base font-medium">Drop</h3>
-            <p className="text-sm text-slate-600">{ride?.dropLocation || ride?.destination}</p>
+            <p className="text-sm text-zinc-400">{ride?.dropLocation || ride?.destination}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 p-3">
-          <i className="ri-currency-line text-xl text-slate-700" />
+          <i className="ri-currency-line text-xl text-zinc-300" />
           <div>
             <h3 className="text-lg font-semibold">₹{fare ?? '—'}</h3>
-            <p className="text-sm text-slate-600">{ride?.paymentMethod || 'Cash'}</p>
+            <p className="text-sm text-zinc-400">{ride?.paymentMethod || 'Cash'}</p>
           </div>
         </div>
       </div>
+
+      {typeof onCancelRide === 'function' ? (
+        <button
+          type="button"
+          disabled={cancelling}
+          onClick={handleCancel}
+          className="mt-4 w-full rounded-xl border border-red-900/60 bg-red-950/40 py-3 text-sm font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-50"
+        >
+          {cancelling ? 'Cancelling…' : 'Cancel ride'}
+        </button>
+      ) : null}
     </div>
   )
 }

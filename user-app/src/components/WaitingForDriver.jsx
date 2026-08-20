@@ -51,7 +51,8 @@ const WaitingForDriver = (props) => {
       passengerOtp={props.passengerOtp}
       driverCoords={props.driverCoords}
       pickupCoords={props.pickupCoords}
-      onCloseWaiting={props.setWaitingForDriver}
+      onCloseWaiting={props.onCloseWaiting}
+      onCancelRide={props.onCancelRide}
     />
   )
 }
