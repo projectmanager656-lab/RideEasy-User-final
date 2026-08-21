@@ -1,4 +1,22 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+
+const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+const HOURS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
+
+function pad2(n) {
+    return String(n).padStart(2, '0')
+}
+
+function defaultDateParts() {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear() }
+}
 
 function defaultTimeParts() {
     const d = new Date()
@@ -16,93 +34,139 @@ function to24HourTime(hour, minute, period) {
     return `${String(h24).padStart(2, '0')}:${minute}`
 }
 
-function hourValue(hour, dir) {
-    return String((Number(hour) + dir + 11) % 12 + 1)
+/** Compose local (no-UTC-shift) date + time into an ISO string for the booking flow. */
+function toIsoLocal(day, month, year, hour, minute, period) {
+    const hh = to24HourTime(hour, minute, period)
+    const iso = `${year}-${pad2(month + 1)}-${pad2(day)}T${hh}:00`
+    return iso
 }
 
-function minuteValue(m, dir) {
-    return String((Number(m) + dir * 5 + 60) % 60).padStart(2, '0')
+function daysInMonth(year, month) {
+    return new Date(year, month + 1, 0).getDate()
 }
 
-function periodValue(period) {
-    return period === 'AM' ? 'PM' : 'AM'
+function dayDisabled(day, month, year, today) {
+    const future = year > today.year
+        || (year === today.year && month > today.month)
+    if (future) return false
+    return !(year === today.year && month == today.month && day > today.date)
 }
 
-function setHour(dir, setParts) {
-    setParts(p => ({ ...p, hour: hourValue(p.hour, dir) }))
+function gridCellClass(selected, disabled) {
+    return [
+        'flex h-10 items-center justify-center rounded-lg border text-sm font-semibold transition active:scale-95',
+        selected
+            ? 'border-brand-yellow bg-brand-yellow text-black'
+            : disabled
+                ? 'cursor-not-allowed border-transparent bg-transparent text-zinc-700'
+                : 'border-brand-border bg-brand-card text-zinc-200 hover:border-zinc-500',
+    ].join(' ')
 }
 
-function setMinute(dir, setParts) {
-    setParts(p => ({ ...p, minute: minuteValue(p.minute, dir) }))
-}
-
-function setPeriod(setParts) {
-    setParts(p => ({ ...p, period: periodValue(p.period) }))
-}
-
-const TimeColumn = ({ label, value, onStep }) => {
-    return (
-        <div className="flex flex-col items-center gap-1.5">
+/**
+ * Compact RideEasy-styled option grid — used for days, months, years,
+ * hours and minutes. No scrolling, one tap to pick.
+ */
+const OptionGrid = ({ options, selected, disabled = () => false, onSelect, label = (v) => v, columns = 4 }) => (
+    <div className={`grid gap-1.5 p-1 ${columns === 7 ? 'grid-cols-7' : columns === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+        {options.map((opt, idx) => (
             <button
+                key={idx}
                 type="button"
-                aria-label={`Increase ${label}`}
-                onClick={() => onStep(1)}
-                className="flex h-9 w-14 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 text-yellow-400 transition active:scale-95"
+                disabled={disabled(opt)}
+                onClick={() => onSelect(opt)}
+                className={[
+                    gridCellClass(selected(opt), disabled(opt)),
+                    columns === 7 ? 'h-9 px-0 text-[13px]' : 'h-10',
+                ].join(' ')}
             >
-                <i className="ri-arrow-up-s-line text-xs" />
+                {label(opt)}
             </button>
-            <div className="flex h-12 w-14 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 text-lg font-bold text-yellow-400">
-                {value}
-            </div>
-            <button
-                type="button"
-                aria-label={`Decrease ${label}`}
-                onClick={() => onStep(-1)}
-                className="flex h-9 w-14 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 text-yellow-400 transition active:scale-95"
-            >
-                <i className="ri-arrow-down-s-line text-xs" />
-            </button>
-        </div>
-    )
-}
+        ))}
+    </div>
+)
 
 const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
-    const [date, setDate] = useState('')
+    const [dateParts, setDateParts] = useState(defaultDateParts)
     const [parts, setParts] = useState(defaultTimeParts)
     const [error, setError] = useState('')
+    const [openPicker, setOpenPicker] = useState(null) // 'day' | 'month' | 'year' | 'hour' | 'minute' | 'period'
+    const sheetRef = useRef(null)
 
-    const minDate = useMemo(() => {
-        const d = new Date()
-        d.setDate(d.getDate() + 1)
-        return d.toISOString().slice(0, 10)
+    const today = useMemo(() => {
+        const n = new Date()
+        return { year: n.getFullYear(), month: n.getMonth(), date: n.getDate() }
     }, [])
 
-    const handleContinue = () => {
-        if (!date) {
-            setError('Please pick a date.')
-            return
+    const years = useMemo(() => {
+        const start = today.year
+        return Array.from({ length: 6 }, (_, i) => start + i)
+    }, [today.year])
+
+    const dayCount = daysInMonth(dateParts.year, dateParts.month)
+
+    /** Sync the last-opened selector into view when it opens. */
+    useEffect(() => {
+        if (!openPicker || !sheetRef.current) return
+        const t = setTimeout(() => {
+            const el = sheetRef.current?.querySelector('[data-picker-panel]')
+            if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        }, 60)
+        return () => clearTimeout(t)
+    }, [openPicker])
+
+    /** Reset state only when the modal transitions closed → open. */
+    const wasOpenRef = useRef(false)
+    useEffect(() => {
+        if (open && !wasOpenRef.current) {
+            setDateParts(defaultDateParts)
+            setParts(defaultTimeParts)
+            setError('')
+            setOpenPicker(null)
         }
+        wasOpenRef.current = open
+    }, [open])
+
+    /** Escape closes the open selector first, then the whole modal. */
+    const openPickerRef = useRef(null)
+    openPickerRef.current = openPicker
+    useEffect(() => {
+        if (!open) return
+        const onKey = (e) => {
+            if (e.key !== 'Escape') return
+            if (openPickerRef.current) setOpenPicker(null)
+            else onClose()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+    }, [open, onClose])
+
+    const handleContinue = () => {
+        const { day, month, year } = dateParts
         const time24 = to24HourTime(parts.hour, parts.minute, parts.period)
-        const scheduled = new Date(`${date}T${time24}`)
+        const scheduled = new Date(`${year}-${pad2(month + 1)}-${pad2(day)}T${time24}`)
         if (Number.isNaN(scheduled.getTime()) || scheduled.getTime() <= Date.now()) {
             setError('Please choose a future date and time.')
             return
         }
         setError('')
-        onContinue(scheduled.toISOString())
+        onContinue(toIsoLocal(day, month, year, parts.hour, parts.minute, parts.period))
     }
 
     if (!open) return null
 
     return (
-        <div className="absolute inset-0 z-40 flex flex-col justify-end">
+        <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
                 onClick={onClose}
                 aria-hidden
             />
-            <div className="relative max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-4">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700" />
+            <div
+                ref={sheetRef}
+                className="relative flex max-h-[88dvh] w-full max-w-[430px] flex-col overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-4 pb-6 sm:rounded-2xl sm:border"
+            >
+                <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-zinc-700 sm:hidden" />
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-base font-bold text-white">Schedule a ride</h2>
                     <button
@@ -114,30 +178,98 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                     </button>
                 </div>
 
-                <label className="mb-1.5 block text-xs font-medium text-zinc-400">Pickup date</label>
-                <input
-                    type="date"
-                    min={minDate}
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-brand-border bg-brand-card px-3 py-2.5 text-sm text-white outline-none [color-scheme:dark] focus:border-brand-yellow"
-                />
-
-                <label className="mb-2 mt-4 block text-xs font-medium text-zinc-400">Pickup time</label>
-                <div className="flex items-center gap-3 rounded-2xl border border-zinc-700 bg-zinc-900 p-3">
-                    <TimeColumn label="Hour" value={parts.hour} onStep={dir => setHour(dir, setParts)} />
-                    <span className="text-xl font-bold text-white" aria-hidden>:</span>
-                    <TimeColumn label="Minute" value={parts.minute} onStep={dir => setMinute(dir, setParts)} />
-                    <TimeColumn label="AM/PM" value={parts.period} onStep={() => setPeriod(setParts)} />
+                <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-400">
+                    Pickup date
+                </label>
+                <div className="grid grid-cols-[1fr_1.2fr_1fr] gap-2">
+                    <button
+                        type="button"
+                        aria-label="Day"
+                        onClick={() => setOpenPicker('day')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'day' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        {pad2(dateParts.day)}
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="Month"
+                        onClick={() => setOpenPicker('month')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'month' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        <span className="truncate">{MONTHS[dateParts.month]}</span>
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="Year"
+                        onClick={() => setOpenPicker('year')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'year' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        {dateParts.year}
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
                 </div>
 
-                <p className="mt-2 text-center text-sm font-semibold text-white">
-                    {String(parts.hour).padStart(2, '0')} : {parts.minute} {parts.period}
+                <label className="mb-2 mt-5 block text-xs font-medium uppercase tracking-wide text-zinc-400">
+                    Pickup time
+                </label>
+                <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-center gap-2">
+                    <button
+                        type="button"
+                        aria-label="Hour"
+                        onClick={() => setOpenPicker('hour')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'hour' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        {parts.hour}
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
+                    <span className="text-xl font-bold text-white" aria-hidden>:</span>
+                    <button
+                        type="button"
+                        aria-label="Minute"
+                        onClick={() => setOpenPicker('minute')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'minute' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        {parts.minute}
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
+                    <button
+                        type="button"
+                        aria-label="AM/PM"
+                        onClick={() => setOpenPicker('period')}
+                        className={[
+                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            openPicker === 'period' ? 'border-brand-yellow' : 'border-brand-border',
+                        ].join(' ')}
+                    >
+                        {parts.period}
+                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
+                    </button>
+                </div>
+
+                <p className="mt-3 text-center text-base font-bold text-brand-yellow">
+                    {pad2(Number(parts.hour))} : {parts.minute} {parts.period}
                 </p>
 
-                {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+                {error && <p className="mt-2 text-center text-xs text-red-400">{error}</p>}
 
-                <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
+                <p className="mt-3 text-center text-[11px] leading-relaxed text-zinc-500">
                     Your ride will be booked at the chosen time through the existing booking flow.
                 </p>
 
@@ -149,6 +281,99 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                 >
                     {findingTrip ? 'Booking your ride...' : 'Continue to Booking'}
                 </button>
+
+                {openPicker && (
+                    <div data-picker-panel className="relative mt-3 rounded-xl border border-brand-border bg-brand-cardSoft p-2">
+                        {openPicker === 'day' && (
+                            <OptionGrid
+                                options={Array.from({ length: dayCount }, (_, i) => i + 1)}
+                                selected={(d) => d === dateParts.day}
+                                disabled={(d) => dayDisabled(d, dateParts.month, dateParts.year, today)}
+                                onSelect={(d) => {
+                                    setDateParts((p) => ({ ...p, day: d }))
+                                    setOpenPicker(null)
+                                }}
+                                columns={7}
+                            />
+                        )}
+                        {openPicker === 'month' && (
+                            <OptionGrid
+                                options={Array.from({ length: 12 }, (_, i) => i)}
+                                selected={(m) => m === dateParts.month}
+                                disabled={() => false}
+                                onSelect={(m) => {
+                                    setDateParts((p) => {
+                                        const maxDay = daysInMonth(p.year, m)
+                                        const day = Math.min(p.day, maxDay)
+                                        return { ...p, month: m, day }
+                                    })
+                                    setOpenPicker(null)
+                                }}
+                                label={(m) => MONTHS[m].slice(0, 3)}
+                            />
+                        )}
+                        {openPicker === 'year' && (
+                            <OptionGrid
+                                options={years}
+                                selected={(y) => y === dateParts.year}
+                                disabled={() => false}
+                                onSelect={(y) => {
+                                    setDateParts((p) => {
+                                        const maxDay = daysInMonth(y, p.month)
+                                        const day = Math.min(p.day, maxDay)
+                                        return { ...p, year: y, day }
+                                    })
+                                    setOpenPicker(null)
+                                }}
+                                columns={3}
+                            />
+                        )}
+                        {openPicker === 'hour' && (
+                            <OptionGrid
+                                options={HOURS}
+                                selected={(h) => h === parts.hour}
+                                disabled={() => false}
+                                onSelect={(h) => {
+                                    setParts((p) => ({ ...p, hour: h }))
+                                    setOpenPicker(null)
+                                }}
+                            />
+                        )}
+                        {openPicker === 'minute' && (
+                            <OptionGrid
+                                options={MINUTES}
+                                selected={(m) => m === parts.minute}
+                                disabled={() => false}
+                                onSelect={(m) => {
+                                    setParts((p) => ({ ...p, minute: m }))
+                                    setOpenPicker(null)
+                                }}
+                            />
+                        )}
+                        {openPicker === 'period' && (
+                            <div className="flex gap-2 p-1">
+                                {['AM', 'PM'].map((p) => (
+                                    <button
+                                        key={p}
+                                        type="button"
+                                        onClick={() => {
+                                            setParts((prev) => ({ ...prev, period: p }))
+                                            setOpenPicker(null)
+                                        }}
+                                        className={[
+                                            'h-12 flex-1 rounded-lg border text-sm font-bold transition active:scale-95',
+                                            parts.period === p
+                                                ? 'border-brand-yellow bg-brand-yellow text-black'
+                                                : 'border-brand-border bg-brand-card text-zinc-200 hover:border-zinc-500',
+                                        ].join(' ')}
+                                    >
+                                        {p}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     )

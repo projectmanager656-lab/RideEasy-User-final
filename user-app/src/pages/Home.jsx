@@ -956,7 +956,7 @@ const Home = () => {
                 </div>
             )}
 
-            {/* Foreground: fixed app viewport (no page scroll) — suggestions float above the map */}
+            {/* Foreground: fixed app viewport (no page scroll) — location suggestions render inline in the flow (no overlay) */}
             <div className="relative z-20 mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden">
                 <RideEasyHeader onNotifications={() => setNotificationsOpen(true)} />
 
@@ -994,7 +994,7 @@ const Home = () => {
                             />
 
                             {panelOpen && (
-                                <div className="absolute inset-x-4 top-full z-50 mt-2">
+                                <div className="mx-4 mt-2">
                                     <LocationSearchPanel
                                         suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
                                         setPickup={setPickup}

@@ -1,11 +1,28 @@
 import React from 'react'
-import autoImage from '../assets/image.png'
+import autoImage from '../assets/image copy.png'
 
 const SafetyPromoCard = () => {
     return (
-        <div className="mx-4 mb-4 flex h-[104px] shrink-0 items-center gap-3.5 rounded-[18px] bg-[#111315] p-3 transition duration-150 active:scale-[0.98]"
+        <div className="relative mx-4 mb-4 flex h-[120px] shrink-0 items-center gap-3.5 overflow-hidden rounded-[18px] bg-[#111315] p-3 transition duration-150 active:scale-[0.98]"
             style={{ border: '1px solid rgba(255, 200, 0, 0.55)' }}
         >
+            {/* Background image layer — auto fills the right side of the card and blends into the card */}
+            <span
+                aria-hidden
+                className="absolute inset-y-0 right-0 w-[52%] max-w-[240px] overflow-hidden"
+            >
+                <img
+                    src={autoImage}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    style={{
+                        objectPosition: 'right center',
+                        maskImage: 'linear-gradient(to left, black 60%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to left, black 60%, transparent 100%)',
+                    }}
+                />
+            </span>
+
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
                 <svg
                     className="h-5 w-5"
@@ -24,19 +41,11 @@ const SafetyPromoCard = () => {
 
             <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-bold leading-snug text-white">
-                    Safe rides. Verified drivers.
+                    Safe rides, Verified drivers.
                 </span>
                 <span className="mt-0.5 block text-[11px] leading-snug text-[#9A9A9A]">
-                    RideEasy serves Kolhapur regions.
+                    RideEasy Serves Kolhapur Region
                 </span>
-            </span>
-
-            <span className="flex h-full w-[34%] min-w-[100px] max-w-[140px] shrink-0 items-center overflow-hidden">
-                <img
-                    src={autoImage}
-                    alt="RideEasy auto-rickshaw"
-                    className="h-full w-full object-contain"
-                />
             </span>
         </div>
     )

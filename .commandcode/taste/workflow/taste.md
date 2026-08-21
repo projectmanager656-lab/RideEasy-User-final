@@ -1,0 +1,8 @@
+- Prefers modifying the existing project rather than creating a new one; inspects the existing code first and preserves currently working functionality. Confidence: 0.9
+- Prefers verifying that referenced asset files exist before editing, and reusing the project's actual folder structure (e.g. `assets` vs `assest`) rather than creating duplicate folders or assets. Confidence: 0.7
+- Prefers preserving backend/API integration and avoids changing API endpoints unless absolutely necessary. Confidence: 0.9
+- Verifies changes by running the application (e.g., `npm run dev`) and checking for errors before reporting completion. Confidence: 0.8
+- Avoids destructive git commands (e.g. `git reset --hard`, `git checkout`, repo-wide resets); prefers keeping existing working code and git changes intact rather than resetting. Confidence: 0.85
+- Avoids disrupting running processes; will not kill `node.exe` or stop an already-running dev server unnecessarily. Confidence: 0.8
+- Prefers minimal, targeted changes: when asked to swap one element (e.g., an image), leaves all other elements (e.g., text/copy) exactly as-is unless explicitly asked to change them. Confidence: 0.85
+- When the user supplies their own asset file (with a specific path), uses that asset directly (swap the import/reference) and adjusts only the framing to suit it, rather than re-tuning the old asset or recreating the asset. Confidence: 0.7

@@ -1,0 +1,10 @@
+- Prefers custom, polished UI components over native browser controls (avoids native date/time pickers). Confidence: 0.9
+- Prefers compact grid/dropdown selectors over long scrolling lists, wheel pickers, or up/down arrow controls; values one-tap selection. Confidence: 0.9
+- Mobile-first responsive design; components must work at narrow widths (360–412px) and desktop preview, with no horizontal overflow or clipped content. Confidence: 0.9
+- Visual identity: dark/black background, yellow primary accent, white primary text, gray secondary text, subtle borders, rounded cards, consistent spacing. Confidence: 0.9
+- For RideEasy branding, "Ride" should be white and "Easy" yellow. Confidence: 0.8
+- Avoids over-engineering: prefers simple React components and existing CSS over adding large UI libraries or unnecessary dependencies. Confidence: 0.8
+- Prefers reusing existing components, state, handlers, and logic over rewriting or creating new components when a working implementation already exists. Confidence: 0.8
+- Prefers promotional card images integrated as a background layer (object-cover, positioned/cropped, blended via mask gradients) so image and text read as one unified banner — not a small standalone floating <img> box; the subject must stay recognizable, undistorted, and clear of text. Confidence: 0.9
+- Cares about exact user-facing copy: punctuation and capitalization in UI text must match the requested wording precisely (comma vs period, title case, no trailing period) — e.g. "Safe rides, Verified drivers." and "RideEasy Serves Kolhapur Region". Confidence: 0.7
+- Wants image assets (often AI-generated) cleaned at the file level: no baked-in text, watermarks, or AI-tool symbols (e.g. the Gemini sparkle icon) may show through in the UI — only the subject (e.g. the auto-rickshaw) should remain in the image itself. Removal must be complete: ghost shadows, partial glyphs, or dimmed remnants of removed text/icons will be re-reported in follow-ups ("still showing … properly delete"). Confidence: 0.9
