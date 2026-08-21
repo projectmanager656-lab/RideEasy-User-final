@@ -1,0 +1,25 @@
+# - Prefers non-invasive fixes: resolve the issue at hand without modifying other codebases or unrelated code files. Confidence: 0.9
+- Prefers non-invasive fixes: resolve the issue at hand without modifying other codebases or unrelated code files. Confidence: 0.9
+- Inspects the existing codebase thoroughly before making changes; refuses to assume filenames, routes, components, or libraries. Confidence: 0.9
+- Strongly prefers reusing existing components, routes, navigation, and icon libraries rather than creating duplicates or rewriting the app. Confidence: 0.9
+- Enforces strict frontend/backend separation: never modifies backend, DB, APIs, controllers, models, or auth/JWT unless a task explicitly requires it; user has explicitly instructed "only work frontend." Confidence: 0.95
+- Avoids installing unnecessary or duplicate dependencies (e.g., a new icon package when one already exists). Confidence: 0.85
+- Does not modify global CSS or global colors; keeps style changes scoped to the feature at hand. Confidence: 0.85
+- Verifies work with lint + production build (and no console errors / no horizontal overflow) before considering a task done. Confidence: 0.85
+- Designs mobile-first with responsive checks across phone sizes and no horizontal overflow. Confidence: 0.8
+- Falls back to local demo data when a backend/API is unreachable so the UI remains functional and testable. Confidence: 0.85
+- Prefers robust, row-based/flex alignment (e.g. independent rows sharing a left column) over fragile gap-based sizing hacks; layout must stay correct when text wraps or grows. Confidence: 0.75
+- Keeps vertically stacked UI sections (filter tabs, search bar, stat cards) sharing identical horizontal padding/margins so they line up flush on both edges; negative-margin tricks that push one row past the content edge are treated as alignment bugs to fix. Confidence: 0.8
+- Matches UI designs precisely from reference images: uses vision analysis to extract exact specs (shape, color, text weight, separators, spacing, alignment), identifies discrepancies with current implementation, and makes surgical edits until it matches. Confidence: 0.97
+- Validates frontend field names against the backend schema (e.g. greps models/ for the field name) rather than guessing, so real data fields are used. Confidence: 0.8
+- Starts dev servers only for smoke-testing then stops them; does not leave background processes (dev servers, etc.) running after verification. Confidence: 0.8
+- Asks for clarification when a user instruction is ambiguous or a typo (e.g. "start implimat") rather than guessing at intent; confirms the next step before acting. Confidence: 0.7
+- Uses the app's existing design-system/theme tokens — verifying they exist in config (e.g. reading tailwind.config.js) — and maps reference colors to the closest available token instead of hardcoding arbitrary hex values. Confidence: 0.8
+- When changing shared styling or helper fields, greps for other usages and applies the same change consistently across related UI surfaces (e.g., card and its detail modal) so they stay in sync. Confidence: 0.75
+- Wants a structured final report after implementation: files created/modified, explicit "Backend/API/DB/auth changes: NONE", routes changed, components reused, and test status. Confidence: 0.7
+- Prefers flat/subtle UI styling: no neon glows, no excessive gradients, thin dark borders, and minimal shadow ("professional UI") over flashy effects. Confidence: 0.7
+- Prefers compact, dense layouts over oversized ones: explicitly targets approximate pixel heights for cards (e.g. ~110–125px on mobile) and rejects excessive empty space / oversized elements. Confidence: 0.7
+- All filter/tab variants of a list must share one identical card/layout — only the ride data and status badge differ; no per-filter layout divergence. Confidence: 0.75
+
+- Uses equal-width grid layouts for filter/tab pill rows (e.g. `grid grid-cols-4`) instead of scrollable/overflowing `whitespace-nowrap` rows, so the tabs fill the same width as adjacent sections (search bar, stat cards) and both edges align on narrow screens; shrinks label size if needed to fit one line at ~360px. Confidence: 0.75
+- Removes the browser's default focus outline (`focus:outline-none`) on custom-styled interactive elements (e.g. selected filter pill) so default blue focus rings don't clash with the app's custom theme. Confidence: 0.7
