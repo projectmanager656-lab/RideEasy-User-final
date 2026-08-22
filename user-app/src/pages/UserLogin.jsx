@@ -20,7 +20,7 @@ const UserLogin = () => {
   useEffect(() => {
     if (authLoading) return
     if (token) {
-      navigate('/home', { replace: true })
+      navigate('/location', { replace: true })
     }
   }, [ authLoading, token, navigate ])
 
@@ -39,7 +39,7 @@ const UserLogin = () => {
         const token = data?.token
         if (user && token) {
           setSession(token, user)
-          navigate('/home', { replace: true, state: location?.state })
+          navigate('/location', { replace: true, state: location?.state })
           setEmail('')
           setPassword('')
         } else {

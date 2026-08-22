@@ -1,5 +1,5 @@
 import React from 'react'
-import autoImage from '../assets/image copy.png'
+import autoImage from '../assets/image.png'
 
 const SafetyPromoCard = () => {
     return (
@@ -9,16 +9,16 @@ const SafetyPromoCard = () => {
             {/* Background image layer — auto fills the right side of the card and blends into the card */}
             <span
                 aria-hidden
-                className="absolute inset-y-0 right-0 w-[52%] max-w-[240px] overflow-hidden"
+                className="absolute inset-y-0 right-0 w-[42%] max-w-[170px] overflow-hidden"
             >
                 <img
                     src={autoImage}
                     alt=""
                     className="h-full w-full object-cover"
                     style={{
-                        objectPosition: 'right center',
-                        maskImage: 'linear-gradient(to left, black 60%, transparent 100%)',
-                        WebkitMaskImage: 'linear-gradient(to left, black 60%, transparent 100%)',
+                        objectPosition: 'right 84%',
+                        maskImage: 'linear-gradient(to left, black 70%, transparent 100%)',
+                        WebkitMaskImage: 'linear-gradient(to left, black 70%, transparent 100%)',
                     }}
                 />
             </span>

@@ -15,13 +15,12 @@ import { useNavigate } from 'react-router-dom';
 import RideMap from '../components/RideMap';
 import RideEasyHeader from '../components/RideEasyHeader';
 import LocationSelector from '../components/LocationSelector';
-import RideActionButtons from '../components/RideActionButtons';
 import SafetyPromoCard from '../components/SafetyPromoCard';
 import ScheduleModal from '../components/ScheduleModal';
-import MoreOptionsModal from '../components/MoreOptionsModal';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
+import { addRecentSearch } from '../utils/recentSearches'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
@@ -98,7 +97,6 @@ const Home = () => {
     const [ bookingError, setBookingError ] = useState('')
     const [ findingTrip, setFindingTrip ] = useState(false)
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
-    const [ moreOpen, setMoreOpen ] = useState(false)
     const [ notificationsOpen, setNotificationsOpen ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(null)
     const [ searching, setSearching ] = useState(false)
@@ -725,6 +723,10 @@ const Home = () => {
         setPanelOpen(false)
         setDestination(name)
         setBookingError('')
+        addRecentSearch({
+            name,
+            detail: typeof suggestion === 'object' && suggestion?.description ? suggestion.description : '',
+        })
         let coords = null
         if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
             coords = { lat: suggestion.lat, lng: suggestion.lng }
@@ -958,7 +960,10 @@ const Home = () => {
 
             {/* Foreground: fixed app viewport (no page scroll) — location suggestions render inline in the flow (no overlay) */}
             <div className="relative z-20 mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden">
-                <RideEasyHeader onNotifications={() => setNotificationsOpen(true)} />
+                <RideEasyHeader
+                    onNotifications={() => setNotificationsOpen(true)}
+                    onSchedule={() => setScheduleOpen(true)}
+                />
 
                 {showSearchPanel && (
                     <>
@@ -1022,17 +1027,9 @@ const Home = () => {
                             </div>
                         )}
 
-                        <div className="mt-3 shrink-0">
-                            <RideActionButtons
-                                onRideNow={findTrip}
-                                onSchedule={() => setScheduleOpen(true)}
-                                onMore={() => setMoreOpen(true)}
-                                findingTrip={findingTrip}
-                                ready={hasRouteSelections}
-                            />
+                        <div className="mt-auto shrink-0 pb-2">
+                            <SafetyPromoCard />
                         </div>
-
-                        <SafetyPromoCard />
                     </>
                 )}
             </div>
@@ -1043,7 +1040,6 @@ const Home = () => {
                 onContinue={handleScheduleContinue}
                 findingTrip={findingTrip}
             />
-            <MoreOptionsModal open={moreOpen} onClose={() => setMoreOpen(false)} />
 
             {notificationsOpen && (
                 <div className="absolute inset-0 z-[60] flex flex-col justify-end">

@@ -1,13 +1,14 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
-const BottomNav = () => {
+const BottomNav = ({ onMoreClick }) => {
   const location = useLocation()
   const path = location.pathname
   const hidden =
     path === '/login' ||
     path === '/signup' ||
-    path === '/user/logout'
+    path === '/user/logout' ||
+    path === '/location'
 
   if (hidden) return null
 
@@ -29,15 +30,15 @@ const BottomNav = () => {
           <i className="ri-home-5-line text-lg" />
           <span className="max-[380px]:text-[10px]">Home</span>
         </NavLink>
-        <NavLink
-          to="/ride"
-          className={() =>
-            `${base} ${path === '/ride' || path === '/riding' ? 'text-[#FFC800]' : 'text-[#777777]'}`
-          }
+        <button
+          type="button"
+          onClick={onMoreClick}
+          aria-label="More"
+          className={`${base} cursor-pointer bg-transparent border-0 text-[#777777]`}
         >
-          <i className="ri-roadster-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Ride</span>
-        </NavLink>
+          <i className="ri-more-2-line text-lg" />
+          <span className="max-[380px]:text-[10px]">More</span>
+        </button>
         <NavLink
           to="/history"
           className={({ isActive }) =>
@@ -54,7 +55,7 @@ const BottomNav = () => {
           }
         >
           <i className="ri-user-3-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Profile</span>
+          <span className="max-[380px]:text-[10px]">Account</span>
         </NavLink>
       </div>
     </nav>

@@ -1,7 +1,8 @@
-import React, { Suspense, lazy, useContext } from 'react'
+import React, { Suspense, lazy, useContext, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
+import MoreOptionsModal from './components/MoreOptionsModal'
 import NativeAndroidFlavorRedirect from './components/NativeAndroidFlavorRedirect'
 import RidingRouteGuard from './components/RidingRouteGuard'
 import { UserDataContext } from './context/UserContext'
@@ -10,6 +11,7 @@ import 'remixicon/fonts/remixicon.css'
 const UserLogin = lazy(() => import('./pages/UserLogin'))
 const UserSignup = lazy(() => import('./pages/UserSignup'))
 const Home = lazy(() => import('./pages/Home'))
+const LocationScreen = lazy(() => import('./pages/LocationScreen'))
 const RideTab = lazy(() => import('./pages/RideTab'))
 const UserProtectWrapper = lazy(() => import('./pages/UserProtectWrapper'))
 const UserLogout = lazy(() => import('./pages/UserLogout'))
@@ -38,10 +40,12 @@ const UserAppRoot = () => {
     return <Navigate to="/login" replace />
   }
 
-  return <Navigate to="/home" replace />
+  return <Navigate to="/location" replace />
 }
 
 const App = () => {
+  const [moreOpen, setMoreOpen] = useState(false)
+
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black text-white">
       <NativeAndroidFlavorRedirect />
@@ -62,6 +66,7 @@ const App = () => {
               )}
             />
             <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
+            <Route path="/location" element={<UserProtectWrapper><LocationScreen /></UserProtectWrapper>} />
             <Route path="/ride" element={<UserProtectWrapper><RideTab /></UserProtectWrapper>} />
             <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
             <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
@@ -70,7 +75,8 @@ const App = () => {
         </Suspense>
         <InstallPWAButton />
       </div>
-      <BottomNav />
+      <BottomNav onMoreClick={() => setMoreOpen(true)} />
+      <MoreOptionsModal open={moreOpen} onClose={() => setMoreOpen(false)} />
     </div>
   )
 }

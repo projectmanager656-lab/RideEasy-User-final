@@ -58,12 +58,6 @@ const LocationSearchPanel = ({
                 </div>
             )}
 
-            {status === 'idle' && (
-                <div className="px-3 py-3 text-xs text-zinc-500">
-                    Start typing to search places.
-                </div>
-            )}
-
             {status === 'done' && suggestions.map((elem, idx) => {
                 const name = typeof elem === 'string' ? elem : (elem?.name || elem?.description || '')
                 const { primary, secondary } = splitLabel(name)
