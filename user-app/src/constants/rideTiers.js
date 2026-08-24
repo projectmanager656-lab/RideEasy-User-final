@@ -51,6 +51,17 @@ export const RIDE_TIERS = [
         capacity: 6,
         features: [ 'Group capacity', 'Luggage space' ],
     },
+    {
+        id: 'BIKE',
+        label: 'Bike',
+        desc: 'Fast bike ride',
+        icon: 'ri-motorbike-line',
+        fare: 80,
+        etaMinutes: 3,
+        vehicleType: 'BIKE',
+        capacity: 1,
+        features: [ 'Quick pickup', 'Lowest fare' ],
+    },
 ]
 
 /**

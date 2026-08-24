@@ -11,6 +11,7 @@ import 'remixicon/fonts/remixicon.css'
 const UserLogin = lazy(() => import('./pages/UserLogin'))
 const UserSignup = lazy(() => import('./pages/UserSignup'))
 const Home = lazy(() => import('./pages/Home'))
+const ChooseRide = lazy(() => import('./pages/ChooseRide'))
 const LocationScreen = lazy(() => import('./pages/LocationScreen'))
 const RideTab = lazy(() => import('./pages/RideTab'))
 const UserProtectWrapper = lazy(() => import('./pages/UserProtectWrapper'))
@@ -66,6 +67,7 @@ const App = () => {
               )}
             />
             <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
+            <Route path="/choose-ride" element={<UserProtectWrapper><ChooseRide /></UserProtectWrapper>} />
             <Route path="/location" element={<UserProtectWrapper><LocationScreen /></UserProtectWrapper>} />
             <Route path="/ride" element={<UserProtectWrapper><RideTab /></UserProtectWrapper>} />
             <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />

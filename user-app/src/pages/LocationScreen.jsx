@@ -4,6 +4,10 @@ import L from 'leaflet'
 import { useNavigate } from 'react-router-dom'
 import { getMapTileUrlTemplate } from '../config/externalEndpoints'
 import { getRecentSearches } from '../utils/recentSearches'
+import bannerCopy2 from '../assets/image copy 2.png'
+import bannerCopy3 from '../assets/image copy 3.png'
+import bannerCopy4 from '../assets/image copy 4.png'
+import bannerCopy5 from '../assets/image copy 5.png'
 
 const KOLHAPUR_CENTER = { lat: 16.705, lng: 74.2433 }
 const DEFAULT_ZOOM = 14
@@ -36,6 +40,7 @@ const LocationScreen = () => {
   const [geoError, setGeoError] = useState('')
   const [searching, setSearching] = useState(false)
   const [recents, setRecents] = useState([])
+  const [showLocationModal, setShowLocationModal] = useState(false)
   const requestedRef = useRef(false)
 
   useEffect(() => {
@@ -88,9 +93,9 @@ const LocationScreen = () => {
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-black text-white">
+    <div className="relative flex h-full w-full flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-black text-white">
       {/* Map — upper portion */}
-      <div className="relative h-[52%] min-h-[280px] w-full shrink-0 overflow-hidden">
+      <div className="relative h-80 min-h-[280px] w-full shrink-0 overflow-hidden">
         <MapContainer
           center={[mapCenter.lat, mapCenter.lng]}
           zoom={DEFAULT_ZOOM}
@@ -116,34 +121,40 @@ const LocationScreen = () => {
           </div>
         )}
         {geoError && !searching && (
-          <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex items-center gap-2 rounded-full border border-brand-border bg-black/80 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur-sm">
-            <i className="ri-map-pin-line text-brand-yellow" aria-hidden />
-            <span>{geoError}</span>
-            <button
-              type="button"
-              onClick={retryLocation}
-              className="pointer-events-auto ml-1 rounded-full border border-brand-yellow px-2 py-0.5 text-[10px] font-semibold text-brand-yellow active:scale-95"
-            >
-              Retry
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowLocationModal(true)}
+            className="absolute inset-x-0 top-0 z-[1000] flex w-full items-center gap-3 border-b border-brand-yellow/30 bg-black/95 px-4 py-3 text-left backdrop-blur-sm transition active:bg-black/85"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+              <i className="ri-map-pin-2-line text-lg" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1 whitespace-nowrap text-center text-sm font-medium text-zinc-100">
+              Location sharing disabled. <span className="text-brand-yellow">Tap here to enable</span>
+            </span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-yellow/10 text-brand-yellow">
+              <i className="ri-arrow-right-s-line text-xl" aria-hidden />
+            </span>
+          </button>
         )}
 
         {/* RideEasy brand chip */}
-        <div className="pointer-events-none absolute right-4 top-4 z-[1000] rounded-full border border-brand-border bg-black/80 px-3 py-1.5 text-xs font-bold backdrop-blur-sm">
-          <span className="text-white">Ride</span>
-          <span className="text-brand-yellow">Easy</span>
-        </div>
+        {!geoError && (
+          <div className="pointer-events-none absolute right-4 top-4 z-[1000] rounded-full border border-brand-border bg-black/80 px-3 py-1.5 text-xs font-bold backdrop-blur-sm">
+            <span className="text-white">Ride</span>
+            <span className="text-brand-yellow">Easy</span>
+          </div>
+        )}
       </div>
 
       {/* Bottom sheet */}
-      <div className="relative z-10 -mt-6 flex min-h-0 flex-1 flex-col rounded-t-[28px] border-t border-brand-border bg-[#101010] shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
+      <div className="relative z-10 -mt-6 flex flex-col rounded-t-[28px] border-t border-brand-border bg-[#101010] shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
         {/* Where to go? search bar */}
-        <div className="shrink-0 px-4 pt-4">
+        <div className="shrink-0 px-4 pt-9">
           <button
             type="button"
             onClick={() => navigate('/home', { replace: true })}
-            className="flex w-full items-center gap-3 rounded-2xl border border-brand-border bg-brand-card px-4 py-4 shadow-lg shadow-black/40 transition active:scale-[0.99]"
+            className="flex w-full items-center gap-3 rounded-2xl border border-brand-border bg-brand-card px-4 py-3.5 shadow-lg shadow-black/40 transition active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
               <i className="ri-search-line text-lg" aria-hidden />
@@ -152,18 +163,20 @@ const LocationScreen = () => {
               <span className="block text-sm font-semibold text-white">Where to go ?</span>
               <span className="block text-xs text-[#707070]">Search pickup &amp; drop locations</span>
             </span>
-            <i className="ri-arrow-right-s-line text-xl text-zinc-500" aria-hidden />
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-yellow/10 text-brand-yellow">
+              <i className="ri-arrow-right-s-line text-lg" aria-hidden />
+            </span>
           </button>
         </div>
 
         {/* Recent searches */}
-        <div className="mt-5 flex min-h-0 flex-1 flex-col px-4 pb-4">
+        <div className="mt-5 flex shrink-0 flex-col px-4 pb-2">
           <div className="mb-2 flex shrink-0 items-center justify-between">
             <h2 className="text-sm font-bold text-white">Recent Searches</h2>
           </div>
 
           {recents.length === 0 ? (
-            <div className="flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-card/40 px-4 py-8 text-center">
+            <div className="flex shrink-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-brand-border bg-brand-card/40 px-4 py-6 text-center">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-yellow/10 text-brand-yellow">
                 <i className="ri-time-line text-xl" aria-hidden />
               </span>
@@ -171,8 +184,8 @@ const LocationScreen = () => {
               <p className="text-xs text-zinc-500">Your searched destinations will appear here.</p>
             </div>
           ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-brand-border bg-brand-card">
-              {recents.map((item, idx) => (
+            <div className="rounded-2xl border border-brand-border bg-brand-card">
+              {recents.slice(0, 2).map((item, idx) => (
                 <button
                   key={`${item.name}-${idx}`}
                   type="button"
@@ -193,8 +206,75 @@ const LocationScreen = () => {
               ))}
             </div>
           )}
+
+          {/* Offer banners — horizontally scrollable row */}
+          <div className="mt-3">
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {[
+                { src: bannerCopy2, alt: 'RideEasy offer 1' },
+                { src: bannerCopy3, alt: 'RideEasy offer 2' },
+                { src: bannerCopy4, alt: 'RideEasy offer 3' },
+                { src: bannerCopy5, alt: 'RideEasy offer 4' },
+              ].map((b, idx) => (
+                <div key={idx} className="w-[72%] shrink-0 overflow-hidden rounded-2xl border border-brand-border bg-brand-card">
+                  <img src={b.src} alt={b.alt} className="h-36 w-full object-cover" loading="lazy" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Location Accuracy modal */}
+      {showLocationModal && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-[1px]"
+            onClick={() => setShowLocationModal(false)}
+            aria-hidden
+          />
+          <div className="relative max-h-[80vh] w-full max-w-sm overflow-y-auto rounded-2xl border border-brand-border bg-[#101010] p-5 shadow-2xl">
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-zinc-700" />
+            <h2 className="text-base font-bold leading-snug text-white">
+              For a better experience, your device will need to use Location Accuracy
+            </h2>
+            <div className="mt-3 space-y-3 text-sm leading-relaxed text-zinc-400">
+              <p>The following settings should be on:</p>
+              <p className="font-medium text-white">Device location</p>
+              <p>
+                Location Accuracy, which provides more accurate location for apps and services. To do
+                this, Google periodically processes information about device sensors and wireless
+                signals from your device to crowdsource wireless signal locations. These are used
+                without identifying you to improve location accuracy and location-based services and
+                to improve, provide and maintain Google&apos;s services based on Google&apos;s and third
+                parties&apos; legitimate interests to serve users&apos; needs.
+              </p>
+              <p>
+                You can change this at any time in location settings. Manage settings or learn more
+              </p>
+            </div>
+            <div className="mt-5 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => setShowLocationModal(false)}
+                className="w-full rounded-xl border border-brand-border bg-brand-card py-3 text-sm font-semibold text-white transition active:scale-[0.98]"
+              >
+                No, thanks
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLocationModal(false)
+                  retryLocation()
+                }}
+                className="w-full rounded-xl bg-brand-yellow py-3 text-sm font-semibold text-black transition active:scale-[0.98]"
+              >
+                Turn on
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

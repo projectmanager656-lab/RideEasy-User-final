@@ -54,7 +54,7 @@ function dayDisabled(day, month, year, today) {
 
 function gridCellClass(selected, disabled) {
     return [
-        'flex h-10 items-center justify-center rounded-lg border text-sm font-semibold transition active:scale-95',
+        'flex h-9 items-center justify-center rounded-lg border text-sm font-semibold transition active:scale-95',
         selected
             ? 'border-brand-yellow bg-brand-yellow text-black'
             : disabled
@@ -68,7 +68,7 @@ function gridCellClass(selected, disabled) {
  * hours and minutes. No scrolling, one tap to pick.
  */
 const OptionGrid = ({ options, selected, disabled = () => false, onSelect, label = (v) => v, columns = 4 }) => (
-    <div className={`grid gap-1.5 p-1 ${columns === 7 ? 'grid-cols-7' : columns === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
+    <div className={`grid gap-1 p-0.5 ${columns === 7 ? 'grid-cols-7' : columns === 3 ? 'grid-cols-3' : 'grid-cols-4'}`}>
         {options.map((opt, idx) => (
             <button
                 key={idx}
@@ -77,7 +77,7 @@ const OptionGrid = ({ options, selected, disabled = () => false, onSelect, label
                 onClick={() => onSelect(opt)}
                 className={[
                     gridCellClass(selected(opt), disabled(opt)),
-                    columns === 7 ? 'h-9 px-0 text-[13px]' : 'h-10',
+                    columns === 7 ? 'h-9 px-0 text-[13px]' : 'h-9',
                 ].join(' ')}
             >
                 {label(opt)}
@@ -98,10 +98,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
         return { year: n.getFullYear(), month: n.getMonth(), date: n.getDate() }
     }, [])
 
-    const years = useMemo(() => {
-        const start = today.year
-        return Array.from({ length: 6 }, (_, i) => start + i)
-    }, [today.year])
+    const years = useMemo(() => [today.year], [today.year])
 
     const dayCount = daysInMonth(dateParts.year, dateParts.month)
 
@@ -164,10 +161,10 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
             />
             <div
                 ref={sheetRef}
-                className="relative flex max-h-[88dvh] w-full max-w-[430px] flex-col overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-4 pb-6 sm:rounded-2xl sm:border"
+                className="relative flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-2.5 pb-4 sm:rounded-2xl sm:border"
             >
-                <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-zinc-700 sm:hidden" />
-                <div className="mb-4 flex items-center justify-between">
+                <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-zinc-700 sm:hidden" />
+                <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-bold text-white">Schedule a ride</h2>
                     <button
                         type="button"
@@ -181,13 +178,13 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                 <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-zinc-400">
                     Pickup date
                 </label>
-                <div className="grid grid-cols-[1fr_1.2fr_1fr] gap-2">
+                <div className="grid grid-cols-[1fr_1.2fr_1fr] gap-1">
                     <button
                         type="button"
                         aria-label="Day"
                         onClick={() => setOpenPicker('day')}
                         className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            'flex h-10 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
                             openPicker === 'day' ? 'border-brand-yellow' : 'border-brand-border',
                         ].join(' ')}
                     >
@@ -199,50 +196,45 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                         aria-label="Month"
                         onClick={() => setOpenPicker('month')}
                         className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            'flex h-10 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
                             openPicker === 'month' ? 'border-brand-yellow' : 'border-brand-border',
                         ].join(' ')}
                     >
                         <span className="truncate">{MONTHS[dateParts.month]}</span>
                         <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
                     </button>
-                    <button
-                        type="button"
+                    <div
                         aria-label="Year"
-                        onClick={() => setOpenPicker('year')}
-                        className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
-                            openPicker === 'year' ? 'border-brand-yellow' : 'border-brand-border',
-                        ].join(' ')}
+                        className="flex h-10 items-center justify-between rounded-xl border border-brand-border bg-brand-card/60 px-3 text-sm font-semibold text-zinc-200"
                     >
                         {dateParts.year}
-                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
-                    </button>
+                        <i className="ri-lock-line text-xs text-zinc-500" aria-hidden />
+                    </div>
                 </div>
 
-                <label className="mb-2 mt-5 block text-xs font-medium uppercase tracking-wide text-zinc-400">
+                <label className="mb-2 mt-4 block text-xs font-medium uppercase tracking-wide text-zinc-400">
                     Pickup time
                 </label>
-                <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-center gap-2">
+                <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-center gap-1">
                     <button
                         type="button"
                         aria-label="Hour"
                         onClick={() => setOpenPicker('hour')}
                         className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            'flex h-10 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
                             openPicker === 'hour' ? 'border-brand-yellow' : 'border-brand-border',
                         ].join(' ')}
                     >
                         {parts.hour}
                         <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
                     </button>
-                    <span className="text-xl font-bold text-white" aria-hidden>:</span>
+                    <span className="text-base font-bold text-white" aria-hidden>:</span>
                     <button
                         type="button"
                         aria-label="Minute"
                         onClick={() => setOpenPicker('minute')}
                         className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            'flex h-10 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
                             openPicker === 'minute' ? 'border-brand-yellow' : 'border-brand-border',
                         ].join(' ')}
                     >
@@ -254,7 +246,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                         aria-label="AM/PM"
                         onClick={() => setOpenPicker('period')}
                         className={[
-                            'flex h-12 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
+                            'flex h-10 items-center justify-between rounded-xl border bg-brand-card px-3 text-sm font-semibold text-white transition active:scale-[0.98]',
                             openPicker === 'period' ? 'border-brand-yellow' : 'border-brand-border',
                         ].join(' ')}
                     >
@@ -263,13 +255,13 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                     </button>
                 </div>
 
-                <p className="mt-3 text-center text-base font-bold text-brand-yellow">
+                <p className="mt-2.5 text-center text-sm font-bold text-brand-yellow">
                     {pad2(Number(parts.hour))} : {parts.minute} {parts.period}
                 </p>
 
                 {error && <p className="mt-2 text-center text-xs text-red-400">{error}</p>}
 
-                <p className="mt-3 text-center text-[11px] leading-relaxed text-zinc-500">
+                <p className="mt-2 text-center text-[11px] leading-relaxed text-zinc-500">
                     Your ride will be booked at the chosen time through the existing booking flow.
                 </p>
 
@@ -277,13 +269,13 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                     type="button"
                     disabled={findingTrip}
                     onClick={handleContinue}
-                    className="mt-4 w-full rounded-xl border border-brand-yellow bg-brand-yellow py-3 text-sm font-bold text-black transition active:scale-[0.98] disabled:opacity-50"
+                    className="mt-3 w-full rounded-xl border border-brand-yellow bg-brand-yellow py-2 text-sm font-bold text-black transition active:scale-[0.98] disabled:opacity-50"
                 >
                     {findingTrip ? 'Booking your ride...' : 'Continue to Booking'}
                 </button>
 
                 {openPicker && (
-                    <div data-picker-panel className="relative mt-3 rounded-xl border border-brand-border bg-brand-cardSoft p-2">
+                    <div data-picker-panel className="relative mt-2.5 rounded-xl border border-brand-border bg-brand-cardSoft p-1.5">
                         {openPicker === 'day' && (
                             <OptionGrid
                                 options={Array.from({ length: dayCount }, (_, i) => i + 1)}
@@ -361,7 +353,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                                             setOpenPicker(null)
                                         }}
                                         className={[
-                                            'h-12 flex-1 rounded-lg border text-sm font-bold transition active:scale-95',
+                                            'h-10 flex-1 rounded-lg border text-sm font-bold transition active:scale-95',
                                             parts.period === p
                                                 ? 'border-brand-yellow bg-brand-yellow text-black'
                                                 : 'border-brand-border bg-brand-card text-zinc-200 hover:border-zinc-500',

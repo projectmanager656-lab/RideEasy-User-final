@@ -11,7 +11,7 @@ import LookingForDriver from '../components/LookingForDriver';
 import WaitingForDriver from '../components/WaitingForDriver';
 import { useSocket } from '../hooks/useSocket';
 import { UserDataContext } from '../context/UserContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import RideMap from '../components/RideMap';
 import RideEasyHeader from '../components/RideEasyHeader';
 import LocationSelector from '../components/LocationSelector';
@@ -22,6 +22,7 @@ import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
 import { addRecentSearch } from '../utils/recentSearches'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
 
@@ -122,6 +123,7 @@ const Home = () => {
     const keepSearchFirstRef = useRef(true)
 
     const navigate = useNavigate()
+    const location = useLocation()
 
     useEffect(() => {
         try {
@@ -226,6 +228,7 @@ const Home = () => {
     /** Restore active booking after refresh (ride id in sessionStorage). */
     useEffect(() => {
         if (ride?._id) return
+        if (location.state?.chooseRideResult) return
         const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
         if (!id || !currentUser?._id) return
         const token = localStorage.getItem('token')
@@ -630,6 +633,7 @@ const Home = () => {
 
     const handlePickupChange = (e) => {
         const value = e.target.value
+        chooseRideSentRef.current = false
         setPickup(value)
         if (pickupSelection && value.trim() !== pickupSelection.name) {
             setPickupSelection(null)
@@ -640,6 +644,7 @@ const Home = () => {
 
     const handleDestinationChange = (e) => {
         const value = e.target.value
+        chooseRideSentRef.current = false
         setDestination(value)
         if (dropSelection && value.trim() !== dropSelection.name) {
             setDropSelection(null)
@@ -941,6 +946,83 @@ const Home = () => {
         && driverCoords?.lat != null
         && pickupCoords?.lat != null
 
+    /** Once both pickup & drop are selected, move to the Choose Ride screen. */
+    const chooseRideSentRef = useRef(false)
+    useEffect(() => {
+        if (hasRouteSelections && !chooseRideSentRef.current) {
+            chooseRideSentRef.current = true
+            try {
+                sessionStorage.setItem(DRAFT_BOOKING_KEY, JSON.stringify({
+                    pickup,
+                    destination,
+                    pickupCoords,
+                    dropCoords,
+                    pickupSelection,
+                    dropSelection,
+                }))
+            } catch { /* ignore */ }
+            navigate('/choose-ride', {
+                state: {
+                    pickup,
+                    destination,
+                    pickupCoords,
+                    dropCoords,
+                    pickupSelection,
+                    dropSelection,
+                },
+            })
+        }
+    }, [ hasRouteSelections, pickup, destination, pickupCoords, dropCoords, pickupSelection, dropSelection, navigate ])
+
+    /** Restore the pickup/drop draft when returning from the Choose Ride screen (Back). */
+    useEffect(() => {
+        if (ride?._id) return
+        if (location.state?.chooseRideResult) return
+        let draft = null
+        try {
+            draft = JSON.parse(sessionStorage.getItem(DRAFT_BOOKING_KEY) || 'null')
+        } catch { draft = null }
+        if (!draft || typeof draft !== 'object') return
+        if (draft.pickupCoords?.lat != null) setPickupCoords(draft.pickupCoords)
+        if (draft.dropCoords?.lat != null) setDropCoords(draft.dropCoords)
+        if (draft.pickup) setPickup(draft.pickup)
+        if (draft.destination) setDestination(draft.destination)
+        if (draft.pickupSelection) setPickupSelection(draft.pickupSelection)
+        if (draft.dropSelection) setDropSelection(draft.dropSelection)
+        chooseRideSentRef.current = true
+        try {
+            sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+        } catch { /* ignore */ }
+    }, [ ride?._id ])
+
+    /** Handoff from the Choose Ride screen: open the existing "Looking for driver" state. */
+    const chooseRideConsumedRef = useRef(false)
+    useEffect(() => {
+        const incoming = location.state?.chooseRideResult
+        if (!incoming || chooseRideConsumedRef.current) return
+        chooseRideConsumedRef.current = true
+        const { ride, pickupCoords: pu, dropCoords: dr, pickup: p, destination: d, vehicleType, scheduledAt } = incoming
+        if (ride?._id) {
+            try {
+                sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ride._id))
+            } catch { /* ignore */ }
+        }
+        if (pu) setPickupCoords(pu)
+        if (dr) setDropCoords(dr)
+        if (p) setPickup(p)
+        if (d) setDestination(d)
+        if (vehicleType) setVehicleType(vehicleType)
+        if (scheduledAt) setScheduledAt(scheduledAt)
+        setRide(ride || null)
+        setVehicleFound(true)
+        setWaitingForDriver(false)
+        setHasShownAcceptAlert(false)
+        try {
+            sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+        } catch { /* ignore */ }
+        navigate(location.pathname, { replace: true })
+    }, [ location.state, location.pathname, navigate ])
+
     return (
         <div className="relative h-full w-full overflow-hidden">
             {/* Full-screen map layer — ONLY behind active booking sheets, never a home background */}
@@ -1013,19 +1095,6 @@ const Home = () => {
                                 </div>
                             )}
                         </div>
-
-                        {/* Dynamic map card — fills the flexible middle space, ONLY after both locations are selected */}
-                        {hasRouteSelections && (
-                            <div className="min-h-0 flex-1 px-4 pt-3 pb-3">
-                                <div className="h-full w-full overflow-hidden rounded-[20px] border border-brand-border shadow-lg shadow-black/40">
-                                    <RideMap
-                                        pickupCoords={pickupCoords}
-                                        dropCoords={dropCoords}
-                                        showRoute
-                                    />
-                                </div>
-                            </div>
-                        )}
 
                         <div className="mt-auto shrink-0 pb-2">
                             <SafetyPromoCard />

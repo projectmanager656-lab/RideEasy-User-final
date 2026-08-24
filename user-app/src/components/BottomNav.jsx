@@ -30,24 +30,6 @@ const BottomNav = ({ onMoreClick }) => {
           <i className="ri-home-5-line text-lg" />
           <span className="max-[380px]:text-[10px]">Home</span>
         </NavLink>
-        <button
-          type="button"
-          onClick={onMoreClick}
-          aria-label="More"
-          className={`${base} cursor-pointer bg-transparent border-0 text-[#777777]`}
-        >
-          <i className="ri-more-2-line text-lg" />
-          <span className="max-[380px]:text-[10px]">More</span>
-        </button>
-        <NavLink
-          to="/history"
-          className={({ isActive }) =>
-            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
-          }
-        >
-          <i className="ri-history-line text-lg" />
-          <span className="max-[380px]:text-[10px]">History</span>
-        </NavLink>
         <NavLink
           to="/profile"
           className={({ isActive }) =>
@@ -57,6 +39,24 @@ const BottomNav = ({ onMoreClick }) => {
           <i className="ri-user-3-line text-lg" />
           <span className="max-[380px]:text-[10px]">Account</span>
         </NavLink>
+        <NavLink
+          to="/history"
+          className={({ isActive }) =>
+            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
+          }
+        >
+          <i className="ri-history-line text-lg" />
+          <span className="max-[380px]:text-[10px]">History</span>
+        </NavLink>
+        <button
+          type="button"
+          onClick={onMoreClick}
+          aria-label="More"
+          className={`${base} cursor-pointer bg-transparent border-0 text-[#777777]`}
+        >
+          <i className="ri-more-line text-xl" />
+          <span className="max-[380px]:text-[10px]">More</span>
+        </button>
       </div>
     </nav>
   )

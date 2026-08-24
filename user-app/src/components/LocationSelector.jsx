@@ -13,7 +13,7 @@ const LocationSelector = ({
 }) => {
     return (
         <>
-            <div className="mx-4 shrink-0 rounded-[20px] border border-brand-border bg-brand-card p-3.5 shadow-lg shadow-black/40">
+            <div className="mx-4 shrink-0 rounded-[20px] border border-brand-border bg-brand-card p-4 shadow-lg shadow-black/40">
                 <div className="mb-2.5 flex items-center justify-between px-1">
                     <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
                         Book a ride
@@ -26,17 +26,14 @@ const LocationSelector = ({
                             className="h-3 w-3 shrink-0 rounded-full bg-brand-pickup ring-4 ring-brand-pickup/20"
                             aria-hidden
                         />
-                        <span
-                            className="my-1 w-px flex-1 border-l-2 border-dashed border-zinc-600"
-                            aria-hidden
-                        />
+                        <span className="flex-1" aria-hidden />
                         <span
                             className="h-3 w-3 shrink-0 rounded-full bg-brand-drop ring-4 ring-brand-drop/20"
                             aria-hidden
                         />
                     </div>
                     <div className="min-w-0 flex-1">
-                        <div className="py-1.5">
+                        <div className="py-2">
                             <p className="text-[10px] font-medium uppercase tracking-wide text-[#A0A0A0]">
                                 Pickup location
                             </p>
@@ -50,7 +47,7 @@ const LocationSelector = ({
                                 autoComplete="off"
                             />
                         </div>
-                        <div className="py-1.5">
+                        <div className="py-2">
                             <p className="text-[10px] font-medium uppercase tracking-wide text-[#A0A0A0]">
                                 Drop location
                             </p>

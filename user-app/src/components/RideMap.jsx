@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndpoints'
@@ -113,6 +113,10 @@ const RideMap = ({
     trackingTo = null,
     /** Show ETA chip for the tracking leg (requires trackingFrom/To). */
     showTrackingEta = true,
+    /** Show the built-in "Estimated trip" duration/distance chip (kept on by default). */
+    showRouteStatsChip = true,
+    /** Where the Leaflet zoom (+/−) control sits. */
+    zoomControlPosition = 'topleft',
 }) => {
     const [routeLine, setRouteLine] = useState([])
     const [routeStats, setRouteStats] = useState(null)
@@ -238,7 +242,7 @@ const RideMap = ({
                     ETA ~{trackingEtaMin} min
                 </div>
             )}
-            {!trackingFrom && routeStats && (
+            {showRouteStatsChip && !trackingFrom && routeStats && (
                 <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[1000] flex justify-center">
                     <div
                         className="rounded-[14px] border px-3.5 py-2 shadow-lg"
@@ -258,13 +262,14 @@ const RideMap = ({
                     </div>
                 </div>
             )}
-            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl>
+            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl={false}>
                 <MapBoundsSync
                     pickupCoords={pickupCoords}
                     dropCoords={dropCoords}
                     driverCoords={driverCoords}
                     passengerLiveCoords={passengerLiveCoords}
                 />
+                <ZoomControl position={zoomControlPosition} />
                 <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
                     url={getMapTileUrlTemplate()}
