@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 
 const Svg = ({ children, className = 'h-4 w-4' }) => (
     <svg
@@ -41,8 +42,33 @@ const OPTIONS = [
     },
 ]
 
+/** Linkable options added to the More menu. */
+const NAV_OPTIONS = [
+    {
+        id: 'safety',
+        label: 'Safety',
+        detail: 'Emergency & trip safety',
+        to: '/safety',
+        icon: 'ri-shield-check-line',
+    },
+    {
+        id: 'help',
+        label: 'Help & Support',
+        detail: 'Get help with your ride',
+        to: '/help',
+        icon: 'ri-customer-service-2-line',
+    },
+]
+
 const MoreOptionsModal = ({ open, onClose }) => {
+    const navigate = useNavigate()
+
     if (!open) return null
+
+    const go = (to) => {
+        onClose()
+        navigate(to)
+    }
 
     return (
         <div className="absolute inset-0 z-40 flex flex-col justify-end">
@@ -51,7 +77,7 @@ const MoreOptionsModal = ({ open, onClose }) => {
                 onClick={onClose}
                 aria-hidden
             />
-            <div className="relative max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-4">
+            <div className="relative max-h-[80vh] overflow-y-auto rounded-t-2xl border-t border-brand-border bg-[#101010] p-4">
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-zinc-700" />
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-base font-bold text-white">More services</h2>
@@ -63,6 +89,29 @@ const MoreOptionsModal = ({ open, onClose }) => {
                         Close
                     </button>
                 </div>
+
+                {/* Safety & Help */}
+                <div className="space-y-2">
+                    {NAV_OPTIONS.map((o) => (
+                        <button
+                            key={o.id}
+                            type="button"
+                            onClick={() => go(o.to)}
+                            className="flex w-full items-center gap-3 rounded-xl border border-brand-border bg-brand-card px-3.5 py-3 text-left transition hover:border-brand-yellow/40 active:scale-[0.99]"
+                        >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                                <i className={`${o.icon} text-lg`} aria-hidden />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-semibold text-white">{o.label}</span>
+                                <span className="block text-xs text-zinc-400">{o.detail}</span>
+                            </span>
+                            <i className="ri-arrow-right-s-line text-xl text-zinc-500" aria-hidden />
+                        </button>
+                    ))}
+                </div>
+
+                <div className="my-4 h-px bg-brand-border" />
 
                 <div className="space-y-2">
                     {OPTIONS.map((o) => (

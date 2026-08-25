@@ -26,7 +26,7 @@ const LocationSelector = ({
                             className="h-3 w-3 shrink-0 rounded-full bg-brand-pickup ring-4 ring-brand-pickup/20"
                             aria-hidden
                         />
-                        <span className="flex-1" aria-hidden />
+                        <span className="my-1 w-px flex-1 border-l-2 border-dotted border-zinc-400" aria-hidden />
                         <span
                             className="h-3 w-3 shrink-0 rounded-full bg-brand-drop ring-4 ring-brand-drop/20"
                             aria-hidden
