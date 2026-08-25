@@ -58,6 +58,13 @@ const NAV_OPTIONS = [
         to: '/help',
         icon: 'ri-customer-service-2-line',
     },
+    {
+        id: 'faq',
+        label: 'Frequently Asked Questions',
+        detail: 'Common questions answered',
+        to: '/faq',
+        icon: 'ri-question-answer-line',
+    },
 ]
 
 const MoreOptionsModal = ({ open, onClose }) => {

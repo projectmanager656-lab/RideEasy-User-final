@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useContext, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
 import MoreOptionsModal from './components/MoreOptionsModal'
@@ -14,6 +14,7 @@ const Home = lazy(() => import('./pages/Home'))
 const ChooseRide = lazy(() => import('./pages/ChooseRide'))
 const Safety = lazy(() => import('./pages/Safety'))
 const HelpSupport = lazy(() => import('./pages/HelpSupport'))
+const Faq = lazy(() => import('./pages/Faq'))
 const LocationScreen = lazy(() => import('./pages/LocationScreen'))
 const RideTab = lazy(() => import('./pages/RideTab'))
 const UserProtectWrapper = lazy(() => import('./pages/UserProtectWrapper'))
@@ -48,11 +49,13 @@ const UserAppRoot = () => {
 
 const App = () => {
   const [moreOpen, setMoreOpen] = useState(false)
+  const location = useLocation()
+  const hideScrollbar = ['/help', '/safety', '/faq'].includes(location.pathname)
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black text-white">
       <NativeAndroidFlavorRedirect />
-      <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div className={`relative min-h-0 flex-1 overflow-y-auto ${hideScrollbar ? 'scrollbar-hide' : ''}`}>
         <Suspense fallback={<div className="h-full flex items-center justify-center text-zinc-400 text-sm bg-black">Loading RideEasy…</div>}>
           <Routes>
             <Route path="/" element={<UserAppRoot />} />
@@ -72,6 +75,7 @@ const App = () => {
             <Route path="/choose-ride" element={<UserProtectWrapper><ChooseRide /></UserProtectWrapper>} />
             <Route path="/safety" element={<UserProtectWrapper><Safety /></UserProtectWrapper>} />
             <Route path="/help" element={<UserProtectWrapper><HelpSupport /></UserProtectWrapper>} />
+            <Route path="/faq" element={<UserProtectWrapper><Faq /></UserProtectWrapper>} />
             <Route path="/location" element={<UserProtectWrapper><LocationScreen /></UserProtectWrapper>} />
             <Route path="/ride" element={<UserProtectWrapper><RideTab /></UserProtectWrapper>} />
             <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
