@@ -4,7 +4,6 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
-import LocationSearchPanel from '../components/LocationSearchPanel';
 import VehiclePanel from '../components/VehiclePanel';
 import ConfirmRide from '../components/ConfirmRide';
 import LookingForDriver from '../components/LookingForDriver';
@@ -15,12 +14,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import RideMap from '../components/RideMap';
 import RideEasyHeader from '../components/RideEasyHeader';
 import LocationSelector from '../components/LocationSelector';
+import ForMeSheet from '../components/ForMeSheet';
 import SafetyPromoCard from '../components/SafetyPromoCard';
 import ScheduleModal from '../components/ScheduleModal';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
-import { addRecentSearch } from '../utils/recentSearches'
+import { addRecentSearch, getRecentSearches } from '../utils/recentSearches'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
@@ -73,7 +73,16 @@ const Home = () => {
     const [ pickup, setPickup ] = useState('')
     const [ destination, setDestination ] = useState('')
     const [ serviceCity ] = useState(readStoredServiceCity)
-    const [ panelOpen, setPanelOpen ] = useState(false)
+    const [ recentSearches, setRecentSearches ] = useState(getRecentSearches)
+    const [ forMeUsers, setForMeUsers ] = useState([ { name: 'Me', phone: '' } ])
+    const [ forMeActive, setForMeActive ] = useState('Me')
+    const [ forMeOpen, setForMeOpen ] = useState(false)
+    const [ pickupSuggestions, setPickupSuggestions ] = useState([])
+    const [ destinationSuggestions, setDestinationSuggestions ] = useState([])
+    const [ activeField, setActiveField ] = useState(null)
+    const [ searchStatus, setSearchStatus ] = useState('idle')
+    const searchTimerRef = useRef(null)
+    const searchSeqRef = useRef(0)
     const vehiclePanelRef = useRef(null)
     const confirmRidePanelRef = useRef(null)
     const vehicleFoundRef = useRef(null)
@@ -82,9 +91,6 @@ const Home = () => {
     const [ confirmRidePanel, setConfirmRidePanel ] = useState(false)
     const [ vehicleFound, setVehicleFound ] = useState(false)
     const [ waitingForDriver, setWaitingForDriver ] = useState(false)
-    const [ pickupSuggestions, setPickupSuggestions ] = useState([])
-    const [ destinationSuggestions, setDestinationSuggestions ] = useState([])
-    const [ activeField, setActiveField ] = useState(null)
     const [ fare, setFare ] = useState({})
     const [ vehicleType, setVehicleType ] = useState(null)
     const [ ride, setRide ] = useState(null)
@@ -100,15 +106,9 @@ const Home = () => {
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
     const [ notificationsOpen, setNotificationsOpen ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(null)
-    const [ searching, setSearching ] = useState(false)
-    const [ searchNotice, setSearchNotice ] = useState('')
-    const [ searchStatus, setSearchStatus ] = useState('idle')
-    const [ searchError, setSearchError ] = useState('')
     const [ assignmentError, setAssignmentError ] = useState('')
     const [ pickupSelection, setPickupSelection ] = useState(null)
     const [ dropSelection, setDropSelection ] = useState(null)
-    const searchTimerRef = useRef(null)
-    const searchSeqRef = useRef(0)
     /** Locks concurrent retry-assign calls; bounds the retry budget across polls. */
     const retryAssignLockRef = useRef(false)
     const retryAttemptRef = useRef(0)
@@ -570,22 +570,17 @@ const Home = () => {
     }, [ride?._id, ride?.status, ride?.captain, syncRideFromServer]);
 
 
-    /** Debounced prefix search with stale-response protection and graceful 429 handling.
-     *  Local service-area dataset guarantees deterministic results from one character;
-     *  the live Photon API enriches queries of three or more characters. */
+    /** Debounced prefix search with stale-response protection and graceful 429 handling. */
     const runLocationSearch = (field, query) => {
         const trimmed = (query || '').trim()
         const seq = ++searchSeqRef.current
         clearTimeout(searchTimerRef.current)
         if (!trimmed) {
-            setSearching(false)
             setSearchStatus('idle')
-            setSearchError('')
             setPickupSuggestions([])
             setDestinationSuggestions([])
             return
         }
-        setSearching(true)
         setSearchStatus('loading')
         searchTimerRef.current = setTimeout(async () => {
             const localList = searchServiceAreaPlaces(trimmed, 8)
@@ -597,9 +592,6 @@ const Home = () => {
                     }))
                     if (seq !== searchSeqRef.current) return
                     const raw = Array.isArray(response.data) ? response.data : []
-                    /* Real API results, filtered to the served belt: valid coords + a full
-                       place label that names Kolhapur / Ichalkaranji / Sangli. This removes
-                       single-word stray Photon hits (e.g. "Random", "Range", "Rang"). */
                     const cityKeys = SERVICE_AREAS.map((z) => z.key.toLowerCase())
                     const apiList = raw
                         .filter((s) => {
@@ -614,20 +606,13 @@ const Home = () => {
                         .map((s) => ({ name: s.name, lat: s.lat, lng: s.lng, source: 'api' }))
                     merged = mergeServicePlaces(localList, apiList)
                 }
-            } catch (err) {
+            } catch {
                 if (seq !== searchSeqRef.current) return
-                /* 429: still show deterministic local results + a transient notice. */
-                if (err?.response?.status === 429) {
-                    setSearchNotice('Location search is temporarily busy. Please try again.')
-                    setTimeout(() => setSearchNotice(''), 5000)
-                }
             }
             if (seq !== searchSeqRef.current) return
             if (field === 'pickup') setPickupSuggestions(merged)
             else setDestinationSuggestions(merged)
             setSearchStatus(merged.length ? 'done' : 'empty')
-            setSearchError('')
-            setSearching(false)
         }, 300)
     }
 
@@ -687,17 +672,40 @@ const Home = () => {
         return null
     }
 
-    /** Typing is NOT selection — selection only happens when the user taps a suggestion. */
+    const handleSelectRecent = async (item) => {
+        const from = String(item.pickup || '').trim()
+        const to = String(item.destination || item.name || '').trim()
+        if (!to) return
+        chooseRideSentRef.current = false
+        setBookingError('')
+        setPickup(from)
+        setDestination(to)
+        if (from) addRecentSearch({ pickup: from, destination: to })
+        else addRecentSearch({ name: to })
+        setRecentSearches(getRecentSearches())
+        const pc = from ? await fetchPickupCoords(from) : null
+        const dc = await fetchDropCoords(to)
+        if (pc) {
+            setPickupCoords(pc)
+            setPickupSelection({ name: from, latitude: pc.lat, longitude: pc.lng })
+        }
+        if (dc) {
+            setDropCoords(dc)
+            setDropSelection({ name: to, latitude: dc.lat, longitude: dc.lng })
+        }
+        if (!pc || !dc) {
+            setBookingError('Could not resolve the selected locations. Please try another.')
+        }
+    }
+
+    /** Select a pickup suggestion from the search panel. */
     const handleSelectPickup = async (suggestion) => {
         const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
         if (!name) return
         clearTimeout(searchTimerRef.current)
-        setSearching(false)
         setSearchStatus('idle')
-        setSearchError('')
-        setSearchNotice('')
         setPickupSuggestions([])
-        setPanelOpen(false)
+        setActiveField(null)
         setPickup(name)
         setBookingError('')
         let coords = null
@@ -716,22 +724,22 @@ const Home = () => {
         }
     }
 
+    /** Select a drop suggestion from the search panel — also records a recent search. */
     const handleSelectDestination = async (suggestion) => {
         const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
         if (!name) return
         clearTimeout(searchTimerRef.current)
-        setSearching(false)
         setSearchStatus('idle')
-        setSearchError('')
-        setSearchNotice('')
         setDestinationSuggestions([])
-        setPanelOpen(false)
+        setActiveField(null)
         setDestination(name)
         setBookingError('')
         addRecentSearch({
-            name,
+            pickup: pickup?.trim() || '',
+            destination: name,
             detail: typeof suggestion === 'object' && suggestion?.description ? suggestion.description : '',
         })
+        setRecentSearches(getRecentSearches())
         let coords = null
         if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
             coords = { lat: suggestion.lat, lng: suggestion.lng }
@@ -746,6 +754,12 @@ const Home = () => {
             setDropSelection(null)
             setBookingError('Could not resolve the selected drop location. Please try another.')
         }
+    }
+
+    /** Route a tapped suggestion to the pickup or drop handler based on the focused field. */
+    const handleSelectSuggestion = (suggestion) => {
+        if (activeField === 'pickup') handleSelectPickup(suggestion)
+        else if (activeField === 'destination') handleSelectDestination(suggestion)
     }
 
     /** Keep pickup/drop text + map pins in sync with the active ride (refresh, socket, or restore). */
@@ -834,7 +848,6 @@ const Home = () => {
             setBookingError('Pickup and destination cannot be the same. Please choose a different destination.')
             return
         }
-        setPanelOpen(false)
         setBookingError('')
         setFindingTrip(true)
         try {
@@ -905,6 +918,10 @@ const Home = () => {
             setPassengerOtp('')
             setDriverCoords(null)
             setHasShownAcceptAlert(false)
+            if (pickup?.trim() || destination?.trim()) {
+                addRecentSearch({ pickup, destination })
+                setRecentSearches(getRecentSearches())
+            }
             if (ridePayload?._id) {
                 try {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
@@ -1055,45 +1072,31 @@ const Home = () => {
                                 destination={destination}
                                 onPickupChange={handlePickupChange}
                                 onPickupFocus={() => {
-                                    setPanelOpen(true)
                                     setActiveField('pickup')
                                     if (pickup.trim()) runLocationSearch('pickup', pickup)
                                     else {
                                         setSearchStatus('idle')
                                         setDestinationSuggestions([])
-                                        setSearchError('')
                                     }
                                 }}
                                 onDestinationChange={handleDestinationChange}
                                 onDestinationFocus={() => {
-                                    setPanelOpen(true)
                                     setActiveField('destination')
                                     if (destination.trim()) runLocationSearch('destination', destination)
                                     else {
                                         setSearchStatus('idle')
                                         setPickupSuggestions([])
-                                        setSearchError('')
                                     }
                                 }}
                                 bookingError={bookingError}
-                                notice={searchNotice}
-                                searching={searching}
+                                recents={recentSearches}
+                                onSelectRecent={handleSelectRecent}
+                                searching={!!activeField}
+                                searchStatus={searchStatus}
+                                suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
+                                onSelectSuggestion={handleSelectSuggestion}
+                                onForMeOpen={() => setForMeOpen(true)}
                             />
-
-                            {panelOpen && (
-                                <div className="mx-4 mt-2">
-                                    <LocationSearchPanel
-                                        suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
-                                        setPickup={setPickup}
-                                        setDestination={setDestination}
-                                        activeField={activeField}
-                                        onSelectPickup={handleSelectPickup}
-                                        onSelectDestination={handleSelectDestination}
-                                        status={searchStatus}
-                                        errorMessage={searchError}
-                                    />
-                                </div>
-                            )}
                         </div>
 
                         <div className="mt-auto shrink-0 pb-2">
@@ -1102,6 +1105,22 @@ const Home = () => {
                     </>
                 )}
             </div>
+
+            <ForMeSheet
+                open={forMeOpen}
+                users={forMeUsers}
+                active={forMeActive}
+                onClose={() => setForMeOpen(false)}
+                onSelect={(name) => {
+                    setForMeActive(name)
+                    setForMeOpen(false)
+                }}
+                onAdd={({ name, phone }) => {
+                    setForMeUsers((prev) => [ ...prev, { name, phone } ])
+                    setForMeActive(name)
+                    setForMeOpen(false)
+                }}
+            />
 
             <ScheduleModal
                 open={scheduleOpen}
@@ -1170,8 +1189,6 @@ const Home = () => {
                     setVehicleFound={setVehicleFound}
                     onEditLocations={() => {
                         setVehicleFound(false)
-                        setPanelOpen(true)
-                        setActiveField('pickup')
                     }} />
             </div>
             <div ref={waitingForDriverRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
