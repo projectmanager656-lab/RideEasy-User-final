@@ -253,20 +253,18 @@ const ChooseRide = () => {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
                 } catch { /* ignore */ }
             }
-            navigate('/home', {
+            navigate('/searching-for-driver', {
                 replace: true,
                 state: {
-                    chooseRideResult: {
-                        ride: ridePayload,
-                        pickupCoords,
-                        dropCoords,
-                        pickup,
-                        destination,
-                        vehicleType,
-                        paymentMethod,
-                        price,
-                        scheduledAt,
-                    },
+                    ride: ridePayload,
+                    pickupCoords,
+                    dropCoords,
+                    pickup,
+                    destination,
+                    vehicleType,
+                    paymentMethod,
+                    price,
+                    scheduledAt,
                 },
             })
         } catch (err) {

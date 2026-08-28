@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from '
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndpoints'
+import autoLogo from '../assets/images-removebg-preview.png'
 
 const containerStyle = { width: '100%', height: '100%' }
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }
@@ -55,6 +56,16 @@ const passengerDivIcon = L.divIcon({
     iconAnchor: [9, 9],
 })
 
+/** Small Auto icon used for nearby-vehicle markers on the searching screen. */
+const nearbyAutoDivIcon = L.divIcon({
+    className: 'nearby-auto-marker',
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:rgba(5,5,5,.85);border:2px solid #FFC800;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)">
+        <img src="${autoLogo}" alt="Auto" style="width:24px;height:24px;object-fit:contain" draggable="false" />
+    </div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+})
+
 function roundCoordKey(lat, lng) {
     return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`
 }
@@ -105,6 +116,8 @@ const RideMap = ({
     driverCoords = null,
     passengerLiveCoords = null,
     currentLocation = null,
+    /** Optional nearby-vehicle markers (e.g. Autos around pickup while searching). */
+    nearbyVehicles = [],
     showRoute = true,
     zoom = 14,
     routeFromCurrent = false,
@@ -287,6 +300,20 @@ const RideMap = ({
                 {passengerLiveCoords?.lat != null && passengerLiveCoords?.lng != null && (
                     <Marker position={[passengerLiveCoords.lat, passengerLiveCoords.lng]} icon={passengerDivIcon} />
                 )}
+
+                {Array.isArray(nearbyVehicles) && nearbyVehicles.map((v) => {
+                    const lat = Number(v?.lat)
+                    const lng = Number(v?.lng)
+                    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+                    return (
+                        <Marker
+                            key={v?.id || `${lat},${lng}`}
+                            position={[lat, lng]}
+                            icon={nearbyAutoDivIcon}
+                            zIndexOffset={500}
+                        />
+                    )
+                })}
 
                 {routeLine.length > 1 && (
                     <Polyline positions={routeLine} pathOptions={{ color: '#FFC800', weight: 5, opacity: 0.95 }} />

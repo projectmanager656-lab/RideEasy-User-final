@@ -12,6 +12,7 @@ const UserLogin = lazy(() => import('./pages/UserLogin'))
 const UserSignup = lazy(() => import('./pages/UserSignup'))
 const Home = lazy(() => import('./pages/Home'))
 const ChooseRide = lazy(() => import('./pages/ChooseRide'))
+const SearchingForDriver = lazy(() => import('./pages/SearchingForDriver'))
 const Safety = lazy(() => import('./pages/Safety'))
 const HelpSupport = lazy(() => import('./pages/HelpSupport'))
 const Faq = lazy(() => import('./pages/Faq'))
@@ -73,6 +74,7 @@ const App = () => {
             />
             <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
             <Route path="/choose-ride" element={<UserProtectWrapper><ChooseRide /></UserProtectWrapper>} />
+            <Route path="/searching-for-driver" element={<UserProtectWrapper><SearchingForDriver /></UserProtectWrapper>} />
             <Route path="/safety" element={<UserProtectWrapper><Safety /></UserProtectWrapper>} />
             <Route path="/help" element={<UserProtectWrapper><HelpSupport /></UserProtectWrapper>} />
             <Route path="/faq" element={<UserProtectWrapper><Faq /></UserProtectWrapper>} />

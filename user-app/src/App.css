@@ -33,6 +33,23 @@
   }
 }
 
+/* Nearby Auto markers shown on the Searching for Driver map */
+@keyframes rideeasy-nearby-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 200, 0, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(255, 200, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 200, 0, 0);
+  }
+}
+
+.nearby-auto-marker {
+  animation: rideeasy-nearby-pulse 2s ease-out infinite;
+}
+
 .card {
   padding: 2em;
 }

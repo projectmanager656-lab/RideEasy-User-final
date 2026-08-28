@@ -9,10 +9,9 @@ function rideStatusNorm(s) {
 const LookingForDriver = (props) => {
     const st = rideStatusNorm(props.ride?.status)
     const isSearching = !st || st === 'searching'
-    const showOtp =
-        Boolean(props.passengerOtp)
-        || st === 'accepted'
-        || st === 'arrived'
+    const isArrived = st === 'arrived'
+    /** OTP is shown to the passenger ONLY once the driver has arrived (never while searching or assigned). */
+    const showOtp = isArrived && Boolean(props.passengerOtp)
 
     return (
         <div>
@@ -43,7 +42,7 @@ const LookingForDriver = (props) => {
                     className={`mt-1 text-lg font-semibold leading-snug select-all ${props.passengerOtp ? 'font-mono text-3xl font-bold tracking-[0.2em] text-white' : 'text-slate-400'}`}
                     title={props.passengerOtp ? 'Share this code with your driver to start the ride' : 'Loading OTP…'}
                 >
-                    {props.passengerOtp || (st === 'accepted' || st === 'arrived' ? 'Loading OTP…' : '—')}
+                    {props.passengerOtp || '—'}
                 </p>
             </div>
             ) : null}
