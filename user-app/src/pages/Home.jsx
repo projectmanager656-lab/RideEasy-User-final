@@ -342,8 +342,14 @@ const Home = () => {
                 if (st === 'arrived' && !keepSearchFirstRef.current) setWaitingForDriver(true)
                 if (st === 'started') {
                     setWaitingForDriver(false)
-                    const r = data.ride || rideRef.current
-                    navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
+                    /* Only auto-jump to the live-ride screen while the user is
+                       actively in this booking/ride flow. A stale catch-up
+                       `started` event (sent when Home mounts after the ride
+                       already began) must not hijack normal tab navigation. */
+                    if (!keepSearchFirstRef.current) {
+                        const r = data.ride || rideRef.current
+                        navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
+                    }
                 }
                 if (st === 'completed') {
                     setWaitingForDriver(false)

@@ -7,6 +7,10 @@ import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '..
 import { tierLabel, tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
 import RideMap from '../components/RideMap'
+import bikeImg from '../assets/Bike-img-ride.png'
+import autoImg from '../assets/Auto-img-ride.png'
+import carImg from '../assets/Car-img-ride.png'
+import luxuryImg from '../assets/luxury-img-ride.png'
 
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
@@ -21,6 +25,20 @@ function formatPrice (n) {
   const v = Number(n)
   if (!Number.isFinite(v) || v <= 0) return null
   return `₹${v.toFixed(2)}`
+}
+
+/**
+ * Pick the real vehicle photo for the driver card from the tier selected at
+ * booking (e.g. PREMIUM) or the backend vehicle type (BIKE / AUTO / CAR).
+ */
+function vehicleImageFor (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL') return luxuryImg
+  const type = String(backendType || '').toUpperCase()
+  if (type === 'BIKE') return bikeImg
+  if (type === 'AUTO') return autoImg
+  if (type === 'CAR') return carImg
+  return null
 }
 
 /** Selectable reasons shown in the cancellation sheet. */
@@ -91,6 +109,7 @@ const SearchingForDriver = () => {
   const pickup = state.pickup || ride?.pickupLocation || ''
   const destination = state.destination || ride?.dropLocation || ''
   const vehicleType = state.vehicleType || ride?.vehicleType || null
+  const rideTierId = state.tierId || null
   const fare = state.price != null ? state.price : (ride?.price ?? ride?.fare ?? null)
   const paymentMethod = state.paymentMethod || ride?.paymentMethod || 'Cash'
 
@@ -102,6 +121,10 @@ const SearchingForDriver = () => {
   const [cancelling, setCancelling] = useState(false)
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  /** Passenger OTP — backend only returns it once status is accepted/arrived. */
+  const [passengerOtp, setPassengerOtp] = useState('')
+  /** Guard so a single "started" event can't fire duplicate /riding navigations. */
+  const startedHandledRef = useRef(null)
 
   const socket = useSocket()
   const rideIdRef = useRef(null)
@@ -134,12 +157,14 @@ const SearchingForDriver = () => {
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
         if (conf) setRideConfirmation(conf)
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
       })
       .catch(() => { /* polling + socket will keep trying */ })
     return () => { cancelled = true }
   }, [rideId])
 
-  /** Socket status events — mirrors Home.jsx handlers (no OTP state here). */
+  /** Socket status events — mirrors Home.jsx handlers (OTP only arrives via REST). */
   useEffect(() => {
     if (!socket || !rideId) return
 
@@ -148,6 +173,8 @@ const SearchingForDriver = () => {
       if (!rideDoc || String(rideDoc._id) !== String(rideIdRef.current)) return
       setRide((prev) => ({ ...(prev || {}), ...rideDoc }))
       if (payload?.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...payload.confirmation }))
+      const otpVal = payload?.confirmation?.otp ?? payload?.otp
+      if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
     }
 
     const handleStatusUpdate = (data) => {
@@ -163,7 +190,9 @@ const SearchingForDriver = () => {
           try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
         }
         if (data.status === 'started') {
-          setTimeout(() => navigateRef.current('/riding', { state: { ride: next } }), 0)
+          /* The REST poll effect below handles the actual navigation once the
+             server confirms `started` — no stale timeout here. */
+          startedHandledRef.current = null
         }
         return next
       })
@@ -211,11 +240,21 @@ const SearchingForDriver = () => {
     }
   }, [socket, rideId])
 
-  /** Poll ride status while searching (8s) / after assignment (5s) — no OTP fetch. */
+  /**
+   * Poll ride status while searching (8s) / after assignment (5s).
+   * The same REST response carries the driver details + passenger OTP, and is
+   * also the source of truth for advancing to the live-ride page once the
+   * server confirms `started`.
+   */
   useEffect(() => {
     if (!rideId) return
     const st = normalizeStatus(ride?.status)
-    if (st === 'completed' || st === 'cancelled') return
+    if (st === 'completed') return
+    if (st === 'cancelled') {
+      try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      navigateRef.current('/home', { replace: true })
+      return
+    }
     const isActive = !st || st === 'searching'
     const intervalMs = isActive ? 8000 : 5000
 
@@ -225,9 +264,24 @@ const SearchingForDriver = () => {
         const res = await apiClient.get(`/rides/${rideId}`, withAuth())
         if (cancelled) return
         const o = stripApiEnvelope(res.data)
+        const dst = normalizeStatus(o.status)
+        if (dst === 'cancelled') {
+          try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+          navigateRef.current('/home', { replace: true })
+          return
+        }
+        if (dst === 'started') {
+          if (startedHandledRef.current === rideId) return
+          startedHandledRef.current = rideId
+          try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+          navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'started' } } })
+          return
+        }
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
       } catch { /* transient — keep polling */ }
     }
 
@@ -286,10 +340,31 @@ const SearchingForDriver = () => {
   const confirmation = rideConfirmation
   const captain = ride?.captain
   const driverName = confirmation?.driverName || captain?.name || 'Your driver'
-  const driverPhone = confirmation?.driverPhone || captain?.phone || '—'
+  const driverPhone = confirmation?.driverPhone || captain?.phone || ''
   const driverRating = confirmation?.driverRating != null ? Number(confirmation.driverRating) : null
-  const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || '—'
-  const vehicleModel = confirmation?.vehicleModel || captain?.vehicle?.model || vehicleLabel
+  /** Driver photo — only shown when the backend actually provides one. */
+  const driverPhoto = confirmation?.driverPhoto || captain?.photo || captain?.avatar || ''
+  /** Vehicle type + model + color — show only what the backend actually provides. */
+  const vehicleTypeText = confirmation?.vehicleType || ride?.vehicleType || captain?.vehicleType || ''
+  const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || ''
+  const vehicleModel = confirmation?.vehicleModel || captain?.vehicle?.model || ''
+  const vehicleColor = confirmation?.vehicleColor || captain?.vehicle?.color || captain?.vehicleColor || ''
+  const tripCount = confirmation?.tripCount != null ? Number(confirmation.tripCount) : null
+  const vehicleImage = vehicleImageFor(rideTierId, vehicleType)
+
+  const messageDriver = useCallback((phone) => {
+    const digits = String(phone || '').replace(/[^+\d]/g, '')
+    if (!digits) return
+    const text = encodeURIComponent('Hi! I\'m your RideEasy passenger. Please share your ETA.')
+    const whatsappUrl = `https://wa.me/${digits}?text=${text}`
+    const win = window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
+    if (win) win.opener = null
+  }, [])
+  const callDriver = useCallback((phone) => {
+    const digits = String(phone || '').replace(/[^+\d]/g, '')
+    if (!digits) return
+    window.location.href = `tel:${digits}`
+  }, [])
 
   /** Nearby Autos only while still searching — cosmetic map markers, cleared on assignment. */
   const [nearbyVehicles, setNearbyVehicles] = useState([])
@@ -344,10 +419,10 @@ const SearchingForDriver = () => {
 
   const sheetHeading = isSearching
     ? 'Looking for a driver'
-    : (isArrived ? 'Driver has arrived' : 'Driver assigned')
+    : (isArrived ? 'Driver has arrived' : 'Your driver is coming')
   const sheetMessage = isSearching
     ? 'Connecting you with a nearby driver...'
-    : (isArrived ? 'Your driver is at the pickup location.' : 'Your driver is on the way to your pickup.')
+    : (isArrived ? `${driverName} is at your pickup location.` : `${driverName} is on the way to your pickup.`)
 
   const mapShown = useMemo(() => !!pickupCoords || !!dropCoords, [pickupCoords, dropCoords])
 
@@ -413,10 +488,20 @@ const SearchingForDriver = () => {
                     Usually connects in about {etaText}
                   </p>
                 )}
+                {!isSearching && confirmation?.eta && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    <i className="ri-time-line mr-1 align-[-1px]" aria-hidden />
+                    Driver ETA ~{confirmation.eta}
+                  </p>
+                )}
               </div>
-              {isSearching && (
+              {isSearching ? (
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15" aria-hidden>
                   <span className="h-6 w-6 animate-spin rounded-full border-2 border-brand-yellow border-t-transparent" />
+                </span>
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15" aria-hidden>
+                  <i className="ri-roadster-line text-lg text-emerald-400" />
                 </span>
               )}
             </div>
@@ -445,24 +530,106 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Driver summary — only once a driver is assigned */}
+            {/* Assigned / arrived: driver + vehicle focus card */}
             {!isSearching && (
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-brand-border bg-brand-card/40 px-3 py-3">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Your driver</p>
-                  <h4 className="truncate text-base font-semibold capitalize text-white">{driverName}</h4>
-                  <p className="text-xs text-zinc-400">{driverPhone}</p>
-                  {driverRating != null && Number.isFinite(driverRating) && (
-                    <p className="mt-0.5 text-xs text-amber-400">
-                      <i className="ri-star-fill" aria-hidden /> {driverRating.toFixed(1)}
-                    </p>
+              <div className="mt-4 rounded-xl border border-brand-border bg-brand-card/40 p-3">
+                <div className="flex items-center gap-3">
+                  {driverPhoto ? (
+                    <img
+                      src={driverPhoto}
+                      alt={driverName}
+                      className="h-14 w-14 shrink-0 rounded-full border border-brand-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-bold text-brand-yellow" aria-hidden>
+                      {driverName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Your driver</p>
+                    <h4 className="truncate text-base font-semibold capitalize text-white">{driverName}</h4>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
+                      {driverRating != null && Number.isFinite(driverRating) && driverRating > 0 && (
+                        <span className="text-amber-400">
+                          <i className="ri-star-fill" aria-hidden /> {driverRating.toFixed(1)}
+                        </span>
+                      )}
+                      {tripCount != null && Number.isFinite(tripCount) && tripCount > 0 && (
+                        <span>{tripCount} trips</span>
+                      )}
+                      {driverPhone && (
+                        <span>{driverPhone}</span>
+                      )}
+                    </div>
+                  </div>
+                  {vehicleImage ? (
+                    <img
+                      src={vehicleImage}
+                      alt={vehicleTypeText || vehicleLabel}
+                      className="h-14 w-14 shrink-0 rounded-xl object-contain"
+                    />
+                  ) : (
+                    <i className="ri-roadster-line text-2xl text-brand-yellow" aria-hidden />
                   )}
                 </div>
-                <div className="shrink-0 text-right text-xs">
-                  <p className="font-medium text-zinc-200">{vehicleModel}</p>
-                  <p className="text-zinc-400">{confirmation?.vehicleType || ride?.vehicleType || vehicleLabel}</p>
-                  <p className="mt-0.5 font-mono font-semibold text-white">{vehicleNumber}</p>
+
+                {/* Vehicle details — each row hidden unless the backend provides it */}
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-brand-border pt-3 text-sm">
+                  {vehicleModel && (
+                    <p className="truncate text-zinc-200">
+                      <i className="ri-car-line mr-1.5 align-[-1px] text-brand-yellow" aria-hidden />
+                      {vehicleModel}
+                    </p>
+                  )}
+                  {vehicleTypeText && (
+                    <p className="truncate text-right capitalize text-zinc-400">{vehicleTypeText.toLowerCase()}</p>
+                  )}
+                  {vehicleNumber && (
+                    <p className="font-mono font-semibold text-white">
+                      <i className="ri-steering-2-line mr-1.5 align-[-1px] text-brand-yellow" aria-hidden />
+                      {vehicleNumber}
+                    </p>
+                  )}
+                  {vehicleColor && (
+                    <p className="truncate text-right text-zinc-400">{vehicleColor}</p>
+                  )}
                 </div>
+
+                {/* Message + Call actions — hidden (non-breaking) when no phone exists */}
+                {driverPhone && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => messageDriver(driverPhone)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-brand-border bg-brand-card/60 px-3 py-2.5 text-sm font-semibold text-white transition active:scale-[0.99]"
+                    >
+                      <i className="ri-chat-3-line text-base text-brand-yellow" aria-hidden />
+                      Message
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => callDriver(driverPhone)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-sm font-semibold text-emerald-300 transition active:scale-[0.99]"
+                    >
+                      <i className="ri-phone-line text-base" aria-hidden />
+                      Call
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Share PIN / OTP — only once the driver has ARRIVED */}
+            {isArrived && passengerOtp && (
+              <div className="mt-3 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
+                  Share PIN
+                </p>
+                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title="Share this code with your driver to start the ride">
+                  {passengerOtp}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">Share this PIN with your driver to start the ride</p>
               </div>
             )}
 

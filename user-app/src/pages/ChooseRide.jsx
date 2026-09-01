@@ -262,6 +262,7 @@ const ChooseRide = () => {
                     pickup,
                     destination,
                     vehicleType,
+                    tierId: tier.id,
                     paymentMethod,
                     price,
                     scheduledAt,
