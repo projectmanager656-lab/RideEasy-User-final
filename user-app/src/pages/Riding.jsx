@@ -271,11 +271,18 @@ const Riding = () => {
         navigate('/home', { replace: true })
     }, [navigate])
 
+    /*
+     * Completion redirect: the old fixed 2.5s timer kicked the user home before
+     * they could rate the driver or open the invoice. The RideCompletionFlow
+     * handles its own countdown + "Book another ride" once completed; we keep a
+     * long safety net here so a user who leaves the completion flow open still
+     * ends up back on Home — without being yanked mid-interaction.
+     */
     useEffect(() => {
         if (ride?.status !== 'completed') return
         const t = setTimeout(() => {
             navigate('/home', { replace: true })
-        }, 2500)
+        }, 120000)
         return () => clearTimeout(t)
     }, [ride?.status, navigate])
 

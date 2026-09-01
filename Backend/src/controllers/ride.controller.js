@@ -1429,3 +1429,85 @@ module.exports.ratePassengerByCaptain = async (req, res) => {
         return res.status(400).json({ message: err?.message || 'Failed to save rating' });
     }
 };
+
+/**
+ * Passenger invoice for a completed ride.
+ * - Passenger-only (ownership enforced — never another user's ride).
+ * - Requires the ride to be completed.
+ * - Returns only the fields needed for the invoice (no OTP, no wallet/bank,
+ *   no platform/earning internals beyond the public fare breakdown).
+ */
+module.exports.getRideInvoice = async (req, res) => {
+    const rideId = req.params.id;
+    if (!mongoose.isValidObjectId(rideId)) {
+        return fail(res, req, 400, 'Invalid ride id');
+    }
+    try {
+        const ride = await rideModel
+            .findById(rideId)
+            .populate('user', 'name phone email')
+            .populate('captain');
+
+        if (!ride) {
+            return fail(res, req, 404, 'Ride not found');
+        }
+
+        const ownerId = userIdOf(ride.user);
+        const requestUserId = req.user ? userIdOf(req.user) : null;
+        if (!ownerId || !requestUserId || ownerId !== requestUserId) {
+            return fail(res, req, 403, 'Forbidden');
+        }
+        if (ride.status !== 'completed') {
+            return fail(res, req, 400, 'Invoice is available only after the ride is completed');
+        }
+
+        // Stable invoice number — persist on first request for legacy rides.
+        let invoiceNumber = ride.invoiceNumber;
+        if (!invoiceNumber) {
+            invoiceNumber = await rideService.ensureInvoiceNumber(ride._id);
+        }
+
+        const captain = ride.captain;
+        const user = ride.user;
+        const method = ride.paymentMethod || 'Cash';
+        const finalAmount = ride.chargedAmount != null ? ride.chargedAmount : ride.price;
+
+        return res.status(200).json({
+            ok: true,
+            invoice: {
+                rideId: String(ride._id),
+                invoiceNumber,
+                invoiceDate: ride.completedAt || ride.createdAt,
+                passenger: {
+                    name: user?.name || ride.customerName || '',
+                    phone: user?.phone || ride.customerPhone || '',
+                },
+                driver: {
+                    name: captain?.name || '',
+                    phone: captain?.phone || '',
+                },
+                vehicle: {
+                    type: captain?.vehicleType || ride.vehicleType || '',
+                    number: captain?.vehicleNumber || '',
+                },
+                pickup: ride.pickupLocation || '',
+                drop: ride.dropLocation || '',
+                distanceKm: ride.distance != null ? Number(ride.distance) : null,
+                durationSec: ride.duration != null ? Number(ride.duration) : null,
+                fare: ride.price != null ? Number(ride.price) : null,
+                discountAmount: ride.discountAmount != null ? Number(ride.discountAmount) : 0,
+                discountReason: ride.discountReason || '',
+                serviceFee: ride.platformFee != null ? Number(ride.platformFee) : null,
+                chargedAmount: finalAmount != null ? Number(finalAmount) : null,
+                paymentMethod: method,
+                paymentStatus: ride.paymentStatus || 'pending',
+                rating: ride.rating != null ? Number(ride.rating) : null,
+            },
+            message: 'Invoice fetched',
+            requestId: req.requestId,
+        });
+    } catch (err) {
+        console.error('[getRideInvoice]', err?.message || err);
+        return fail(res, req, 500, err?.message || 'Failed to fetch invoice');
+    }
+};

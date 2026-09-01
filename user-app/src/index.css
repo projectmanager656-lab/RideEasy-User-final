@@ -27,3 +27,18 @@
     @apply relative mx-auto w-full max-w-[480px] bg-black shadow-2xl;
   }
 }
+
+/*
+ * Print output — the invoice page is a clean white printable document.
+ * Applies only when printing (no effect on the on-screen UI).
+ */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #ffffff !important;
+    max-width: none !important;
+  }
+}

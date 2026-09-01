@@ -57,6 +57,11 @@ const rideSchema = new mongoose.Schema({
     chargedAmount: { type: Number },
     customerName: { type: String },
     customerPhone: { type: String },
+    /** Stable, human-readable invoice id — assigned once when the ride completes. */
+    invoiceNumber: { type: String, index: true },
+    /** Internal per-day invoice sequence counter (counter doc only). */
+    invoiceSeqKey: { type: String },
+    invoiceSeq: { type: Number, default: 0 },
 }, { timestamps: true });
 
 rideSchema.index({ pickup: '2dsphere' });

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 function formatINR (n) {
     const x = Number(n)
@@ -61,10 +61,23 @@ export default function RideCompletionFlow ({
     const [ feedback, setFeedback ] = useState('')
     const [ skippedRating, setSkippedRating ] = useState(false)
     const [ secLeft, setSecLeft ] = useState(autoRedirectSec)
+    const navigate = useNavigate()
 
     const paid = ride?.paymentStatus === 'success'
     const canRate = paid && ride?.rating == null && !skippedRating
     const doneWithRating = Boolean(ride?.rating || skippedRating)
+    const invoiceUrl = ride?._id ? `/invoice/${ride._id}` : null
+
+    /** Open the invoice for this exact ride; keep the user in the app. */
+    const openInvoice = () => {
+        if (!invoiceUrl) return
+        navigate(invoiceUrl, { state: { from: 'completion' } })
+    }
+    /** Download/print — the invoice page is print-optimized. */
+    const downloadInvoice = () => {
+        if (!invoiceUrl) return
+        navigate(invoiceUrl, { state: { from: 'completion' } })
+    }
 
     useEffect(() => {
         if (!paid || !doneWithRating) return undefined
@@ -336,6 +349,28 @@ export default function RideCompletionFlow ({
                                         <p className="text-xs text-slate-500">{captain.phone}</p>
                                     ) : null}
                                 </div>
+                            </div>
+                        ) : null}
+
+                        {/* Invoice actions — always available once the ride is completed */}
+                        {invoiceUrl ? (
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={openInvoice}
+                                    className="flex items-center justify-center gap-2 rounded-xl bg-white/10 py-3 text-sm font-semibold text-white ring-1 ring-white/10"
+                                >
+                                    <i className="ri-file-list-3-line text-base" aria-hidden />
+                                    View Invoice
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={downloadInvoice}
+                                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-white"
+                                >
+                                    <i className="ri-download-2-line text-base" aria-hidden />
+                                    Download Invoice
+                                </button>
                             </div>
                         ) : null}
                     </section>

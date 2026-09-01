@@ -121,6 +121,18 @@ const RideHistory = () => {
               {r.rating != null && (
                 <p className="mt-1 text-xs text-amber-400">Your rating · {r.rating}/5</p>
               )}
+              {String(r.status || '').toLowerCase() === 'completed' && r._id && (
+                <div className="mt-3">
+                  <Link
+                    to={`/invoice/${r._id}`}
+                    state={{ from: 'history' }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-zinc-800"
+                  >
+                    <i className="ri-file-list-3-line text-sm" aria-hidden />
+                    View Invoice
+                  </Link>
+                </div>
+              )}
             </li>
           ))}
         </ul>

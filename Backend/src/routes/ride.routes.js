@@ -90,6 +90,9 @@ router.post('/rate',
 
 router.post('/:id/retry-assign', auth.authUser, rideController.retryAssign);
 
+/** Passenger invoice for a completed ride — keep before the catch-all GET /:id. */
+router.get('/:id/invoice', auth.authUser, rideController.getRideInvoice);
+
 router.get('/:id', auth.authUserOrCaptain, rideController.getRideById); // keep after /:id/passenger-otp
 
 module.exports = router;

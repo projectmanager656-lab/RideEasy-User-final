@@ -30,6 +30,42 @@ module.exports.normalizePaymentMethod = normalizePaymentMethod;
 /** Re-export for backward compatibility — prefer `payment.service`. */
 module.exports.settleRidePaymentIfNeeded = paymentService.settleRidePaymentIfNeeded;
 
+/** Zero-padded sequence for the invoice number (e.g. 000042). */
+function padSeq (n) {
+    const s = String(n || 0)
+    return s.padStart(6, '0')
+}
+
+/**
+ * Deterministic per-day invoice sequence.
+ * Uses an atomic upsert on the ride collection so concurrent completions
+ * never collide. If the ride already has an invoiceNumber it is returned
+ * unchanged — the number is assigned once and stays stable forever.
+ */
+async function ensureInvoiceNumber (rideId) {
+    const ride = await rideModel.findById(rideId).select('invoiceNumber completedAt').lean();
+    if (!ride) return null;
+    if (ride.invoiceNumber) return ride.invoiceNumber;
+
+    const day = new Date(ride.completedAt || Date.now());
+    const yyyy = day.getUTCFullYear();
+    const mm = String(day.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(day.getUTCDate()).padStart(2, '0');
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+
+    const counter = await rideModel.findOneAndUpdate(
+        { invoiceSeqKey: dateKey },
+        { $inc: { invoiceSeq: 1 }, $setOnInsert: { invoiceSeqKey: dateKey } },
+        { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    const seq = Number(counter?.invoiceSeq || 1);
+    const invoiceNumber = `RE-${yyyy}${mm}${dd}-${padSeq(seq)}`;
+
+    await rideModel.updateOne({ _id: rideId }, { $set: { invoiceNumber } });
+    return invoiceNumber;
+}
+module.exports.ensureInvoiceNumber = ensureInvoiceNumber;
+
 async function buildFarePayload(pickup, destination, coordOpts = null) {
     if (!pickup || !destination) throw new Error('Pickup and destination are required');
     const distanceTime =
@@ -196,6 +232,12 @@ module.exports.endRide = async ({ rideId, captain }) => {
         ...(norm === 'Cash' ? { paymentStatus: 'success' } : {}),
     };
     await rideModel.updateOne({ _id: rideId }, patch);
+    // Assign a stable invoice number once, at completion time.
+    try {
+        await ensureInvoiceNumber(rideId);
+    } catch (e) {
+        console.error('[endRide] invoice number assignment failed:', e?.message || e);
+    }
     if (norm === 'Cash') {
         await paymentService.settleRidePaymentIfNeeded(rideId);
     }

@@ -22,6 +22,7 @@ const UserProtectWrapper = lazy(() => import('./pages/UserProtectWrapper'))
 const UserLogout = lazy(() => import('./pages/UserLogout'))
 const Riding = lazy(() => import('./pages/Riding'))
 const RideHistory = lazy(() => import('./pages/RideHistory'))
+const Invoice = lazy(() => import('./pages/Invoice'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
 
 const authShellLoader = (
@@ -81,6 +82,7 @@ const App = () => {
             <Route path="/location" element={<UserProtectWrapper><LocationScreen /></UserProtectWrapper>} />
             <Route path="/ride" element={<UserProtectWrapper><RideTab /></UserProtectWrapper>} />
             <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
+            <Route path="/invoice/:id" element={<UserProtectWrapper><Invoice /></UserProtectWrapper>} />
             <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
             <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
           </Routes>
