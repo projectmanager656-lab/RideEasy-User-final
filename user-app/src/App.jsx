@@ -52,7 +52,7 @@ const UserAppRoot = () => {
 const App = () => {
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
-  const hideScrollbar = ['/help', '/safety', '/faq'].includes(location.pathname)
+  const hideScrollbar = ['/help', '/safety', '/faq'].includes(location.pathname) || location.pathname.startsWith('/invoice/')
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black text-white">

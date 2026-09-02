@@ -3,7 +3,10 @@ import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from '
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndpoints'
-import autoLogo from '../assets/images-removebg-preview.png'
+import bikeVehicleImg from '../assets/Bike-img-ride.png'
+import autoVehicleImg from '../assets/Auto-img-ride.png'
+import carVehicleImg from '../assets/Car-img-ride.png'
+import luxuryVehicleImg from '../assets/Luxury-img-ride.png'
 
 const containerStyle = { width: '100%', height: '100%' }
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }
@@ -56,15 +59,33 @@ const passengerDivIcon = L.divIcon({
     iconAnchor: [9, 9],
 })
 
-/** Small Auto icon used for nearby-vehicle markers on the searching screen. */
-const nearbyAutoDivIcon = L.divIcon({
-    className: 'nearby-auto-marker',
-    html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:rgba(5,5,5,.85);border:2px solid #FFC800;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)">
-        <img src="${autoLogo}" alt="Auto" style="width:24px;height:24px;object-fit:contain" draggable="false" />
-    </div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-})
+/** Exact asset per backend vehicle type — BIKE / AUTO / CAR / PREMIUM(LUXURY). */
+const NEARBY_VEHICLE_IMAGES = {
+    BIKE: bikeVehicleImg,
+    AUTO: autoVehicleImg,
+    CAR: carVehicleImg,
+    PREMIUM: luxuryVehicleImg,
+    LUXURY: luxuryVehicleImg,
+    PREMIUM_CAR: luxuryVehicleImg,
+}
+
+/**
+ * Tiny map-vehicle marker: a small circular badge with the real vehicle photo.
+ * Stays compact so several nearby vehicles fit on screen at once.
+ */
+const nearbyVehicleDivIcon = (vehicleType) => {
+    const type = String(vehicleType || 'AUTO').toUpperCase()
+    const img = NEARBY_VEHICLE_IMAGES[type] || autoVehicleImg
+    const alt = type === 'PREMIUM' || type === 'LUXURY' || type === 'PREMIUM_CAR' ? 'Premium Car' : String(type || 'Auto')
+    return L.divIcon({
+        className: 'nearby-auto-marker',
+        html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:rgba(5,5,5,.85);border:2px solid #FFC800;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)">
+            <img src="${img}" alt="${alt}" style="width:26px;height:26px;object-fit:contain" draggable="false" />
+        </div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+    })
+}
 
 function roundCoordKey(lat, lng) {
     return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`
@@ -309,7 +330,7 @@ const RideMap = ({
                         <Marker
                             key={v?.id || `${lat},${lng}`}
                             position={[lat, lng]}
-                            icon={nearbyAutoDivIcon}
+                            icon={nearbyVehicleDivIcon(v?.vehicleType)}
                             zIndexOffset={500}
                         />
                     )

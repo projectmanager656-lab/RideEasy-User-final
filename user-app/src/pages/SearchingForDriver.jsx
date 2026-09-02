@@ -62,11 +62,13 @@ function seedingFromString (str) {
 
 /**
  * Deterministic pseudo-random offsets around a point, so each ride shows the
- * same nearby Autos while searching (no fake driver identities — purely
- * cosmetic map markers around the pickup area).
+ * same nearby vehicles while searching (no fake driver identities — purely
+ * cosmetic map markers around the pickup area). Each marker carries a real
+ * vehicleType so the map renders the matching vehicle asset (Bike/Auto/Car/Premium).
  */
+const NEARBY_VEHICLE_TYPES = [ 'AUTO', 'AUTO', 'BIKE', 'CAR', 'CAR', 'PREMIUM', 'AUTO' ]
 function buildNearbyVehicles (lat, lng, seed) {
-  const count = 7
+  const count = NEARBY_VEHICLE_TYPES.length
   const out = []
   for (let i = 0; i < count; i += 1) {
     const s = seedingFromString(`${seed}:${i}`)
@@ -78,6 +80,7 @@ function buildNearbyVehicles (lat, lng, seed) {
       id: `nearby-${seed}-${i}`,
       lat: lat + dLat,
       lng: lng + dLng,
+      vehicleType: NEARBY_VEHICLE_TYPES[i],
     })
   }
   return out
@@ -366,7 +369,7 @@ const SearchingForDriver = () => {
     window.location.href = `tel:${digits}`
   }, [])
 
-  /** Nearby Autos only while still searching — cosmetic map markers, cleared on assignment. */
+  /** Nearby vehicle markers only while still searching — cosmetic map markers, cleared on assignment. */
   const [nearbyVehicles, setNearbyVehicles] = useState([])
   const nearbyTimerRef = useRef(null)
   const hasValidPickup = pickupCoords?.lat != null && pickupCoords?.lng != null
@@ -428,7 +431,7 @@ const SearchingForDriver = () => {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black text-white">
-      {/* Map is the primary visual area — route + nearby Autos while searching */}
+      {/* Map is the primary visual area — route + nearby vehicles while searching */}
       {mapShown && (
         <div className="absolute inset-0 z-0">
           <RideMap
