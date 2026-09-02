@@ -61,14 +61,29 @@ function seedingFromString (str) {
 }
 
 /**
+ * Normalize a vehicle type/tier to the marker asset group: BIKE / AUTO / CAR / PREMIUM.
+ * Accepts tier ids (ECONOMY → AUTO, COMFORT → CAR, PREMIUM/XL → PREMIUM) and
+ * backend type spellings (e.g. RICKSHAW → AUTO, PREMIUM_CAR → PREMIUM).
+ */
+function normalizeVehicleTypeForMarkers (value) {
+  const t = String(value || '').trim().toUpperCase()
+  if (t === 'BIKE') return 'BIKE'
+  if (t === 'ECONOMY' || t === 'AUTO' || t === 'RICKSHAW') return 'AUTO'
+  if (t === 'COMFORT' || t === 'CAR') return 'CAR'
+  if (t === 'PREMIUM' || t === 'LUXURY' || t === 'PREMIUM_CAR' || t === 'XL') return 'PREMIUM'
+  return null
+}
+
+/**
  * Deterministic pseudo-random offsets around a point, so each ride shows the
  * same nearby vehicles while searching (no fake driver identities — purely
- * cosmetic map markers around the pickup area). Each marker carries a real
- * vehicleType so the map renders the matching vehicle asset (Bike/Auto/Car/Premium).
+ * cosmetic map markers around the pickup area). Every marker is the same
+ * vehicle type the user selected, so Bike riders only see Bikes, Auto riders
+ * only Autos, etc.
  */
-const NEARBY_VEHICLE_TYPES = [ 'AUTO', 'AUTO', 'BIKE', 'CAR', 'CAR', 'PREMIUM', 'AUTO' ]
-function buildNearbyVehicles (lat, lng, seed) {
-  const count = NEARBY_VEHICLE_TYPES.length
+const NEARBY_VEHICLE_TYPES = [ 'BIKE', 'AUTO', 'CAR', 'PREMIUM' ]
+function buildNearbyVehicles (lat, lng, seed, selectedType) {
+  const count = 7
   const out = []
   for (let i = 0; i < count; i += 1) {
     const s = seedingFromString(`${seed}:${i}`)
@@ -80,7 +95,7 @@ function buildNearbyVehicles (lat, lng, seed) {
       id: `nearby-${seed}-${i}`,
       lat: lat + dLat,
       lng: lng + dLng,
-      vehicleType: NEARBY_VEHICLE_TYPES[i],
+      vehicleType: selectedType || NEARBY_VEHICLE_TYPES[i % NEARBY_VEHICLE_TYPES.length],
     })
   }
   return out
@@ -373,20 +388,22 @@ const SearchingForDriver = () => {
   const [nearbyVehicles, setNearbyVehicles] = useState([])
   const nearbyTimerRef = useRef(null)
   const hasValidPickup = pickupCoords?.lat != null && pickupCoords?.lng != null
+  /** Only show markers matching the ride type the user selected. */
+  const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
   useEffect(() => {
     if (!isSearching || !hasValidPickup) {
       setNearbyVehicles([])
       return () => clearInterval(nearbyTimerRef.current)
     }
     const seed = String(rideId || 'ride')
-    const build = () => setNearbyVehicles(buildNearbyVehicles(pickupCoords.lat, pickupCoords.lng, seed))
+    const build = () => setNearbyVehicles(buildNearbyVehicles(pickupCoords.lat, pickupCoords.lng, seed, selectedMarkerType))
     build()
     nearbyTimerRef.current = setInterval(build, 4000)
     return () => {
       clearInterval(nearbyTimerRef.current)
       nearbyTimerRef.current = null
     }
-  }, [isSearching, hasValidPickup, pickupCoords?.lat, pickupCoords?.lng, rideId])
+  }, [isSearching, hasValidPickup, pickupCoords?.lat, pickupCoords?.lng, rideId, selectedMarkerType])
 
   /** Estimated connection time while searching (best-effort, non-blocking). */
   const [etaText, setEtaText] = useState('')

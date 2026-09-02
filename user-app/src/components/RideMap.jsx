@@ -70,20 +70,21 @@ const NEARBY_VEHICLE_IMAGES = {
 }
 
 /**
- * Tiny map-vehicle marker: a small circular badge with the real vehicle photo.
- * Stays compact so several nearby vehicles fit on screen at once.
+ * Floating map-vehicle marker: the real transparent vehicle photo directly on
+ * the map (no circular badge), anchored bottom-center to its map coordinate,
+ * with a subtle drop shadow for visibility against the tiles.
  */
 const nearbyVehicleDivIcon = (vehicleType) => {
     const type = String(vehicleType || 'AUTO').toUpperCase()
     const img = NEARBY_VEHICLE_IMAGES[type] || autoVehicleImg
     const alt = type === 'PREMIUM' || type === 'LUXURY' || type === 'PREMIUM_CAR' ? 'Premium Car' : String(type || 'Auto')
     return L.divIcon({
-        className: 'nearby-auto-marker',
-        html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:rgba(5,5,5,.85);border:2px solid #FFC800;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.4)">
-            <img src="${img}" alt="${alt}" style="width:26px;height:26px;object-fit:contain" draggable="false" />
+        className: 'nearby-vehicle-marker',
+        html: `<div style="display:flex;align-items:flex-end;justify-content:center;width:44px;height:44px">
+            <img src="${img}" alt="${alt}" style="width:42px;max-height:42px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35))" draggable="false" />
         </div>`,
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
+        iconSize: [44, 44],
+        iconAnchor: [22, 42],
     })
 }
 

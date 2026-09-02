@@ -41,4 +41,21 @@
     background: #ffffff !important;
     max-width: none !important;
   }
+  /* The app shell scroller must not clip multi-page or long invoices in print. */
+  body * {
+    overflow: visible !important;
+  }
+  /* Hide app chrome and unrelated elements from the printed document. */
+  .print\:hidden,
+  header,
+  nav,
+  button,
+  iframe,
+  video {
+    display: none !important;
+  }
+  .leaflet-container,
+  .leaflet-pane {
+    display: none !important;
+  }
 }

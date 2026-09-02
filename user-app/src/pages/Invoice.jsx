@@ -37,8 +37,17 @@ function paymentLabel (m) {
   return 'Cash'
 }
 
+function vehicleTypeLabel (t) {
+  const u = String(t || '').toUpperCase()
+  if (u === 'BIKE') return 'Bike'
+  if (u === 'AUTO') return 'Auto'
+  if (u === 'CAR') return 'Car'
+  if (u === 'PREMIUM' || u === 'LUXURY' || u === 'PREMIUM_CAR') return 'Premium Car'
+  return String(t || '—')
+}
+
 /**
- * RideEasy ride invoice — printable (white, professional) layout.
+ * RideEasy ride invoice — a clean, document-style Booking History receipt.
  * Data comes only from the backend invoice endpoint for the exact ride.
  */
 const Invoice = () => {
@@ -92,9 +101,9 @@ const Invoice = () => {
   }, [ invoice ])
 
   return (
-    <div className="min-h-dvh w-full bg-zinc-950 text-white">
+    <div className="min-h-dvh w-full bg-white text-slate-900 print:bg-white">
       {/* App chrome (hidden when printing) */}
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-950/95 px-3 py-3 backdrop-blur print:hidden">
+      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-950 px-3 py-3 text-white print:hidden">
         <button
           type="button"
           onClick={goBack}
@@ -117,140 +126,140 @@ const Invoice = () => {
         </button>
       </header>
 
-      <div className="mx-auto w-full max-w-2xl px-3 py-5 sm:px-4">
-        {loading && <p className="py-10 text-center text-sm text-zinc-500">Loading invoice…</p>}
+      <div className="mx-auto w-full max-w-2xl px-5 py-6 sm:px-8">
+        {loading && <p className="py-10 text-center text-sm text-slate-500">Loading invoice…</p>}
 
         {!loading && error && (
-          <div role="alert" className="rounded-xl border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-200">
+          <div role="alert" className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         )}
 
         {!loading && !error && !invoice && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-6 text-center text-sm text-zinc-400">
+          <div className="rounded border border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
             Invoice data is not available for this ride.
           </div>
         )}
 
         {!loading && !error && invoice && (
-          <div className="rounded-2xl bg-white text-slate-900 shadow-xl print:rounded-none print:shadow-none">
-            {/* Header */}
-            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-lg font-black text-white">
-                  RE
-                </div>
-                <div>
-                  <p className="text-lg font-bold tracking-tight text-slate-900">RideEasy</p>
-                  <p className="text-xs text-slate-500">Safe · Reliable · Local rides</p>
-                </div>
+          <div>
+            {/* Document header — RideEasy branding + INVOICE number */}
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-300 pb-4">
+              <div>
+                <p className="text-2xl font-black tracking-tight text-slate-900">RideEasy</p>
+                <p className="text-xs text-slate-500">Safe · Reliable · Local rides</p>
               </div>
               <div className="text-right">
-                <p className="text-sm font-bold uppercase tracking-wide text-slate-900">Invoice</p>
-                <p className="mt-0.5 text-xs text-slate-500">{invoice.invoiceNumber}</p>
+                <p className="text-base font-bold uppercase tracking-wide text-slate-900">Invoice</p>
+                <p className="text-xs text-slate-500">{invoice.invoiceNumber}</p>
               </div>
             </div>
 
-            {/* Meta + parties */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5 px-6 py-5 sm:grid-cols-3">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Invoice date</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">{formatDate(invoice.invoiceDate, true)}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Ride ID</p>
-                <p className="mt-1 text-sm font-medium break-all text-slate-800">{invoice.rideId}</p>
-              </div>
-              <div className="col-span-2 sm:col-span-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Passenger</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">{invoice.passenger?.name || '—'}</p>
-                {invoice.passenger?.phone ? (
-                  <p className="text-xs text-slate-500">{invoice.passenger.phone}</p>
-                ) : null}
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Driver</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">{invoice.driver?.name || '—'}</p>
-                {invoice.driver?.phone ? (
-                  <p className="text-xs text-slate-500">{invoice.driver.phone}</p>
-                ) : null}
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Vehicle</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {[ invoice.vehicle?.type, invoice.vehicle?.number ].filter(Boolean).join(' · ') || '—'}
-                </p>
+            {/* Booking history — compact two-column rows */}
+            <div className="mt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Booking History</p>
+              <dl className="mt-2 divide-y divide-slate-200 text-sm">
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Passenger</dt>
+                  <dd className="truncate text-right font-medium text-slate-900">{invoice.passenger?.name || '—'}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Ride ID</dt>
+                  <dd className="truncate text-right font-medium break-all text-slate-900">{invoice.rideId}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Driver</dt>
+                  <dd className="truncate text-right font-medium text-slate-900">{invoice.driver?.name || '—'}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Vehicle Number</dt>
+                  <dd className="truncate text-right font-medium text-slate-900">{invoice.vehicle?.number || '—'}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Vehicle Type</dt>
+                  <dd className="truncate text-right font-medium text-slate-900">{vehicleTypeLabel(invoice.vehicle?.type)}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="shrink-0 text-slate-500">Ride Time</dt>
+                  <dd className="truncate text-right font-medium text-slate-900">{formatDate(invoice.invoiceDate, true)}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Selected price — prominent */}
+            <div className="mt-6 border-t border-slate-300 pt-5 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Selected Price</p>
+              <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">{formatINR(total)}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {paymentLabel(invoice.paymentMethod)}
+                <span aria-hidden> · </span>
+                {invoice.paymentStatus === 'success' ? 'Paid' : 'Pending'}
+              </p>
+            </div>
+
+            {/* Trip — pickup / drop with clear indicators */}
+            <div className="mt-6 border-t border-slate-300 pt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Trip Details</p>
+              <div className="mt-3 space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-600" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500">Pickup</p>
+                    <p className="font-medium text-slate-900">{invoice.pickup || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500">Drop-off</p>
+                    <p className="font-medium text-slate-900">{invoice.drop || '—'}</p>
+                  </div>
+                </div>
+                {(invoice.distanceKm != null || invoice.durationSec != null) && (
+                  <div className="flex items-baseline justify-between gap-4 border-t border-slate-200 pt-3 text-sm">
+                    <span className="text-slate-500">Distance</span>
+                    <span className="font-medium text-slate-900">
+                      {invoice.distanceKm != null ? `${Number(invoice.distanceKm).toFixed(1)} km` : '—'}
+                    </span>
+                  </div>
+                )}
+                {invoice.durationSec != null && (
+                  <div className="flex items-baseline justify-between gap-4 text-sm">
+                    <span className="text-slate-500">Duration</span>
+                    <span className="font-medium text-slate-900">{formatDuration(invoice.durationSec)}</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Trip */}
-            <div className="border-t border-slate-200 px-6 py-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Trip</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <div className="flex gap-2">
-                  <span className="text-slate-400">Pickup</span>
-                  <span className="font-medium text-slate-800">{invoice.pickup || '—'}</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-slate-400">Drop-off</span>
-                  <span className="font-medium text-slate-800">{invoice.drop || '—'}</span>
-                </div>
-                <div className="flex gap-2">
-                  <span className="text-slate-400">Distance</span>
-                  <span className="font-medium text-slate-800">
-                    {invoice.distanceKm != null ? `${Number(invoice.distanceKm).toFixed(1)} km` : '—'}
-                  </span>
-                  <span className="ml-4 text-slate-400">Duration</span>
-                  <span className="font-medium text-slate-800">{formatDuration(invoice.durationSec)}</span>
-                </div>
+            {/* Fare extras — only real data the backend provides */}
+            {(discount > 0 || invoice.serviceFee != null) && (
+              <div className="mt-5 border-t border-slate-200 pt-4 text-sm">
+                {discount > 0 && (
+                  <div className="flex items-baseline justify-between gap-4 py-1">
+                    <span className="text-slate-500">Discount{invoice.discountReason ? ` (${invoice.discountReason})` : ''}</span>
+                    <span className="font-medium text-emerald-700">−{formatINR(discount)}</span>
+                  </div>
+                )}
+                {invoice.serviceFee != null && (
+                  <div className="flex items-baseline justify-between gap-4 py-1">
+                    <span className="text-slate-500">Service fee</span>
+                    <span className="font-medium text-slate-900">{formatINR(invoice.serviceFee)}</span>
+                  </div>
+                )}
+                {invoice.fare != null && (
+                  <div className="flex items-baseline justify-between gap-4 border-t border-slate-200 pt-2.5">
+                    <span className="text-slate-500">Ride fare</span>
+                    <span className="font-medium text-slate-900">{formatINR(invoice.fare)}</span>
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Fare breakdown */}
-            <div className="border-t border-slate-200 px-6 py-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Fare details</p>
-              <div className="mt-3 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Base / ride fare</span>
-                  <span className="font-medium text-slate-800">{formatINR(invoice.fare)}</span>
-                </div>
-                {discount > 0 ? (
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Discount{invoice.discountReason ? ` (${invoice.discountReason})` : ''}</span>
-                    <span>−{formatINR(discount)}</span>
-                  </div>
-                ) : null}
-                {invoice.serviceFee != null ? (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Service / platform fee</span>
-                    <span className="font-medium text-slate-800">{formatINR(invoice.serviceFee)}</span>
-                  </div>
-                ) : null}
-                <div className="flex justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900">
-                  <span>Total paid</span>
-                  <span>{formatINR(total)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Payment method</span>
-                  <span>{paymentLabel(invoice.paymentMethod)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>Payment status</span>
-                  <span>{invoice.paymentStatus === 'success' ? 'Paid' : 'Pending'}</span>
-                </div>
-                {invoice.rating != null ? (
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Your rating</span>
-                    <span>{invoice.rating}/5</span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            )}
 
             {/* Footer */}
-            <div className="rounded-b-2xl border-t border-slate-200 bg-slate-50 px-6 py-4 text-center print:rounded-none">
+            <div className="mt-8 border-t border-slate-300 pt-4 text-center">
               <p className="text-xs text-slate-500">
-                Thank you for riding with RideEasy. This invoice was generated for your completed trip.
+                This invoice was generated for your completed ride with RideEasy.
               </p>
               <p className="mt-1 text-[11px] text-slate-400">
                 Invoice {invoice.invoiceNumber} · RideEasy

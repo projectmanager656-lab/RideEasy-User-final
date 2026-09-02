@@ -33,21 +33,24 @@
   }
 }
 
-/* Nearby Auto markers shown on the Searching for Driver map */
-@keyframes rideeasy-nearby-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 200, 0, 0.45);
-  }
-  70% {
-    box-shadow: 0 0 0 12px rgba(255, 200, 0, 0);
-  }
+/* Nearby vehicle markers shown on the Searching for Driver map */
+@keyframes rideeasy-nearby-float {
+  0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 200, 0, 0);
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
   }
 }
 
-.nearby-auto-marker {
-  animation: rideeasy-nearby-pulse 2s ease-out infinite;
+.nearby-vehicle-marker {
+  pointer-events: none;
+}
+
+/* Animate the inner wrapper only — Leaflet owns the marker root's transform. */
+.nearby-vehicle-marker > div {
+  animation: rideeasy-nearby-float 3.2s ease-in-out infinite;
 }
 
 .card {
