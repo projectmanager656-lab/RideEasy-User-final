@@ -68,6 +68,13 @@ export default function RideCompletionFlow ({
     const doneWithRating = Boolean(ride?.rating || skippedRating)
     const invoiceUrl = ride?._id ? `/invoice/${ride._id}` : null
 
+    /** 25% advance split — at completion we only collect the remaining 75%. */
+    const totalFare = Number(ride?.price || 0)
+    const advancePaid = ride?.advancePaymentStatus === 'success' ? Number(ride?.advanceAmount || 0) : 0
+    const remainingDue = Number(ride?.chargedAmount) > 0
+        ? Number(ride.chargedAmount)
+        : Math.max(0, totalFare - advancePaid)
+
     /** Open the invoice for this exact ride; keep the user in the app. */
     const openInvoice = () => {
         if (!invoiceUrl) return
@@ -230,6 +237,12 @@ export default function RideCompletionFlow ({
                                 ) : null}
                             </div>
                         )}
+                        {advancePaid > 0 && (
+                            <p className="mt-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
+                                Fare {formatINR(totalFare)} · Advance paid {formatINR(advancePaid)} ·{' '}
+                                <span className="font-semibold text-white">Remaining {formatINR(remainingDue)}</span>
+                            </p>
+                        )}
                         <button
                             type="button"
                             disabled={paying}
@@ -242,7 +255,7 @@ export default function RideCompletionFlow ({
                                     Processing…
                                 </span>
                             ) : (
-                                `Pay ${formatINR(ride?.price)}`
+                                `Pay ${formatINR(remainingDue)}`
                             )}
                         </button>
                     </section>
@@ -313,6 +326,12 @@ export default function RideCompletionFlow ({
                                 <span>Trip fare</span>
                                 <span className="text-white">{formatINR(ride?.price)}</span>
                             </div>
+                            {advancePaid > 0 ? (
+                                <div className="flex justify-between text-emerald-400/90">
+                                    <span>25% advance paid</span>
+                                    <span>{formatINR(advancePaid)}</span>
+                                </div>
+                            ) : null}
                             {Number(ride?.discountAmount) > 0 ? (
                                 <div className="flex justify-between text-emerald-400/90">
                                     <span>Discount</span>
@@ -327,7 +346,7 @@ export default function RideCompletionFlow ({
                             ) : null}
                             <div className="flex justify-between border-t border-white/10 pt-3 text-base font-semibold text-white">
                                 <span>Total paid</span>
-                                <span>{formatINR(ride?.chargedAmount ?? ride?.price)}</span>
+                                <span>{formatINR(advancePaid + Number(ride?.chargedAmount ?? 0))}</span>
                             </div>
                             <div className="flex justify-between text-xs text-slate-500">
                                 <span>Method</span>

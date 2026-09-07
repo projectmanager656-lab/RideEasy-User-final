@@ -235,7 +235,7 @@ const Riding = () => {
         setPaying(true)
         setPayError('')
         try {
-            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method }, {
+            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method, part: 'remaining' }, {
                 headers: { Authorization: `Bearer ${getPassengerToken()}` }
             })
             if (data?.ride) setRide(data.ride)

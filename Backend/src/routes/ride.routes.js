@@ -51,6 +51,7 @@ router.post('/pay-mock',
     auth.authUser,
     body('rideId').isMongoId(),
     body('method').isString(),
+    body('part').optional().isIn([ 'advance', 'remaining' ]),
     rideController.payMock
 );
 router.post('/upi/verify',

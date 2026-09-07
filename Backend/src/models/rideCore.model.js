@@ -55,6 +55,15 @@ const rideSchema = new mongoose.Schema({
     discountAmount: { type: Number, default: 0 },
     discountReason: { type: String, default: '' },
     chargedAmount: { type: Number },
+    /** 25% UPI advance collected after driver acceptance; remaining is charged at completion. */
+    advanceAmount: { type: Number, default: 0 },
+    advancePaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
+    advanceRef: { type: String, default: '' },
+    advancePaidAt: { type: Date, default: null },
+    /** Remaining balance = fare − advance (set when the advance is paid). */
+    remainingAmount: { type: Number, default: 0 },
+    remainingPaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
+    remainingPaidAt: { type: Date, default: null },
     customerName: { type: String },
     customerPhone: { type: String },
     /** Stable, human-readable invoice id — assigned once when the ride completes. */

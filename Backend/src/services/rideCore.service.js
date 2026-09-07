@@ -229,7 +229,17 @@ module.exports.endRide = async ({ rideId, captain }) => {
         status: 'completed',
         completedAt,
         ...(durationSec != null ? { duration: durationSec } : {}),
-        ...(norm === 'Cash' ? { paymentStatus: 'success' } : {}),
+        ...(norm === 'Cash'
+            ? {
+                paymentStatus: 'success',
+                // A UPI advance may have been collected earlier — the cash balance at
+                // completion is the remaining 75%, which is now settled.
+                ...(ride.advancePaymentStatus === 'success' ? {
+                    remainingPaymentStatus: 'success',
+                    remainingPaidAt: completedAt,
+                } : {}),
+            }
+            : {}),
     };
     await rideModel.updateOne({ _id: rideId }, patch);
     // Assign a stable invoice number once, at completion time.

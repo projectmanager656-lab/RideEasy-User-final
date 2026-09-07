@@ -95,10 +95,12 @@ const Invoice = () => {
   }, [ location.state?.from, navigate ])
 
   const discount = useMemo(() => Number(invoice?.discountAmount) > 0 ? Number(invoice.discountAmount) : 0, [ invoice ])
+  const advancePaid = useMemo(() => invoice?.advancePaymentStatus === 'success' ? Number(invoice?.advanceAmount || 0) : 0, [ invoice ])
   const total = useMemo(() => {
-    const t = Number(invoice?.chargedAmount ?? invoice?.fare)
+    const t = Number(invoice?.totalPaid) > 0 ? Number(invoice.totalPaid) : Number(invoice?.chargedAmount ?? invoice?.fare)
     return Number.isFinite(t) ? t : null
   }, [ invoice ])
+  const remainingPaid = useMemo(() => (total != null ? Math.max(0, total - advancePaid) : null), [ total, advancePaid ])
 
   return (
     <div className="min-h-dvh w-full bg-white text-slate-900 print:bg-white">
@@ -195,6 +197,53 @@ const Invoice = () => {
                 <span aria-hidden> · </span>
                 {invoice.paymentStatus === 'success' ? 'Paid' : 'Pending'}
               </p>
+            </div>
+
+            {/* Payment breakdown — 25% advance + 75% remaining = 100% of fare */}
+            <div className="mt-6 border-t border-slate-300 pt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Payment Breakdown</p>
+              <dl className="mt-3 divide-y divide-slate-200 text-sm">
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-500">Total Ride Fare</dt>
+                  <dd className="text-right font-semibold text-slate-900">{formatINR(invoice.fare)}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-500">25% Advance Paid</dt>
+                  <dd className="text-right font-medium text-emerald-700">
+                    {formatINR(advancePaid)}
+                    {invoice.advancePaymentStatus === 'success' ? (
+                      <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Paid</span>
+                    ) : (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Pending</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-500">Remaining 75% Paid</dt>
+                  <dd className="text-right font-medium text-slate-900">
+                    {formatINR(remainingPaid)}
+                    {invoice.paymentStatus === 'success' ? (
+                      <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">Paid</span>
+                    ) : (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">Pending</span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-900 font-semibold">Total Paid</dt>
+                  <dd className="text-right font-bold text-slate-900">{formatINR(total)}</dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-500">Payment Status</dt>
+                  <dd className="text-right font-medium text-slate-900">
+                    {invoice.paymentStatus === 'success' ? 'Paid' : 'Pending'}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-4 py-2.5">
+                  <dt className="text-slate-500">Payment Method</dt>
+                  <dd className="text-right font-medium text-slate-900">{paymentLabel(invoice.paymentMethod)}</dd>
+                </div>
+              </dl>
             </div>
 
             {/* Trip — pickup / drop with clear indicators */}

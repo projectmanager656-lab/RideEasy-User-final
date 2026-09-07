@@ -4,7 +4,7 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
-import { tierLabel, tierFare } from '../constants/rideTiers'
+import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
@@ -39,6 +39,37 @@ function vehicleImageFor (tierId, backendType) {
   if (type === 'AUTO') return autoImg
   if (type === 'CAR') return carImg
   return null
+}
+
+/**
+ * Friendly descriptive vehicle label for the driver card — "Auto rickshaw",
+ * "Bike", "Car" or "Premium/Luxury Car" — derived from the booked tier and
+ * the backend vehicle type.
+ */
+function vehicleDetailLabel (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  const type = String(backendType || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL' || type === 'PREMIUM' || type === 'PREMIUM_CAR' || type === 'LUXURY' || type === 'LUXURY_CAR') return 'Premium/Luxury Car'
+  if (tier === 'BIKE' || type === 'BIKE') return 'Bike'
+  if (tier === 'ECONOMY' || type === 'AUTO' || type === 'RICKSHAW') return 'Auto rickshaw'
+  if (tier === 'COMFORT' || type === 'CAR') return 'Car'
+  const raw = String(backendType || 'Ride').replace(/[_-]+/g, ' ').trim()
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+}
+
+/**
+ * Short vehicle label for the fare card — "Auto", "Bike", "Car" or
+ * "Premium/Luxury Car" — derived from the booked tier and backend type.
+ */
+function vehicleShortLabel (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  const type = String(backendType || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL' || type === 'PREMIUM' || type === 'PREMIUM_CAR' || type === 'LUXURY' || type === 'LUXURY_CAR') return 'Premium/Luxury Car'
+  if (tier === 'BIKE' || type === 'BIKE') return 'Bike'
+  if (tier === 'ECONOMY' || type === 'AUTO' || type === 'RICKSHAW') return 'Auto'
+  if (tier === 'COMFORT' || type === 'CAR') return 'Car'
+  const raw = String(backendType || 'Ride').replace(/[_-]+/g, ' ').trim()
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
 }
 
 /** Selectable reasons shown in the cancellation sheet. */
@@ -129,7 +160,6 @@ const SearchingForDriver = () => {
   const vehicleType = state.vehicleType || ride?.vehicleType || null
   const rideTierId = state.tierId || null
   const fare = state.price != null ? state.price : (ride?.price ?? ride?.fare ?? null)
-  const paymentMethod = state.paymentMethod || ride?.paymentMethod || 'Cash'
 
   const pickupCoords = state.pickupCoords || null
   const dropCoords = state.dropCoords || null
@@ -139,6 +169,9 @@ const SearchingForDriver = () => {
   const [cancelling, setCancelling] = useState(false)
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  /** Paying the 25% UPI advance at Card 3 (mock payment endpoint, same as completion). */
+  const [payingAdvance, setPayingAdvance] = useState(false)
+  const [advancePayError, setAdvancePayError] = useState('')
   /** Passenger OTP — backend only returns it once status is accepted/arrived. */
   const [passengerOtp, setPassengerOtp] = useState('')
   /** Guard so a single "started" event can't fire duplicate /riding navigations. */
@@ -354,7 +387,6 @@ const SearchingForDriver = () => {
   const isArrived = status === 'arrived'
 
   const price = fare ?? tierFare(vehicleType)
-  const vehicleLabel = tierLabel(vehicleType) || String(vehicleType || 'Ride')
   const confirmation = rideConfirmation
   const captain = ride?.captain
   const driverName = confirmation?.driverName || captain?.name || 'Your driver'
@@ -362,27 +394,55 @@ const SearchingForDriver = () => {
   const driverRating = confirmation?.driverRating != null ? Number(confirmation.driverRating) : null
   /** Driver photo — only shown when the backend actually provides one. */
   const driverPhoto = confirmation?.driverPhoto || captain?.photo || captain?.avatar || ''
-  /** Vehicle type + model + color — show only what the backend actually provides. */
+  /** Vehicle type + number plate — show only what the backend actually provides. */
   const vehicleTypeText = confirmation?.vehicleType || ride?.vehicleType || captain?.vehicleType || ''
   const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || ''
-  const vehicleModel = confirmation?.vehicleModel || captain?.vehicle?.model || ''
-  const vehicleColor = confirmation?.vehicleColor || captain?.vehicle?.color || captain?.vehicleColor || ''
   const tripCount = confirmation?.tripCount != null ? Number(confirmation.tripCount) : null
   const vehicleImage = vehicleImageFor(rideTierId, vehicleType)
+  /** Card 1 type line (descriptive) + Card 3 fare row (short) labels. */
+  const driverCardVehicleLabel = vehicleDetailLabel(rideTierId, vehicleTypeText)
+  const fareCardVehicleLabel = vehicleShortLabel(rideTierId, vehicleTypeText)
+  /** 25% advance (UPI) payment split — computed from the actual ride total. */
+  const totalFareNum = Number(price)
+  const advanceAmount = Number(ride?.advanceAmount) > 0
+    ? Number(ride.advanceAmount)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 0.25) : 0)
+  const remainingAmount = Number(ride?.remainingAmount) > 0
+    ? Number(ride.remainingAmount)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
+  const advancePaid = ride?.advancePaymentStatus === 'success'
+  /** Advance section appears once a driver is assigned — applies to every
+     payment method, replacing the old Cash-only "pay at end" behavior. */
+  const showAdvanceSection = !isSearching
 
   const messageDriver = useCallback((phone) => {
     const digits = String(phone || '').replace(/[^+\d]/g, '')
     if (!digits) return
-    const text = encodeURIComponent('Hi! I\'m your RideEasy passenger. Please share your ETA.')
-    const whatsappUrl = `https://wa.me/${digits}?text=${text}`
-    const win = window.open(whatsappUrl, '_blank', 'noopener,noreferrer')
-    if (win) win.opener = null
+    window.location.href = `sms:${digits}`
   }, [])
   const callDriver = useCallback((phone) => {
     const digits = String(phone || '').replace(/[^+\d]/g, '')
     if (!digits) return
     window.location.href = `tel:${digits}`
   }, [])
+
+  /** Pay the 25% advance via the existing mock payment endpoint (same as completion). */
+  const payAdvance = useCallback(async () => {
+    if (!rideId || payingAdvance || advancePaid) return
+    setPayingAdvance(true)
+    setAdvancePayError('')
+    try {
+      const res = await apiClient.post('/rides/pay-mock', { rideId, method: 'UPI', part: 'advance' }, withAuth())
+      const o = stripApiEnvelope(res.data)
+      if (o?.ride) {
+        setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      }
+    } catch (err) {
+      setAdvancePayError(formatApiError(err))
+    } finally {
+      setPayingAdvance(false)
+    }
+  }, [rideId, payingAdvance, advancePaid])
 
   /** Nearby vehicle markers only while still searching — cosmetic map markers, cleared on assignment. */
   const [nearbyVehicles, setNearbyVehicles] = useState([])
@@ -550,9 +610,10 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Assigned / arrived: driver + vehicle focus card */}
+            {/* Card 1 — Assigned / arrived: driver + vehicle details */}
             {!isSearching && (
               <div className="mt-4 rounded-xl border border-brand-border bg-brand-card/40 p-3">
+                {/* Top row — driver info on the left, vehicle image + plate on the right */}
                 <div className="flex items-center gap-3">
                   {driverPhoto ? (
                     <img
@@ -569,49 +630,41 @@ const SearchingForDriver = () => {
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Your driver</p>
                     <h4 className="truncate text-base font-semibold capitalize text-white">{driverName}</h4>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-400">
-                      {driverRating != null && Number.isFinite(driverRating) && driverRating > 0 && (
-                        <span className="text-amber-400">
-                          <i className="ri-star-fill" aria-hidden /> {driverRating.toFixed(1)}
-                        </span>
+                      {driverPhone && (
+                        <span>{driverPhone}</span>
                       )}
                       {tripCount != null && Number.isFinite(tripCount) && tripCount > 0 && (
                         <span>{tripCount} trips</span>
                       )}
-                      {driverPhone && (
-                        <span>{driverPhone}</span>
+                      {driverRating != null && Number.isFinite(driverRating) && driverRating > 0 && (
+                        <span className="ml-1 text-amber-400">
+                          <i className="ri-star-fill" aria-hidden /> {driverRating.toFixed(1)}
+                        </span>
                       )}
                     </div>
                   </div>
-                  {vehicleImage ? (
-                    <img
-                      src={vehicleImage}
-                      alt={vehicleTypeText || vehicleLabel}
-                      className="h-14 w-14 shrink-0 rounded-xl object-contain"
-                    />
-                  ) : (
-                    <i className="ri-roadster-line text-2xl text-brand-yellow" aria-hidden />
-                  )}
+
+                  {/* Vehicle image on the right side of the driver info — clean, no badge */}
+                  <div className="shrink-0">
+                    {vehicleImage ? (
+                      <img
+                        src={vehicleImage}
+                        alt={driverCardVehicleLabel}
+                        draggable={false}
+                        className="h-16 w-20 object-contain"
+                      />
+                    ) : (
+                      <i className="ri-roadster-line text-3xl text-brand-yellow" aria-hidden />
+                    )}
+                  </div>
                 </div>
 
-                {/* Vehicle details — each row hidden unless the backend provides it */}
-                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-brand-border pt-3 text-sm">
-                  {vehicleModel && (
-                    <p className="truncate text-zinc-200">
-                      <i className="ri-car-line mr-1.5 align-[-1px] text-brand-yellow" aria-hidden />
-                      {vehicleModel}
-                    </p>
-                  )}
-                  {vehicleTypeText && (
-                    <p className="truncate text-right capitalize text-zinc-400">{vehicleTypeText.toLowerCase()}</p>
-                  )}
+                {/* Vehicle type row — icon + vehicle type with the number plate after it */}
+                <div className="mt-4 flex items-center gap-2 rounded-xl bg-black/20 px-3 py-2.5">
+                  <i className="ri-roadster-line text-lg text-brand-yellow" aria-hidden />
+                  <span className="truncate text-sm font-semibold text-white">{driverCardVehicleLabel}</span>
                   {vehicleNumber && (
-                    <p className="font-mono font-semibold text-white">
-                      <i className="ri-steering-2-line mr-1.5 align-[-1px] text-brand-yellow" aria-hidden />
-                      {vehicleNumber}
-                    </p>
-                  )}
-                  {vehicleColor && (
-                    <p className="truncate text-right text-zinc-400">{vehicleColor}</p>
+                    <span className="ml-3 font-mono text-sm font-semibold tracking-wider text-zinc-300">{vehicleNumber}</span>
                   )}
                 </div>
 
@@ -653,25 +706,72 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Compact ride summary */}
-            <div className="mt-3 divide-y divide-brand-border rounded-xl border border-brand-border bg-brand-card/40">
-              <div className="flex items-center gap-3 px-3 py-2.5">
-                <i className="ri-roadster-line text-lg text-brand-yellow" aria-hidden />
-                <span className="text-sm font-semibold text-white">{vehicleLabel}</span>
-                <span className="ml-auto text-sm text-zinc-400">{formatPrice(price) ?? '—'}</span>
+            {/* Card 2 — Pickup and drop only (no vehicle type, fare or payment) */}
+            <div className="mt-3 rounded-xl border border-brand-border bg-brand-card/40 px-3.5 py-3">
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center self-stretch pt-0.5">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-emerald-400 bg-emerald-400/20" aria-hidden />
+                  <span className="my-1.5 w-px flex-1 bg-brand-border" aria-hidden />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-rose-400 bg-rose-400/20" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-zinc-200">{pickup || '—'}</p>
+                  <div className="my-2 h-px bg-brand-border" aria-hidden />
+                  <p className="truncate text-sm font-medium text-zinc-200">{destination || '—'}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-3 px-3 py-2.5">
-                <i className="ri-map-pin-user-fill text-lg text-emerald-400" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-sm text-zinc-300">{pickup || '—'}</span>
+            </div>
+
+            {/* Card 3 — Vehicle type + total amount + 25% advance (UPI) */}
+            <div className="mt-3 space-y-2.5 rounded-xl border border-brand-border bg-brand-card/40 px-3.5 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-white">{fareCardVehicleLabel}</span>
+                <span className="text-sm font-bold text-brand-yellow">{formatPrice(price) ?? '—'}</span>
               </div>
-              <div className="flex items-center gap-3 px-3 py-2.5">
-                <i className="ri-map-pin-2-fill text-lg text-rose-400" aria-hidden />
-                <span className="min-w-0 flex-1 truncate text-sm text-zinc-300">{destination || '—'}</span>
-              </div>
-              <div className="flex items-center gap-3 px-3 py-2.5">
-                <i className="ri-money-rupee-circle-line text-lg text-brand-yellow" aria-hidden />
-                <span className="text-sm text-zinc-300">{paymentMethod || 'Cash'} · Pay at end</span>
-              </div>
+
+              {showAdvanceSection && (
+                <>
+                  <div className="flex items-center justify-between border-t border-brand-border pt-2.5 text-sm">
+                    <span className="text-zinc-400">25% Advance</span>
+                    <span className="font-semibold text-white">{formatPrice(advanceAmount) ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-400">Remaining 75%</span>
+                    <span className="font-semibold text-white">{formatPrice(remainingAmount) ?? '—'}</span>
+                  </div>
+                  {advancePayError && (
+                    <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{advancePayError}</p>
+                  )}
+                  {advancePaid ? (
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5">
+                      <span className="text-sm font-semibold text-emerald-300">
+                        <i className="ri-checkbox-circle-fill mr-1.5 align-[-1px]" aria-hidden />
+                        25% Advance Paid ✓
+                      </span>
+                      <span className="text-sm font-semibold text-white">Remaining 75%: {formatPrice(remainingAmount)}</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={payAdvance}
+                      disabled={payingAdvance || !rideId}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-yellow px-3 py-2.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+                    >
+                      {payingAdvance ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" aria-hidden />
+                          Processing…
+                        </>
+                      ) : (
+                        <>
+                          <i className="ri-qr-code-line text-base" aria-hidden />
+                          Pay {formatPrice(advanceAmount)} Advance via UPI
+                        </>
+                      )}
+                    </button>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Cancel Ride — opens the cancellation sheet, never navigates directly */}

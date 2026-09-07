@@ -1140,10 +1140,59 @@ module.exports.payMock = async (req, res) => {
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
-    const { rideId, method } = req.body;
+    const { rideId, method, part } = req.body;
+    const requestedPart = String(part || 'remaining').trim().toLowerCase();
     try {
-        const ride = await rideModel.findOne({ _id: rideId, user: req.user._id, status: 'completed' });
-        if (!ride) return res.status(400).json({ message: 'Completed ride not found' });
+        const ride = await rideModel.findOne({ _id: rideId, user: req.user._id });
+        if (!ride) return res.status(404).json({ message: 'Ride not found' });
+
+        const norm = rideService.normalizePaymentMethod(method);
+
+        // ---- Advance (25% UPI) collection after the driver accepts ----
+        if (requestedPart === 'advance') {
+            if (ride.status === 'searching') {
+                return res.status(400).json({ message: 'Wait for a driver to accept the ride first' });
+            }
+            if (ride.status === 'completed' || ride.status === 'cancelled') {
+                return res.status(400).json({ message: 'Ride is no longer open for advance payment' });
+            }
+            // Idempotent — never charge twice.
+            if (ride.advancePaymentStatus === 'success') {
+                const doc = await paymentService.settleRidePaymentIfNeeded(ride._id) || ride;
+                return res.json({ ride: publicRide(doc), ok: true, message: 'Advance already paid' });
+            }
+            // Amounts are always computed on the server from ride.price — never trust the client.
+            const total = Math.max(0, Number(ride.price || 0));
+            if (total <= 0) {
+                return res.status(400).json({ message: 'Invalid ride fare' });
+            }
+            const advanceAmount = Math.round(total * 0.25);
+            const remainingAmount = Math.max(0, total - advanceAmount);
+
+            ride.advanceAmount = advanceAmount;
+            ride.advancePaymentStatus = 'success';
+            ride.advanceRef = `ADV-${ride._id}-${Date.now()}`;
+            ride.advancePaidAt = new Date();
+            ride.remainingAmount = remainingAmount;
+            ride.remainingPaymentStatus = 'pending';
+            await ride.save();
+
+            await paymentService.recordRideAdvanceLedger(ride._id, advanceAmount, 'UPI');
+
+            const fresh = await rideModel.findById(ride._id).populate('user', 'name phone email').populate('captain');
+            emitToUser(userIdOf(req.user), 'ride:status-update', {
+                rideId: ride._id,
+                status: ride.status,
+                advancePaymentStatus: 'success',
+                ride: publicRide(fresh),
+            });
+            return res.json({ ride: publicRide(fresh), ok: true, message: 'Advance paid' });
+        }
+
+        // ---- Remaining (75%) — existing completion payment flow, minus any paid advance ----
+        if (ride.status !== 'completed') {
+            return res.status(400).json({ message: 'Completed ride not found' });
+        }
         if (ride.paymentStatus === 'success') {
             const settled = await paymentService.settleRidePaymentIfNeeded(ride._id);
             const u = await userModel.findById(req.user._id);
@@ -1151,12 +1200,12 @@ module.exports.payMock = async (req, res) => {
             return res.json({ ride: publicRide(doc), walletBalance: u?.walletBalance });
         }
 
-        const norm = rideService.normalizePaymentMethod(method);
-
         const user = await userModel.findById(req.user._id);
         const referralDiscountEligible = Boolean(user?.referralOfferEligible && !user?.referralOfferUsed);
         const discountAmount = referralDiscountEligible ? Math.min(REFERRAL_DISCOUNT_RS, ride.price || 0) : 0;
-        const payableAmount = Math.max(0, (ride.price || 0) - discountAmount);
+        const advanceAmount = Number(ride.advanceAmount || 0);
+        // Only the remaining 75% is collected here — the advance was already paid.
+        const payableAmount = Math.max(0, (ride.price || 0) - discountAmount - advanceAmount);
         if (norm === 'WALLET') {
             if ((user.walletBalance || 0) < payableAmount) {
                 return res.status(400).json({ message: 'Insufficient wallet balance' });
@@ -1170,6 +1219,10 @@ module.exports.payMock = async (req, res) => {
         ride.discountAmount = discountAmount;
         ride.discountReason = discountAmount > 0 ? 'Referral first-ride offer' : '';
         ride.chargedAmount = payableAmount;
+        if (advanceAmount > 0) {
+            ride.remainingPaymentStatus = 'success';
+            ride.remainingPaidAt = new Date();
+        }
         await ride.save();
 
         if (referralDiscountEligible) {
@@ -1359,6 +1412,10 @@ module.exports.confirmPassengerPaidCaptain = async (req, res) => {
             });
         }
         ride.paymentStatus = 'success';
+        if (Number(ride.advanceAmount || 0) > 0) {
+            ride.remainingPaymentStatus = 'success';
+            ride.remainingPaidAt = new Date();
+        }
         await ride.save();
         const fresh = await paymentService.settleRidePaymentIfNeeded(ride._id)
             || await rideModel.findById(ride._id).populate('user', 'name phone email').populate('captain');
@@ -1471,6 +1528,8 @@ module.exports.getRideInvoice = async (req, res) => {
         const user = ride.user;
         const method = ride.paymentMethod || 'Cash';
         const finalAmount = ride.chargedAmount != null ? ride.chargedAmount : ride.price;
+        const advancePaid = ride.advancePaymentStatus === 'success' ? Number(ride.advanceAmount || 0) : 0;
+        const remainingPaid = ride.paymentStatus === 'success' ? Number(ride.chargedAmount ?? ride.remainingAmount ?? 0) : 0;
 
         return res.status(200).json({
             ok: true,
@@ -1501,6 +1560,12 @@ module.exports.getRideInvoice = async (req, res) => {
                 chargedAmount: finalAmount != null ? Number(finalAmount) : null,
                 paymentMethod: method,
                 paymentStatus: ride.paymentStatus || 'pending',
+                /** 25% advance UPI payment breakdown — totals always reconcile to 100% of the fare. */
+                advanceAmount: Number(ride.advanceAmount || 0),
+                advancePaymentStatus: ride.advancePaymentStatus || 'pending',
+                remainingAmount: Number(ride.remainingAmount || 0),
+                remainingPaymentStatus: ride.remainingPaymentStatus || 'pending',
+                totalPaid: advancePaid + remainingPaid,
                 rating: ride.rating != null ? Number(ride.rating) : null,
             },
             message: 'Invoice fetched',
