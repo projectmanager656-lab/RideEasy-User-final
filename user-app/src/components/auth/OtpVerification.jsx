@@ -27,10 +27,9 @@ const maskIdentifier = (id) => {
  * OTP verification step for new-user registration.
  * 6 digits (matching the backend), auto-advance, paste, countdown + resend.
  * On success the API returns a token → user is authenticated immediately.
- * When `loginIdentifier` is provided this switches to login-OTP mode (existing
- * account sign-in via OTP sent to the identifier's email or phone).
+ * When `loginIdentifier` is provided this switches to login-OTP mode.
  */
-const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack, onVerified }) => {
+const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, loginIdentifier, onBack, onVerified }) => {
   const { t } = useLanguage()
   const [ otp, setOtp ] = useState('')
   const [ loading, setLoading ] = useState(false)
@@ -80,6 +79,9 @@ const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack
               phone: String(phone).trim(),
               otp: String(otp).replace(/\D/g, ''),
               ...(name ? { name } : {}),
+              // Store the password chosen on the signup form so password login
+              // works for this account (only during registration, never login-OTP).
+              ...(signupPassword ? { password: signupPassword } : {}),
             }
       )
       const data = stripApiEnvelope(response.data)
@@ -102,27 +104,32 @@ const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack
       <button
         type="button"
         onClick={onBack}
-        className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-400 transition hover:text-white"
+        className="mb-4 flex items-center gap-2 text-sm font-medium text-theme-secondary transition hover:text-theme-primary"
       >
         <i className="ri-arrow-left-line" aria-hidden />
         {t(isLogin ? 'back_to_login' : 'back_to_registration')}
       </button>
 
       <h1 className="text-2xl font-bold">{t('verify_your_number')}</h1>
-      <p className="mb-6 mt-1 text-sm text-zinc-400">
+      <p className="mb-6 mt-1 text-sm text-theme-secondary">
         {t('otp_sent_to')}{' '}
         {isLogin ? maskIdentifier(loginIdentifier) : `+91 ${maskPhone(phone)}`}
       </p>
 
-      <div className="rounded-2xl border border-night-border bg-night-900 p-6 shadow-xl">
+      <div className="rounded-2xl border border-theme bg-theme-card p-6 shadow-xl">
         {error ? <div role="alert" className={errorBoxClass}>{error}</div> : null}
         {resendNotice ? (
           <p role="status" className="mb-4 text-sm text-brand">{t('otp_sent')}</p>
         ) : null}
-        {import.meta.env.DEV && shownDevOtp ? (
-          <p className="mb-4 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand">
-            Dev OTP: {shownDevOtp}
-          </p>
+        {shownDevOtp ? (
+          <button
+            type="button"
+            onClick={() => setOtp(String(shownDevOtp).replace(/\D/g, '').slice(0, 6))}
+            className="mb-4 w-full rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-brand/15"
+            title="Tap to autofill"
+          >
+            Temporary OTP: {shownDevOtp}
+          </button>
         ) : null}
         <div className="mb-5">
           <OtpInputs otp={otp} onChange={setOtp} disabled={loading} />
@@ -138,7 +145,7 @@ const OtpVerification = ({ phone, email, name, debugOtp, loginIdentifier, onBack
               {t('resend_otp')}
             </button>
           ) : (
-            <span className="text-sm text-zinc-500">
+            <span className="text-sm text-theme-muted">
               {t('resend_otp_in', { seconds: secondsLeft })}
             </span>
           )}

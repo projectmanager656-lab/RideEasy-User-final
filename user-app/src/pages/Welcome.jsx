@@ -61,7 +61,7 @@ const Welcome = () => {
           <button
             type="button"
             onClick={goToLogin}
-            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-brand text-base font-bold text-black shadow-[0_8px_30px_rgba(255,168,0,0.25)] transition hover:bg-brand-light active:scale-[0.98]"
+            className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-brand text-base font-bold text-brand-ink shadow-[0_8px_30px_rgba(255,168,0,0.25)] transition hover:bg-brand-light active:scale-[0.98]"
           >
             {t('get_started')}
             <i className="ri-arrow-right-line" aria-hidden />

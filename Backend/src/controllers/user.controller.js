@@ -183,14 +183,116 @@ module.exports.checkUserExists = async (req, res) => {
 };
 
 module.exports.getProfile = async (req, res) => {
-    if (!req.user?._id) {
-        console.error('[users/profile GET] req.user missing');
-        return fail(res, req, 401, 'Unauthorized');
-    }
-    return ok(res, req, 200, 'Profile fetched', { user: toPublicDoc(req.user) });
-};
+     if (!req.user?._id) {
+         console.error('[users/profile GET] req.user missing');
+         return fail(res, req, 401, 'Unauthorized');
+     }
+     return ok(res, req, 200, 'Profile fetched', { user: toPublicDoc(req.user) });
+ };
 
-function toUserObjectId (raw) {
+ module.exports.getEmergencyContact = async (req, res) => {
+     if (!req.user?._id) {
+         console.error('[users/emergency-contact GET] req.user missing');
+         return fail(res, req, 401, 'Unauthorized');
+     }
+     
+     try {
+         const user = await userModel.findById(req.user._id).select('emergencyContact');
+         if (!user) {
+             return fail(res, req, 404, 'User not found');
+         }
+         
+         // If no emergency contact exists, return 404 to indicate it needs to be created
+         if (!user.emergencyContact || !user.emergencyContact.name) {
+             return fail(res, req, 404, 'Emergency contact not found');
+         }
+         
+         return ok(res, req, 200, 'Emergency contact fetched', { emergencyContact: user.emergencyContact });
+     } catch (err) {
+         console.error('[users/emergency-contact GET]', err);
+         return fail(res, req, 500, 'Could not fetch emergency contact');
+     }
+ };
+
+ module.exports.saveEmergencyContact = async (req, res) => {
+     if (!req.user?._id) {
+         console.error('[users/emergency-contact POST] req.user missing');
+         return fail(res, req, 401, 'Unauthorized');
+     }
+
+     const errors = validationResult(req);
+     if (!errors.isEmpty()) return fail(res, req, 400, 'Validation failed', { errors: errors.array() });
+
+     const { name, phone, relationship } = req.body || {};
+
+     // Validation
+     if (!name || String(name).trim() === '') {
+         return fail(res, req, 400, 'Emergency contact name is required');
+     }
+     
+     const trimmedName = String(name).trim();
+     if (trimmedName.length < 2) {
+         return fail(res, req, 400, 'Emergency contact name must be at least 2 characters');
+     }
+     
+     if (!phone || !/^[6-9]\d{9}$/.test(String(phone).replace(/\D/g, ''))) {
+         return fail(res, req, 400, 'Valid 10-digit phone number is required');
+     }
+     
+     const validRelationships = ['family', 'friend', 'parent', 'spouse', 'other'];
+     if (!relationship || !validRelationships.includes(relationship)) {
+         return fail(res, req, 400, 'Valid relationship is required');
+     }
+
+     try {
+         const user = await userModel.findById(req.user._id);
+         if (!user) {
+             return fail(res, req, 404, 'User not found');
+         }
+
+         // Update emergency contact information
+         user.emergencyContact = {
+             name: trimmedName,
+             phone: String(phone).replace(/\D/g, ''), // Store only digits
+             relationship
+         };
+
+         await user.save({ validateModifiedOnly: true });
+         return ok(res, req, 200, 'Emergency contact saved', { emergencyContact: user.emergencyContact });
+     } catch (err) {
+         console.error('[users/emergency-contact POST]', err);
+         return fail(res, req, 500, 'Could not save emergency contact');
+     }
+ };
+
+ module.exports.deleteEmergencyContact = async (req, res) => {
+     if (!req.user?._id) {
+         console.error('[users/emergency-contact DELETE] req.user missing');
+         return fail(res, req, 401, 'Unauthorized');
+     }
+
+     try {
+         const user = await userModel.findById(req.user._id);
+         if (!user) {
+             return fail(res, req, 404, 'User not found');
+         }
+
+         // Clear emergency contact information
+         user.emergencyContact = {
+             name: '',
+             phone: '',
+             relationship: ''
+         };
+
+         await user.save({ validateModifiedOnly: true });
+         return ok(res, req, 200, 'Emergency contact deleted');
+     } catch (err) {
+         console.error('[users/emergency-contact DELETE]', err);
+         return fail(res, req, 500, 'Could not delete emergency contact');
+     }
+ };
+
+ function toUserObjectId (raw) {
     if (raw == null) return null;
     try {
         if (raw instanceof mongoose.Types.ObjectId) return raw;
@@ -419,8 +521,62 @@ module.exports.verifyPhoneOtp = async (req, res) => {
     user.loginOtp = undefined;
     user.loginOtpExpiresAt = undefined;
     if (name && String(name).trim().length >= 2) user.name = String(name).trim();
+    // Registration passes the password the user chose on the signup form —
+    // store it so they can log in with it. Phone-OTP login / forgot-password
+    // send no password and stay unchanged.
+    const signupPassword = req.body?.password;
+    if (typeof signupPassword === 'string' && signupPassword.length >= 6) {
+        user.password = await userModel.hashPassword(signupPassword);
+    }
     await user.save();
     const token = user.generateAuthToken();
     return res.status(200).json({ token, user: toPublicDoc(user) });
+};
+
+/** Change password for the authenticated user (session/JWT → req.user). */
+module.exports.changePassword = async (req, res) => {
+    if (!req.user?._id) {
+        console.error('[users/change-password] req.user missing');
+        return fail(res, req, 401, 'Unauthorized');
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return fail(res, req, 400, 'Validation failed', { errors: errors.array() });
+
+    const currentPassword = req.body?.currentPassword;
+    const newPassword = req.body?.newPassword;
+
+    if (typeof currentPassword !== 'string' || currentPassword.length === 0) {
+        return fail(res, req, 400, 'Current password is required');
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return fail(res, req, 400, 'New password must be at least 6 characters');
+    }
+
+    try {
+        // Fetch the user with the password hash (select:false by default).
+        const user = await userModel.findById(req.user._id).select('+password');
+        if (!user) {
+            return fail(res, req, 404, 'User not found');
+        }
+
+        const isCurrentValid = await user.comparePassword(currentPassword);
+        if (!isCurrentValid) {
+            return fail(res, req, 400, 'Current password is incorrect');
+        }
+
+        const isSamePassword = await user.comparePassword(newPassword);
+        if (isSamePassword) {
+            return fail(res, req, 400, 'New password must be different from your current password');
+        }
+
+        user.password = await userModel.hashPassword(newPassword);
+        await user.save({ validateModifiedOnly: true });
+
+        return ok(res, req, 200, 'Password changed successfully');
+    } catch (err) {
+        console.error('[users/change-password]', err);
+        return fail(res, req, 500, 'Unable to change password right now. Please try again.');
+    }
 };
 

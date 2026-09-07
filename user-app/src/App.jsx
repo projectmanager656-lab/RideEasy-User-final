@@ -17,11 +17,12 @@ const UserLogout = lazy(() => import('./pages/UserLogout'))
 const Riding = lazy(() => import('./pages/Riding'))
 const RideHistory = lazy(() => import('./pages/RideHistory'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
+const EmergencyContact = lazy(() => import('./pages/EmergencyContact'))
 
 const authShellLoader = (
-  <div className="h-screen flex flex-col items-center justify-center gap-3 bg-black text-zinc-400 text-sm">
+  <div className="h-screen flex flex-col items-center justify-center gap-3 bg-theme-bg text-theme-secondary text-sm">
     <div
-      className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-600 border-t-emerald-500"
+      className="h-8 w-8 animate-spin rounded-full border-2 border-theme border-t-brand"
       aria-hidden
     />
     <p>Loading…</p>
@@ -78,9 +79,9 @@ const App = () => {
   }
 
   return (
-    <div className={`min-h-dvh min-h-screen bg-black text-white ${isAuthRoute ? '' : 'pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:pb-20'}`}>
+      <div className={`min-h-dvh min-h-screen bg-theme-bg text-theme-primary ${isAuthRoute ? '' : 'pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:pb-20'}`}>
       <NativeAndroidFlavorRedirect />
-      <Suspense fallback={<div className="h-screen flex items-center justify-center text-zinc-400 text-sm bg-black">Loading RideEasy…</div>}>
+      <Suspense fallback={<div className="h-screen flex items-center justify-center text-theme-secondary text-sm bg-theme-bg">Loading RideEasy…</div>}>
         <Routes>
           <Route path="/" element={<UserAppRoot />} />
           <Route path="/welcome" element={<Welcome />} />
@@ -97,8 +98,9 @@ const App = () => {
             )}
           />
           <Route path="/home" element={<UserProtectWrapper><Home /></UserProtectWrapper>} />
-          <Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
-          <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
+<Route path="/history" element={<UserProtectWrapper><RideHistory /></UserProtectWrapper>} />
+           <Route path="/emergency-contact" element={<UserProtectWrapper><EmergencyContact /></UserProtectWrapper>} />
+           <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
           <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
         </Routes>
       </Suspense>

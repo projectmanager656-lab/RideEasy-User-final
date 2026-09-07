@@ -38,7 +38,7 @@ const PasswordInput = ({
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? t('password_hide') : t('password_show')}
           aria-pressed={visible}
-          className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 hover:text-zinc-200"
+          className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-theme-muted hover:text-theme-primary"
         >
           <i className={`ri-${visible ? 'eye-off' : 'eye'}-line text-xl`} aria-hidden />
         </button>

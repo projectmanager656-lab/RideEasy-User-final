@@ -23,7 +23,7 @@ const AppleIcon = () => (
 )
 
 const socialBase =
-  'flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-night-border bg-night-800 px-4 py-3 text-sm font-semibold text-white transition hover:border-zinc-600 hover:bg-night-700 active:scale-[0.99]'
+  'flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-theme bg-theme-card px-4 py-3 text-sm font-semibold text-theme-primary transition hover:border-theme-strong hover:bg-theme-card-muted active:scale-[0.99]'
 
 let gisPromise = null
 function loadGoogleIdentity() {
@@ -99,7 +99,7 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
         })
         google.accounts.id.renderButton(googleSlotRef.current, {
           type: 'standard',
-          theme: 'filled_black',
+          theme: 'outline',
           size: 'large',
           shape: 'rect',
           width: 400,
@@ -119,7 +119,6 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
       showNotice(t('google_not_configured'))
       return
     }
-    // GIS script still loading — retry render shortly after.
     setNotice('')
     loadGoogleIdentity()
       .then((google) => {
@@ -133,9 +132,9 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
   return (
     <div>
       <div className={dividerClass}>
-        <span className="h-px flex-1 bg-night-border" aria-hidden />
+        <span className="h-px flex-1 bg-theme border-theme" aria-hidden />
         <span>{t('or_continue_with')}</span>
-        <span className="h-px flex-1 bg-night-border" aria-hidden />
+        <span className="h-px flex-1 bg-theme border-theme" aria-hidden />
       </div>
       <div className="grid grid-cols-1 gap-3">
         {GOOGLE_CLIENT_ID ? (
@@ -152,7 +151,7 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
         </button>
       </div>
       {notice ? (
-        <p role="status" className="mt-3 text-center text-xs text-zinc-500">{notice}</p>
+        <p role="status" className="mt-3 text-center text-xs text-theme-muted">{notice}</p>
       ) : null}
     </div>
   )

@@ -12,6 +12,9 @@ import RegistrationForm from '../../components/auth/RegistrationForm'
 import OtpVerification from '../../components/auth/OtpVerification'
 import { markOnboardingComplete } from '../../utils/onboarding'
 import { useLanguage } from '../../i18n'
+import { useTheme } from '../../context/ThemeContext'
+import lightBg from '../../assets/image.png'
+import darkBg from '../../assets/rideeasy-welcome.png'
 
 /**
  * RideEasy authentication flow (smart detection):
@@ -24,6 +27,7 @@ import { useLanguage } from '../../i18n'
  */
 const AuthScreen = ({ skipTokenRedirect = false }) => {
   const { t } = useLanguage()
+  const { isDark } = useTheme()
   const { setSession, authLoading, token } = useContext(UserDataContext)
   const navigate = useNavigate()
   const location = useLocation()
@@ -45,7 +49,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const [ checkingAccount, setCheckingAccount ] = useState(false)
 
   // registration state (shared between the registration + OTP panes)
-  const [ draft, setDraft ] = useState({ name: '', email: '', phone: '' })
+  // `password` holds the password the user chose on the signup form so it can
+  // be stored on the account once the phone OTP is verified.
+  const [ draft, setDraft ] = useState({ name: '', email: '', phone: '', password: '' })
   const [ regError, setRegError ] = useState('')
   const [ regDuplicate, setRegDuplicate ] = useState(false)
   const [ regLoading, setRegLoading ] = useState(false)
@@ -80,7 +86,10 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
           duration: 0.45,
           ease: 'power2.inOut',
           overwrite: 'auto',
-          onComplete: () => { if (el) el.scrollTop = 0 },
+          onComplete: () => {
+            const scroller = el?.querySelector('[data-pane-scroll]')
+            if (scroller) scroller.scrollTop = 0
+          },
         }
       )
     } else if (registerInit.current) {
@@ -111,7 +120,10 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
           duration: 0.4,
           ease: 'power2.out',
           overwrite: 'auto',
-          onComplete: () => { if (el) el.scrollTop = 0 },
+          onComplete: () => {
+            const scroller = el?.querySelector('[data-pane-scroll]')
+            if (scroller) scroller.scrollTop = 0
+          },
         }
       )
     } else if (otpInit.current) {
@@ -213,6 +225,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     // A login-OTP session must not leak into the registration flow.
     setLoginOtpIdentifier('')
     setLoginOtpDevOtp('')
+    // Persist the full draft (incl. the chosen password) so the OTP step can
+    // finalize the account with a working password.
+    if (payload?.password) setDraft((prev) => ({ ...prev, ...payload }))
     try {
       const response = await apiClient.post('/users/phone/send-otp', payload)
       const data = stripApiEnvelope(response.data)
@@ -238,21 +253,45 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setRegisterOpen(false)
   }
 
-  const paneBase =
-    'absolute inset-0 z-0 overflow-y-auto pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]'
+  // Pane = outer positioned layer (GSAP slides this); a scroller sits inside
+  // so each pane's artwork backdrop can fill the screen without scrolling away.
   // CSS fallback hidden state — GSAP overrides these inline during animation,
   // so the overlays can never block the login form even if GSAP is unavailable.
   // NOTE: no translate utility here — a CSS translate would be cached by GSAP as
   // pixels and keep the panel offset even after yPercent animates to 0.
+  const paneBase = 'absolute inset-0 z-0 overflow-hidden'
+  const paneScroller =
+    'absolute inset-0 overflow-y-auto pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]'
   const hiddenPaneBase = `${paneBase} invisible`
+  const themeBg = isDark ? darkBg : lightBg
+  const paneBackdrop = (
+    <>
+      {/* theme-aware artwork behind the sliding form panes */}
+      <img
+        src={themeBg}
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      />
+      {/* scrim so the form text stays readable over the artwork */}
+      <div
+        className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${
+          isDark
+            ? 'from-black/70 via-black/60 to-black/80'
+            : 'from-white/60 via-white/55 to-white/80'
+        }`}
+        aria-hidden
+      />
+    </>
+  )
 
   return (
     <AuthShell strongBackdrop>
       {/* Login pane — always visible beneath the sliding panels */}
       <div className={paneBase}>
-        <div className="flex min-h-full flex-col justify-end pt-6">
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
           {/* tagline — sits just above the login card on every screen */}
-          <p className="mb-6 text-center text-sm font-medium tracking-wide text-white/95 drop-shadow-md md:text-base">
+          <p className="mb-6 text-center text-sm font-medium tracking-wide text-theme-primary drop-shadow-md md:text-base">
             {t('ride_anytime_anywhere')}
           </p>
           <LoginForm
@@ -267,13 +306,15 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
             onSubmit={submitLogin}
             onCheckAccount={checkAccount}
             onForgotVerified={completeAuth}
+            onCreateAccount={() => setRegisterOpen(true)}
           />
         </div>
       </div>
 
       {/* Registration pane — slides up over the login pane */}
-      <div ref={registerRef} className={`${hiddenPaneBase} z-10 bg-night-950 pt-6`} aria-hidden={!registerOpen}>
-        <div className="flex min-h-full flex-col justify-end pt-6">
+      <div ref={registerRef} className={`${hiddenPaneBase} z-10`} aria-hidden={!registerOpen}>
+        {paneBackdrop}
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
           <RegistrationForm
             draft={draft}
             onDraftChange={setDraft}
@@ -289,12 +330,14 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
       </div>
 
       {/* OTP pane — slides in over the registration panel */}
-      <div ref={otpRef} className={`${hiddenPaneBase} z-20 bg-night-950 pt-6`} aria-hidden={!otpOpen}>
-        <div className="flex min-h-full flex-col justify-end pt-6">
+      <div ref={otpRef} className={`${hiddenPaneBase} z-20`} aria-hidden={!otpOpen}>
+        {paneBackdrop}
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
           <OtpVerification
             phone={draft.phone}
             email={draft.email}
             name={draft.name}
+            signupPassword={draft.password}
             debugOtp={loginOtpIdentifier ? loginOtpDevOtp : regDebugOtp}
             loginIdentifier={loginOtpIdentifier}
             onBack={() => setOtpOpen(false)}

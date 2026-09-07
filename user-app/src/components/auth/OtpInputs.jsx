@@ -65,7 +65,7 @@ const OtpInputs = ({ otp, onChange, disabled = false }) => {
           onKeyDown={(e) => handleKeyDown(i, e)}
           onPaste={(e) => handlePaste(i, e)}
           aria-label={`OTP digit ${i + 1}`}
-          className="h-14 w-full max-w-[52px] rounded-xl border border-night-border bg-night-800 text-center text-2xl font-semibold text-white caret-brand focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60 disabled:opacity-60 transition-colors"
+          className="h-14 w-full max-w-[52px] rounded-xl border border-theme bg-theme-input text-center text-2xl font-semibold text-theme-primary caret-brand focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60 disabled:opacity-60 transition-colors"
         />
       ))}
     </div>

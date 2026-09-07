@@ -172,10 +172,10 @@ function rideDateKey(r) {
 
 function statusBadge(status) {
   const s = String(status || '').toLowerCase()
-  if (s === 'completed') return { label: 'Completed', className: 'border border-emerald-500 text-emerald-400' }
-  if (s === 'cancelled') return { label: 'Cancelled', className: 'bg-rose-500 text-white' }
-  if (ACTIVE_STATUSES.has(s)) return { label: 'Upcoming', className: 'bg-amber-400 text-black' }
-  return { label: s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}` : 'Pending', className: 'bg-zinc-700 text-white' }
+  if (s === 'completed') return { label: 'Completed', className: 'border border-emerald-500 text-emerald-600 dark:text-emerald-400' }
+  if (s === 'cancelled') return { label: 'Cancelled', className: 'bg-red-500 text-white' }
+  if (ACTIVE_STATUSES.has(s)) return { label: 'Upcoming', className: 'border border-sky-500 text-sky-600 dark:text-sky-400' }
+  return { label: s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}` : 'Pending', className: 'bg-theme-card-muted text-theme-muted' }
 }
 
 const VEHICLE_IMAGE = {
@@ -215,12 +215,12 @@ const STAT_ACCENTS = {
 const StatCard = ({ accent, label, value }) => {
   const a = STAT_ACCENTS[accent] || STAT_ACCENTS.total
   return (
-    <div className="relative flex flex-col items-center gap-1.5 overflow-hidden rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 px-2 py-3">
+    <div className="relative flex flex-col items-center gap-1.5 overflow-hidden rounded-xl border border-theme bg-theme-card px-2 py-3">
       <span className={`flex h-7 w-7 items-center justify-center rounded-full ${a.circle}`}>
         <i className={`${a.icon} text-sm`} />
       </span>
-      <span className="text-xl font-bold text-white">{value}</span>
-      <span className="text-center text-[0.65rem] leading-tight text-slate-400">{label}</span>
+      <span className="text-xl font-bold text-theme-primary">{value}</span>
+      <span className="text-center text-[0.65rem] leading-tight text-theme-muted">{label}</span>
       <span className={`absolute inset-x-0 bottom-0 h-0.5 ${a.glow}`} />
     </div>
   )
@@ -242,14 +242,14 @@ const RideCard = ({ ride, t, onView }) => {
           openDetail()
         }
       }}
-      className="group relative cursor-pointer rounded-xl border border-zinc-800 bg-zinc-900 p-3 shadow-sm outline-none transition-colors hover:bg-zinc-800/80"
+      className="group relative cursor-pointer rounded-xl border border-theme bg-theme-card p-3 shadow-sm outline-none transition-colors hover:bg-theme-card-muted"
       role="button"
       tabIndex={0}
       aria-label={`${t('view_ride')}: ${ride.destination}`}
     >
       <div className="flex items-center gap-3">
         {/* vehicle (perfect circle — no square edge) */}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-800">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted">
           <img src={v.image} alt={v.label} className="h-full w-full object-cover" />
         </div>
 
@@ -258,21 +258,21 @@ const RideCard = ({ ride, t, onView }) => {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-              <p className="truncate text-sm font-semibold text-white">{ride.pickup}</p>
+              <p className="truncate text-sm font-semibold text-theme-primary">{ride.pickup}</p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="my-0.5 block h-3 w-px border-l border-dashed border-zinc-600" />
+              <span className="my-0.5 block h-3 w-px border-l border-dashed border-theme-strong" />
             </div>
             <div className="flex items-center gap-2">
-              <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" />
-              <p className="truncate text-xs text-zinc-400">{ride.destination}</p>
+              <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+              <p className="truncate text-xs text-theme-muted">{ride.destination}</p>
             </div>
           </div>
           {/* date / time + passenger (single compact row) */}
-          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-theme-muted">
             <i className="ri-calendar-2-line text-xs" />
             <span className="truncate">{dt || '—'}</span>
-            <span className="text-zinc-700">|</span>
+            <span className="text-theme-muted">|</span>
             <i className="ri-user-line text-xs" />
             <span className="shrink-0">
               {ride.passengers} Passenger{ride.passengers > 1 ? 's' : ''}
@@ -282,7 +282,7 @@ const RideCard = ({ ride, t, onView }) => {
 
         {/* fare + status (right-aligned column) */}
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="text-base font-bold text-white">{fare}</span>
+          <span className="text-base font-bold text-theme-primary">{fare}</span>
           <span
             className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${sb.className}`}
           >
@@ -291,7 +291,7 @@ const RideCard = ({ ride, t, onView }) => {
         </div>
 
         {/* view chevron (far right, vertically centered) */}
-        <i className="ri-arrow-right-s-line shrink-0 text-zinc-400 transition-colors group-hover:text-zinc-200" />
+        <i className="ri-arrow-right-s-line shrink-0 text-theme-muted transition-colors group-hover:text-theme-primary" />
       </div>
     </li>
   )
@@ -311,17 +311,17 @@ const RideDetailModal = ({ ride, t, onClose }) => {
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg rounded-t-2xl border-t border-zinc-800 bg-zinc-950 p-5"
+        className="relative w-full max-w-lg rounded-t-2xl border-t border-theme bg-theme-bg p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="absolute left-1/2 top-3 h-1.5 w-12 -translate-x-1/2 rounded-full bg-zinc-700" />
+        <div className="absolute left-1/2 top-3 h-1.5 w-12 -translate-x-1/2 rounded-full bg-theme-muted" />
 
         <div className="mt-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">{t('ride_details')}</h2>
+          <h2 className="text-lg font-semibold text-theme-primary">{t('ride_details')}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            className="rounded-full p-1 text-theme-muted hover:bg-theme-card-muted hover:text-theme-primary"
             aria-label={t('close')}
           >
             <i className="ri-close-line text-xl" />
@@ -330,32 +330,32 @@ const RideDetailModal = ({ ride, t, onClose }) => {
 
         <div className="mt-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-zinc-800">
+            <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted">
               <img src={v.image} alt={v.label} className="h-full w-full object-cover" />
             </span>
-            <span className="text-sm font-medium text-zinc-100">{v.label}</span>
+            <span className="text-sm font-medium text-theme-primary">{v.label}</span>
           </div>
           <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${sb.className}`}>
             {sb.label}
           </span>
         </div>
 
-        {dt ? <p className="mt-3 text-xs text-slate-400">{dt}</p> : null}
+        {dt ? <p className="mt-3 text-xs text-theme-muted">{dt}</p> : null}
 
         <div className="mt-3 flex items-start gap-2.5">
           <div className="flex flex-col items-center">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
-            <i className="ri-arrow-down-line text-xs text-zinc-600" />
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-rose-500" />
+            <i className="ri-arrow-down-line text-xs text-theme-muted" />
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
           </div>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-xs text-slate-500">{t('pickup')}</p>
-              <p className="break-words text-sm text-slate-300">{ride.pickup}</p>
+              <p className="text-xs text-theme-muted">{t('pickup')}</p>
+              <p className="break-words text-sm text-theme-primary">{ride.pickup}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-500">{t('drop')}</p>
-              <p className="break-words text-sm text-slate-300">{ride.destination}</p>
+              <p className="text-xs text-theme-muted">{t('drop')}</p>
+              <p className="break-words text-sm text-theme-primary">{ride.destination}</p>
             </div>
           </div>
         </div>
@@ -363,40 +363,40 @@ const RideDetailModal = ({ ride, t, onClose }) => {
         <div className="mt-3 space-y-1.5 text-sm">
           {ride.distance || ride.duration ? (
             <div className="flex justify-between">
-              <span className="text-slate-400">{t('distance_duration')}</span>
-              <span className="text-zinc-200">
+              <span className="text-theme-secondary">{t('distance_duration')}</span>
+              <span className="text-theme-primary">
                 {[ride.distance, ride.duration].filter(Boolean).join(' · ')}
               </span>
             </div>
           ) : null}
           {ride.paymentMethod ? (
             <div className="flex justify-between">
-              <span className="text-slate-400">{t('payment_method')}</span>
-              <span className="text-zinc-200">{ride.paymentMethod}</span>
+              <span className="text-theme-secondary">{t('payment_method')}</span>
+              <span className="text-theme-primary">{ride.paymentMethod}</span>
             </div>
           ) : null}
           {ride.rating != null ? (
             <div className="flex justify-between">
-              <span className="text-slate-400">{t('rating')}</span>
-              <span className="flex items-center gap-1 text-zinc-200">
-                <i className="ri-star-fill text-amber-400" /> {ride.rating}
+              <span className="text-theme-secondary">{t('rating')}</span>
+              <span className="flex items-center gap-1 text-theme-primary">
+                <i className="ri-star-fill text-brand" /> {ride.rating}
               </span>
             </div>
           ) : null}
           {ride.captain?.name ? (
             <div className="flex justify-between">
-              <span className="text-slate-400">{t('driver')}</span>
-              <span className="text-zinc-200">{ride.captain.name}</span>
+              <span className="text-theme-secondary">{t('driver')}</span>
+              <span className="text-theme-primary">{ride.captain.name}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="mt-5 flex items-center justify-between border-t border-zinc-800 pt-4">
-          <span className="text-sm text-slate-400">
+        <div className="mt-5 flex items-center justify-between border-t border-theme pt-4">
+          <span className="text-sm text-theme-secondary">
             {cancelled ? t('cancellation_fee') : t('total_fare')}
           </span>
           <span
-            className={`text-xl font-semibold ${cancelled ? 'text-rose-400' : 'text-amber-400'}`}
+            className={`text-xl font-semibold ${cancelled ? 'text-red-500' : 'text-brand'}`}
           >
             {amount}
           </span>
@@ -406,7 +406,7 @@ const RideDetailModal = ({ ride, t, onClose }) => {
           <button
             type="button"
             onClick={onClose}
-            className="w-full rounded-xl bg-amber-400 py-2.5 text-sm font-semibold text-zinc-950 hover:bg-amber-300"
+            className="w-full rounded-xl bg-brand py-2.5 text-sm font-bold text-brand-ink hover:bg-brand-light"
           >
             {t('close')}
           </button>
@@ -522,26 +522,26 @@ const RideHistory = () => {
   }, [items, activeFilter, query, dateFilter])
 
   return (
-    <div className="min-h-dvh min-h-screen w-full max-w-full overflow-x-hidden bg-black text-white pb-24">
+    <div className="min-h-dvh min-h-screen w-full max-w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
       {/* header */}
-      <header className="sticky top-0 z-20 border-b border-zinc-800 bg-gradient-to-b from-black via-black to-zinc-950 px-3 py-3 backdrop-blur sm:px-4">
+      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-3 py-3 backdrop-blur sm:px-4">
         <div className="mx-auto flex w-full max-w-lg items-center gap-2 sm:gap-3">
           <Link
             to="/home"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-zinc-200"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-card text-theme-secondary"
             aria-label="Back"
           >
             <i className="ri-arrow-left-line text-lg" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-bold text-white sm:text-lg">{t('ride_history')}</h1>
-            <p className="text-xs text-slate-400">{t('your_past_trips')}</p>
+            <h1 className="truncate text-base font-bold text-theme-primary sm:text-lg">{t('ride_history')}</h1>
+            <p className="text-xs text-theme-muted">{t('your_past_trips')}</p>
           </div>
           <button
             type="button"
             onClick={() => setShowCalendar((s) => !s)}
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-              showCalendar ? 'bg-amber-400 text-black' : 'bg-zinc-900 text-zinc-200 hover:bg-zinc-800'
+              showCalendar ? 'bg-brand text-brand-ink' : 'bg-theme-card text-theme-secondary hover:bg-theme-card-muted'
             }`}
             aria-label="Calendar"
             title="Calendar"
@@ -553,30 +553,30 @@ const RideHistory = () => {
 
       {/* real calendar filter */}
       {showCalendar ? (
-        <div className="border-b border-zinc-800 bg-zinc-950/95 px-3 py-3 sm:px-4">
+        <div className="border-b border-theme bg-theme-bg/95 px-3 py-3 sm:px-4">
           <div className="mx-auto w-full max-w-lg">
             <div className="flex items-center justify-between">
               {calView === 'days' ? (
                 <button
                   type="button"
                   onClick={() => setCalView('years')}
-                  className="rounded-lg px-1 py-0.5 text-sm font-semibold text-white hover:bg-zinc-800 focus:outline-none"
+                  className="rounded-lg px-1 py-0.5 text-sm font-semibold text-theme-primary hover:bg-theme-card-muted focus:outline-none"
                   title="Choose year and month"
                 >
                   {new Date(calendarMonth.y, calendarMonth.m).toLocaleString(undefined, { month: 'long', year: 'numeric' })}
-                  <i className="ri-arrow-down-s-line ml-0.5 text-xs text-slate-400" />
+                  <i className="ri-arrow-down-s-line ml-0.5 text-xs text-theme-muted" />
                 </button>
               ) : calView === 'months' ? (
                 <button
                   type="button"
                   onClick={() => setCalView('years')}
-                  className="rounded-lg px-1 py-0.5 text-sm font-semibold text-white hover:bg-zinc-800 focus:outline-none"
+                  className="rounded-lg px-1 py-0.5 text-sm font-semibold text-theme-primary hover:bg-theme-card-muted focus:outline-none"
                 >
                   {calendarMonth.y}
-                  <i className="ri-arrow-down-s-line ml-0.5 text-xs text-slate-400" />
+                  <i className="ri-arrow-down-s-line ml-0.5 text-xs text-theme-muted" />
                 </button>
               ) : (
-                <p className="text-sm font-semibold text-white">Select year</p>
+                <p className="text-sm font-semibold text-theme-primary">Select year</p>
               )}
 
               <div className="flex items-center gap-1">
@@ -584,7 +584,7 @@ const RideHistory = () => {
                   <button
                     type="button"
                     onClick={() => setDateFilter('')}
-                    className="text-xs font-medium text-amber-400"
+                    className="text-xs font-medium text-brand"
                   >
                     Clear
                   </button>
@@ -598,7 +598,7 @@ const RideHistory = () => {
                         const d = new Date(calendarMonth.y, calendarMonth.m - 1)
                         setCalendarMonth({ y: d.getFullYear(), m: d.getMonth() })
                       }}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
                       aria-label="Previous month"
                     >
                       <i className="ri-arrow-left-s-line text-lg" />
@@ -609,7 +609,7 @@ const RideHistory = () => {
                         const d = new Date(calendarMonth.y, calendarMonth.m + 1)
                         setCalendarMonth({ y: d.getFullYear(), m: d.getMonth() })
                       }}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
                       aria-label="Next month"
                     >
                       <i className="ri-arrow-right-s-line text-lg" />
@@ -622,7 +622,7 @@ const RideHistory = () => {
                     <button
                       type="button"
                       onClick={() => setCalYearOffset((o) => o - 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
                       aria-label="Previous years"
                     >
                       <i className="ri-arrow-left-s-line text-lg" />
@@ -630,7 +630,7 @@ const RideHistory = () => {
                     <button
                       type="button"
                       onClick={() => setCalYearOffset((o) => o + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
                       aria-label="Next years"
                     >
                       <i className="ri-arrow-right-s-line text-lg" />
@@ -642,7 +642,7 @@ const RideHistory = () => {
 
             {calView === 'days' ? (
               <>
-                <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium text-slate-500">
+                <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium text-theme-muted">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                     <span key={d} className="py-1">{d}</span>
                   ))}
@@ -670,12 +670,12 @@ const RideHistory = () => {
                           }}
                           className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-sm transition-colors focus:outline-none ${
                             selected
-                              ? 'bg-amber-400 font-bold text-black'
+                              ? 'bg-brand font-bold text-brand-ink'
                               : hasRides
-                                ? 'bg-amber-400/15 font-semibold text-amber-300'
+                                ? 'bg-brand/15 font-semibold text-brand'
                                 : isToday
-                                  ? 'border border-zinc-600 text-white'
-                                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                  ? 'border border-theme-strong text-theme-primary'
+                                  : 'text-theme-muted hover:bg-theme-card-muted hover:text-theme-primary'
                           }`}
                         >
                           {d}
@@ -700,8 +700,8 @@ const RideHistory = () => {
                     }}
                     className={`rounded-xl border py-2.5 text-sm font-medium transition-colors focus:outline-none ${
                       calendarMonth.m === idx
-                        ? 'border-amber-400 bg-amber-400/15 text-amber-300'
-                        : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                        ? 'border-brand bg-brand/15 text-brand'
+                        : 'border-theme bg-theme-card text-theme-secondary hover:bg-theme-card-muted'
                     }`}
                   >
                     {m}
@@ -727,8 +727,8 @@ const RideHistory = () => {
                         }}
                         className={`rounded-xl border py-2.5 text-sm font-medium transition-colors focus:outline-none ${
                           calendarMonth.y === y
-                            ? 'border-amber-400 bg-amber-400/15 text-amber-300'
-                            : 'border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                            ? 'border-brand bg-brand/15 text-brand'
+                            : 'border-theme bg-theme-card text-theme-secondary hover:bg-theme-card-muted'
                         }`}
                       >
                         {y}
@@ -747,14 +747,14 @@ const RideHistory = () => {
         {unreachable ? (
           <div
             role="status"
-            className="mb-3 rounded-lg border border-amber-900/50 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+            className="mb-3 rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-brand"
           >
             {t('sample_data_notice')}
           </div>
         ) : null}
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-theme-secondary">
             <i className="ri-loader-4-line animate-spin text-base" />
             <span>{t('loading')}</span>
           </div>
@@ -783,8 +783,8 @@ const RideHistory = () => {
                   onClick={() => setActiveFilter(f.key)}
                   className={`flex w-full items-center justify-center whitespace-nowrap rounded-full px-1 py-2 text-[13px] font-semibold transition-colors focus:outline-none ${
                     active
-                      ? 'bg-amber-400 text-black shadow-[0_0_16px_rgba(251,191,36,0.35)]'
-                      : 'border border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                      ? 'bg-brand text-brand-ink shadow-[0_0_16px_rgba(255,168,0,0.35)]'
+                      : 'border border-theme bg-theme-card text-theme-muted hover:bg-theme-card-muted hover:text-theme-primary'
                   }`}
                 >
                   {t(f.i18n)}
@@ -797,7 +797,7 @@ const RideHistory = () => {
         {!loading ? (
           <div className="mb-4 flex items-center gap-2">
             <div className="relative flex-1">
-              <i className="ri-search-line pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <i className="ri-search-line pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" />
               <input
                 id="ride-history-search"
                 type="search"
@@ -805,13 +805,13 @@ const RideHistory = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('search_rides')}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 pl-9 pr-3 py-2.5 text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                className="w-full rounded-xl border border-theme bg-theme-input pl-9 pr-3 py-2.5 text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-2 focus:ring-brand/50"
               />
             </div>
             <button
               type="button"
               onClick={() => setActiveFilter('all')}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-theme bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
               aria-label="Filter"
               title="Filter"
             >
@@ -822,9 +822,9 @@ const RideHistory = () => {
 
         {!loading && displayed.length === 0 ? (
           <div className="py-10 text-center">
-            <i className="ri-ride-line mb-2 text-4xl text-sky-400/70" />
-            <p className="text-sm font-medium text-slate-300">{t('no_rides_found')}</p>
-            <p className="mt-1 text-xs text-slate-500">{t('no_rides_sub')}</p>
+            <i className="ri-ride-line mb-2 text-4xl text-sky-500/70" />
+            <p className="text-sm font-medium text-theme-secondary">{t('no_rides_found')}</p>
+            <p className="mt-1 text-xs text-theme-muted">{t('no_rides_sub')}</p>
           </div>
         ) : null}
 
@@ -837,13 +837,13 @@ const RideHistory = () => {
         ) : null}
 
         {!loading ? (
-          <div className="mt-5 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 p-4 text-center">
-            <p className="text-sm font-medium text-slate-300">{t('cant_find_ride')}</p>
-            <p className="mt-0.5 text-xs text-slate-500">{t('check_older_dates')}</p>
+          <div className="mt-5 rounded-xl border border-theme bg-theme-card p-4 text-center">
+            <p className="text-sm font-medium text-theme-secondary">{t('cant_find_ride')}</p>
+            <p className="mt-0.5 text-xs text-theme-muted">{t('check_older_dates')}</p>
             <button
               type="button"
               onClick={() => setActiveFilter('all')}
-              className="mt-3 inline-flex items-center gap-1 rounded-full bg-amber-400 px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-amber-300"
+              className="mt-3 inline-flex items-center gap-1 rounded-full bg-brand px-5 py-2 text-sm font-bold text-brand-ink transition-colors hover:bg-brand-light"
             >
               {t('view_past_rides')}
             </button>

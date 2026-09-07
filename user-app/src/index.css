@@ -6,10 +6,74 @@
   html {
     -webkit-text-size-adjust: 100%;
   }
+
+  /* Centralized RideEasy theme tokens. The `data-theme` attribute is set on
+     <html> by ThemeProvider and drives both the CSS variables below and the
+     Tailwind `theme-*` color aliases. */
+  :root {
+    --bg: 255 255 255;
+    --surface: 248 249 251;
+    --card: 255 255 255;
+    --card-muted: 244 245 247;
+    --text-primary: 10 12 18;
+    --text-secondary: 95 99 110;
+    --text-muted: 138 143 156;
+    --border: 226 229 235;
+    --border-strong: 209 213 220;
+    --input-bg: 255 255 255;
+    --brand: 255 168 0;
+    --brand-ink: 17 14 4;
+  }
+
+  :root[data-theme='dark'] {
+    --bg: 5 7 10;
+    --surface: 8 11 16;
+    --card: 17 20 24;
+    --card-muted: 23 27 33;
+    --text-primary: 248 250 252;
+    --text-secondary: 180 186 196;
+    --text-muted: 122 128 140;
+    --border: 42 45 50;
+    --border-strong: 58 62 68;
+    --input-bg: 26 30 36;
+    --brand: 255 168 0;
+    --brand-ink: 17 14 4;
+  }
+
   body {
-    @apply overflow-x-hidden antialiased text-white bg-zinc-950;
+    @apply overflow-x-hidden antialiased;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--text-primary));
   }
+
   #root {
-    @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full bg-black shadow-2xl overflow-x-hidden;
+    @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full shadow-2xl overflow-x-hidden;
+    background-color: rgb(var(--bg));
   }
+
+  /* Theme-aware utility color aliases (rgb components from the tokens above). */
+  .bg-theme-bg { background-color: rgb(var(--bg)); }
+  .bg-theme-surface { background-color: rgb(var(--surface)); }
+  .bg-theme-card { background-color: rgb(var(--card)); }
+  .bg-theme-card-muted { background-color: rgb(var(--card-muted)); }
+  .bg-theme-input { background-color: rgb(var(--input-bg)); }
+
+  .text-theme-primary { color: rgb(var(--text-primary)); }
+  .text-theme-secondary { color: rgb(var(--text-secondary)); }
+  .text-theme-muted { color: rgb(var(--text-muted)); }
+
+  .border-theme { border-color: rgb(var(--border)); }
+  .border-theme-strong { border-color: rgb(var(--border-strong)); }
+
+  .text-brand { color: rgb(var(--brand)); }
+  .bg-brand { background-color: rgb(var(--brand)); }
+  .border-brand { border-color: rgb(var(--brand)); }
+  .text-brand-ink { color: rgb(var(--brand-ink)); }
+
+  .bg-brand\/10 { background-color: rgba(var(--brand), 0.1); }
+  .bg-brand\/15 { background-color: rgba(var(--brand), 0.15); }
+  .bg-brand\/30 { background-color: rgba(var(--brand), 0.3); }
+  .border-brand\/30 { border-color: rgba(var(--brand), 0.3); }
+  .border-brand\/40 { border-color: rgba(var(--brand), 0.4); }
+  .border-brand\/50 { border-color: rgba(var(--brand), 0.5); }
 }

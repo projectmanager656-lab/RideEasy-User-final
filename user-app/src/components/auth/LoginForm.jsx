@@ -15,7 +15,7 @@ import { useCountdown } from './useCountdown'
  * Smart login: the email/phone is checked against the backend first.
  * - Account exists  → password + Login are revealed (existing user).
  * - No account      → the registration panel auto-opens (new user).
- * There is deliberately NO "Sign up" button/link: the flow is automatic.
+ * The explicit "Create account" link also opens registration.
  */
 const LoginForm = ({
   identifier,
@@ -29,6 +29,7 @@ const LoginForm = ({
   onSubmit,
   onCheckAccount,
   onForgotVerified,
+  onCreateAccount,
 }) => {
   const { t } = useLanguage()
   const [ forgotOpen, setForgotOpen ] = useState(false)
@@ -38,6 +39,9 @@ const LoginForm = ({
   const [ otpLoading, setOtpLoading ] = useState(false)
   const [ otpError, setOtpError ] = useState('')
   const [ devOtp, setDevOtp ] = useState('')
+  // Forgot-password: new password chosen after the OTP is verified.
+  const [ newPassword, setNewPassword ] = useState('')
+  const [ confirmPassword, setConfirmPassword ] = useState('')
   const { secondsLeft, reset } = useCountdown(300)
 
   const canResend = secondsLeft === 0
@@ -65,12 +69,23 @@ const LoginForm = ({
 
   const verifyOtp = async () => {
     if (String(otp).replace(/\D/g, '').length !== 6) return
+    // A new password is required to reset the old (lost) one.
+    if (newPassword.length < 6) {
+      setOtpError(t('min_6_chars'))
+      return
+    }
+    if (confirmPassword !== newPassword) {
+      setOtpError(t('passwords_do_not_match'))
+      return
+    }
     setOtpError('')
     setOtpLoading(true)
     try {
       const response = await apiClient.post('/users/phone/verify-otp', {
         phone: forgotPhone,
         otp: String(otp).replace(/\D/g, ''),
+        // The backend stores this as the account's new password.
+        password: newPassword,
       })
       const data = stripApiEnvelope(response.data)
       const user = data?.user ?? data
@@ -90,24 +105,29 @@ const LoginForm = ({
   if (forgotOpen) {
     return (
       <div className="mx-auto w-full max-w-md px-6 pb-10">
-        <div className="rounded-2xl border border-night-border bg-night-900 p-6 shadow-xl">
+        <div className="rounded-2xl border border-theme bg-theme-card p-6 shadow-xl">
           <button
             type="button"
             onClick={() => setForgotOpen(false)}
-            className="mb-4 flex items-center gap-2 text-sm font-medium text-zinc-400 transition hover:text-white"
+            className="mb-4 flex items-center gap-2 text-sm font-medium text-theme-secondary transition hover:text-theme-primary"
           >
             <i className="ri-arrow-left-line" aria-hidden />
             {t('back_to_login')}
           </button>
           <h2 className="text-xl font-semibold">{t('forgot_password')}</h2>
-          <p className="mb-5 mt-1 text-sm text-zinc-500">
-            {t('otp_sent_to_phone')}
+          <p className="mb-5 mt-1 text-sm text-theme-muted">
+            {t('otp_sent_to_phone')} {t('reset_password_hint')}
           </p>
           {otpError ? <div role="alert" className={errorBoxClass}>{otpError}</div> : null}
-          {import.meta.env.DEV && devOtp ? (
-            <p className="mb-4 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand">
-              Dev OTP: {devOtp}
-            </p>
+          {devOtp ? (
+            <button
+              type="button"
+              onClick={() => setOtp(String(devOtp).replace(/\D/g, '').slice(0, 6))}
+              className="mb-4 w-full rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-brand/15"
+              title="Tap to autofill"
+            >
+              Temporary OTP: {devOtp}
+            </button>
           ) : null}
           {!otpSent ? (
             <>
@@ -138,10 +158,31 @@ const LoginForm = ({
                     {t('resend_otp')}
                   </button>
                 ) : (
-                  <span className="text-sm text-zinc-500">
+                  <span className="text-sm text-theme-muted">
                     {t('resend_otp_in', { seconds: secondsLeft })}
                   </span>
                 )}
+              </div>
+              {/* New password — required so this account can be logged into with it. */}
+              <div className="mb-4">
+                <PasswordInput
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  label={t('create_password')}
+                  placeholder={t('enter_password')}
+                  autoComplete="new-password"
+                  name="forgot-new-password"
+                />
+              </div>
+              <div className="mb-4">
+                <PasswordInput
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  label={t('confirm_password')}
+                  placeholder={t('confirm_new_password')}
+                  autoComplete="new-password"
+                  name="forgot-confirm-password"
+                />
               </div>
               <AuthButton
                 loading={otpLoading}
@@ -160,13 +201,13 @@ const LoginForm = ({
   return (
     <div className="mx-auto w-full max-w-md px-6 pb-10">
       <h1 className="text-2xl font-bold">{t('welcome_back')}</h1>
-      <p className="mb-6 mt-1 text-sm text-zinc-400">{t('sign_in_continue')}</p>
+      <p className="mb-6 mt-1 text-sm text-theme-secondary">{t('sign_in_continue')}</p>
 
-      <div className="rounded-2xl border border-night-border bg-night-900 p-6 shadow-xl">
+      <div className="rounded-2xl border border-theme bg-theme-card p-6 shadow-xl">
         <form onSubmit={onSubmit} noValidate>
           {error ? <div role="alert" className={errorBoxClass}>{error}</div> : null}
           <div className="mb-4">
-            <label htmlFor="auth-identifier" className={labelClass}>{t('email_or_phone')}</label>
+            <label htmlFor="auth-identifier" className={labelClass}>{t('email')}</label>
             <input
               id="auth-identifier"
               name="identifier"
@@ -175,7 +216,7 @@ const LoginForm = ({
               inputMode="email"
               autoComplete="username"
               className={inputBase}
-              placeholder={t('email_or_phone_ph')}
+              placeholder={t('enter_email')}
               value={identifier}
               onChange={(e) => onIdentifierChange(e.target.value)}
               onBlur={(e) => {
@@ -186,7 +227,7 @@ const LoginForm = ({
           </div>
 
           {checking ? (
-            <div role="status" className="mb-4 flex items-center justify-center gap-2 rounded-xl bg-night-800 px-4 py-3 text-sm text-zinc-300">
+            <div role="status" className="mb-4 flex items-center justify-center gap-2 rounded-xl bg-theme-card-muted px-4 py-3 text-sm text-theme-secondary">
               <i className="ri-loader-4-line animate-spin text-brand" aria-hidden />
               {t('checking_account')}
             </div>
@@ -204,13 +245,14 @@ const LoginForm = ({
               <PasswordInput
                 value={password}
                 onChange={onPasswordChange}
-                placeholder={t('password')}
+                label={t('password')}
+                placeholder={t('enter_password')}
               />
               <div className="mb-5 -mt-2 text-right">
                 <button
                   type="button"
                   onClick={() => setForgotOpen(true)}
-                  className="text-sm font-medium text-brand hover:text-brand-light"
+                  className="text-sm font-semibold text-brand hover:text-brand-light"
                 >
                   {t('forgot_password')}
                 </button>
@@ -231,6 +273,17 @@ const LoginForm = ({
 
         <SocialLoginButtons onAuthenticated={onForgotVerified} />
       </div>
+
+      <p className="mt-6 text-center text-sm text-theme-secondary">
+        {t('create_new_account')}{' '}
+        <button
+          type="button"
+          onClick={onCreateAccount}
+          className="font-bold text-brand hover:text-brand-light"
+        >
+          {t('create_account')}
+        </button>
+      </p>
     </div>
   )
 }
