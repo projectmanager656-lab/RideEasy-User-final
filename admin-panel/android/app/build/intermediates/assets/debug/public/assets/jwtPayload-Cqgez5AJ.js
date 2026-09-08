@@ -1,0 +1,1 @@
+function l(n){if(!n||typeof n!="string")return null;const t=n.split(".");if(t.length<2)return null;try{const r=t[1].replace(/-/g,"+").replace(/_/g,"/"),e=atob(r);return JSON.parse(e)}catch{return null}}function o(n){const t=l(n);return(t==null?void 0:t.role)??null}function s(n){return o(n)==="admin"}export{s as i};

@@ -1,5 +1,6 @@
 import React from 'react'
 import { rowStableKey, paymentStatusClass } from '../adminUtils'
+import { useLanguage } from '../../i18n'
 
 export default function PaymentsTab ({
   paymentsLoading,
@@ -15,26 +16,28 @@ export default function PaymentsTab ({
   deleteRide,
   bulkDeletePayments,
 }) {
+  const { t } = useLanguage()
+
   return (
     <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl">
-      <p className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">Completed ride settlements (from ride records)</p>
+      <p className="border-b border-neutral-200 px-4 py-2 text-xs text-neutral-500">{t('payments_tab_hint')}</p>
       {paymentsLoading ? (
-        <div className="p-12 text-center text-neutral-600">Loading payments…</div>
+        <div className="p-12 text-center text-neutral-600">{t('loading_payments')}</div>
       ) : (
         <>
           <div className="flex flex-col gap-3 border-b border-neutral-200 px-3 py-3 sm:px-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <input
               type="search"
-              placeholder="Search ride id, summary, amount, status…"
+              placeholder={t('search_payments_placeholder')}
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
               className="w-full max-w-full sm:max-w-md rounded-lg border border-neutral-300 bg-white text-black px-3 py-2 text-sm placeholder:text-neutral-500 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
             {selectedIds.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-neutral-600">{selectedIds.length} selected</span>
-                <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">Clear</button>
-                <button type="button" onClick={bulkDeletePayments} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">Delete selected rides</button>
+                <span className="text-xs text-neutral-600">{t('selected_count', { count: selectedIds.length })}</span>
+                <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">{t('clear')}</button>
+                <button type="button" onClick={bulkDeletePayments} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">{t('delete_selected_rides')}</button>
               </div>
             )}
           </div>
@@ -51,21 +54,21 @@ export default function PaymentsTab ({
                       onChange={(e) => (e.target.checked ? selectAllVisible(filteredPayments) : clearSelection())}
                     />
                   </th>
-                  <th className="px-4 py-3">Completed</th>
-                  <th className="px-4 py-3">Ride</th>
-                  <th className="px-4 py-3 text-right">Charged ₹</th>
-                  <th className="px-4 py-3 text-right">Driver net ₹</th>
-                  <th className="px-4 py-3 text-right">Platform ₹</th>
-                  <th className="px-4 py-3">Method</th>
-                  <th className="px-4 py-3">Payment</th>
-                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">{t('completed_col')}</th>
+                  <th className="px-4 py-3">{t('ride_col')}</th>
+                  <th className="px-4 py-3 text-right">{t('charged_col')}</th>
+                  <th className="px-4 py-3 text-right">{t('driver_net_col')}</th>
+                  <th className="px-4 py-3 text-right">{t('platform_col')}</th>
+                  <th className="px-4 py-3">{t('method_col')}</th>
+                  <th className="px-4 py-3">{t('payment_col')}</th>
+                  <th className="px-4 py-3">{t('action_col')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
                 {filteredPayments.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-neutral-500">
-                      {payments.length === 0 ? 'No completed payments yet.' : 'No rows match your search.'}
+                      {payments.length === 0 ? t('no_payments_yet') : t('no_payments_match')}
                     </td>
                   </tr>
                 )}
@@ -99,7 +102,7 @@ export default function PaymentsTab ({
                         className="text-sm font-medium text-neutral-600 underline hover:text-black"
                         onClick={() => deleteRide(p._id)}
                       >
-                        Delete ride
+                        {t('delete_ride')}
                       </button>
                     </td>
                   </tr>

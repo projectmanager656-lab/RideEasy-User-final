@@ -1,15 +1,17 @@
-import React, { useContext, useState, useEffect } from 'react'
+import React, { useContext, useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CaptainDataContext } from '../context/CaptainContext'
 import { apiClient } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
 import { getCaptainToken } from '../utils/authTokens'
+import { useLanguage, LANGUAGE_OPTIONS } from '../i18n'
 
 const inputClass =
   'mb-4 rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 w-full text-base text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500'
 
 const Captainlogin = () => {
+  const { t, language, setLanguage } = useLanguage()
   const [ email, setEmail ] = useState('')
   const [ password, setPassword ] = useState('')
   const [ phone, setPhone ] = useState('')
@@ -18,9 +20,19 @@ const Captainlogin = () => {
   const [ otpLoading, setOtpLoading ] = useState(false)
   const [ loading, setLoading ] = useState(false)
   const [ error, setError ] = useState('')
+  const [ langOpen, setLangOpen ] = useState(false)
+  const langRef = useRef(null)
 
   const { setCaptain } = useContext(CaptainDataContext)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const click = (e) => {
+      if (langRef.current && !langRef.current.contains(e.target)) setLangOpen(false)
+    }
+    window.addEventListener('mousedown', click)
+    return () => window.removeEventListener('mousedown', click)
+  }, [])
 
   useEffect(() => {
     if (getCaptainToken()) {
@@ -49,7 +61,7 @@ const Captainlogin = () => {
           setEmail('')
           setPassword('')
         } else {
-          setError('Login response missing account or token.')
+          setError(t('login_response_missing'))
         }
       }
     } catch (err) {
@@ -91,7 +103,7 @@ const Captainlogin = () => {
           localStorage.setItem('captainToken', token)
           navigate('/captain-home', { replace: true })
         } else {
-          setError('Verification response missing account or token.')
+          setError(t('verification_response_missing'))
         }
       }
     } catch (err) {
@@ -104,14 +116,37 @@ const Captainlogin = () => {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-between p-6 sm:p-8">
       <div className="mx-auto w-full max-w-md">
-        <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-6 shadow-xl">
+        <div className="relative mb-8 rounded-2xl border border-zinc-800 bg-zinc-950/80 p-6 shadow-xl">
+          <div className="absolute top-6 right-6" ref={langRef}>
+            <button
+              onClick={() => setLangOpen(!langOpen)}
+              className="flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-bold text-zinc-400 hover:bg-zinc-800 transition-colors"
+            >
+              <i className="ri-translate-2" />
+              {LANGUAGE_OPTIONS.find(o => o.code === language)?.label}
+            </button>
+            {langOpen && (
+              <div className="absolute right-0 mt-1 w-28 overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl z-10">
+                {LANGUAGE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.code}
+                    onClick={() => { setLanguage(opt.code); setLangOpen(false) }}
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-zinc-800 ${opt.code === language ? 'text-emerald-400 font-bold bg-emerald-500/5' : 'text-zinc-300'}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="mb-6 flex items-center gap-3">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10">
               <span className="text-xl font-bold text-emerald-400">R</span>
             </span>
             <div>
-              <p className="text-lg font-semibold">RideEasy Driver</p>
-              <p className="text-xs text-zinc-500">Sign in to go online</p>
+              <p className="text-lg font-semibold">{t('rideeasy_driver')}</p>
+              <p className="text-xs text-zinc-500">{t('sign_in_to_go_online')}</p>
             </div>
           </div>
 
@@ -124,7 +159,7 @@ const Captainlogin = () => {
                 {error}
               </div>
             ) : null}
-            <label className="mb-1 block text-sm text-zinc-400">Email</label>
+            <label className="mb-1 block text-sm text-zinc-400">{t('email')}</label>
             <input
               required
               value={email}
@@ -133,33 +168,33 @@ const Captainlogin = () => {
               type="email"
               placeholder="email@example.com"
             />
-            <label className="mb-1 block text-sm text-zinc-400">Password</label>
+            <label className="mb-1 block text-sm text-zinc-400">{t('password')}</label>
             <input
               className={inputClass}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               type="password"
-              placeholder="Password"
+              placeholder={t('password')}
             />
             <button
               disabled={loading}
               type="submit"
               className="w-full rounded-xl bg-emerald-600 py-3 text-base font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
             >
-              {loading ? 'Logging in…' : 'Login'}
+              {loading ? t('logging_in') : t('login')}
             </button>
           </form>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5">
-          <h4 className="mb-3 text-sm font-semibold text-zinc-300">Phone OTP</h4>
+          <h4 className="mb-3 text-sm font-semibold text-zinc-300">{t('phone_otp')}</h4>
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className={inputClass}
             type="tel"
-            placeholder="Driver phone number"
+            placeholder={t('driver_phone_number')}
           />
           {!otpSent ? (
             <button
@@ -168,7 +203,7 @@ const Captainlogin = () => {
               disabled={otpLoading || !String(phone || '').trim()}
               className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
             >
-              {otpLoading ? 'Sending OTP…' : 'Send OTP'}
+              {otpLoading ? t('sending_otp') : t('send_otp')}
             </button>
           ) : (
             <div className="space-y-2">
@@ -178,7 +213,7 @@ const Captainlogin = () => {
                 className={inputClass}
                 type="text"
                 maxLength={6}
-                placeholder="6-digit OTP"
+                placeholder={t('otp_6_digit')}
               />
               <button
                 type="button"
@@ -186,16 +221,16 @@ const Captainlogin = () => {
                 disabled={otpLoading || String(otp || '').trim().length !== 6}
                 className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60"
               >
-                {otpLoading ? 'Verifying…' : 'Verify & Login'}
+                {otpLoading ? t('verifying') : t('verify_login')}
               </button>
             </div>
           )}
         </div>
 
         <p className="mt-6 text-center text-sm text-zinc-500">
-          New driver?{' '}
+          {t('new_here')}{' '}
           <Link to="/captain-signup" className="font-medium text-emerald-400 hover:text-emerald-300">
-            Register
+            {t('register')}
           </Link>
         </p>
       </div>

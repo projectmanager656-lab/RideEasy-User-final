@@ -1,5 +1,6 @@
 import React from 'react'
 import { displayName, rowStableKey, statusBadgeClass, RIDE_STATUSES } from '../adminUtils'
+import { useLanguage } from '../../i18n'
 
 export default function RidesTab ({
   ridesLoading,
@@ -17,41 +18,45 @@ export default function RidesTab ({
   deleteRide,
   bulkDeleteRides,
 }) {
+  const { t } = useLanguage()
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white px-3 py-3 sm:px-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-neutral-600">
-            Status
+            {t('status_label')}
             <select
               value={rideStatusFilter}
               onChange={(e) => setRideStatusFilter(e.target.value)}
               className="ml-2 rounded-lg border border-neutral-300 bg-white text-black px-3 py-2 text-sm"
             >
               {RIDE_STATUSES.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
+                <option key={o.value} value={o.value}>
+                  {o.value === 'all' ? t('all_filter') : t(`status_${o.value}_label`)}
+                </option>
               ))}
             </select>
           </label>
         </div>
         <input
           type="search"
-          placeholder="Search city, route, passenger, driver, id…"
+          placeholder={t('search_rides_placeholder')}
           value={tableSearch}
           onChange={(e) => setTableSearch(e.target.value)}
           className="w-full max-w-full sm:max-w-md rounded-lg border border-neutral-300 bg-white text-black px-3 py-2 text-sm placeholder:text-neutral-500 focus:border-black focus:outline-none focus:ring-1 focus:ring-black sm:ml-auto"
         />
         {selectedIds.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-neutral-600">{selectedIds.length} selected</span>
-            <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">Clear</button>
-            <button type="button" onClick={bulkDeleteRides} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">Delete selected</button>
+            <span className="text-xs text-neutral-600">{t('selected_count', { count: selectedIds.length })}</span>
+            <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">{t('clear')}</button>
+            <button type="button" onClick={bulkDeleteRides} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">{t('delete_selected')}</button>
           </div>
         )}
       </div>
       <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl">
         {ridesLoading ? (
-          <div className="p-12 text-center text-neutral-600">Loading rides…</div>
+          <div className="p-12 text-center text-neutral-600">{t('loading_rides')}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] sm:min-w-[960px] text-left text-sm text-neutral-900">
@@ -66,14 +71,14 @@ export default function RidesTab ({
                       onChange={(e) => (e.target.checked ? selectAllVisible(filteredRides) : clearSelection())}
                     />
                   </th>
-                  <th className="px-4 py-3">When</th>
-                  <th className="px-4 py-3">City</th>
-                  <th className="px-4 py-3">Passenger</th>
-                  <th className="px-4 py-3">Driver</th>
-                  <th className="px-4 py-3">Route</th>
-                  <th className="px-4 py-3 text-right">₹</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">{t('when_col')}</th>
+                  <th className="px-4 py-3">{t('city_col')}</th>
+                  <th className="px-4 py-3">{t('passenger_col')}</th>
+                  <th className="px-4 py-3">{t('driver_col')}</th>
+                  <th className="px-4 py-3">{t('route_col')}</th>
+                  <th className="px-4 py-3 text-right">{t('rupee_col')}</th>
+                  <th className="px-4 py-3">{t('status_col')}</th>
+                  <th className="px-4 py-3">{t('action_col')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
@@ -81,8 +86,8 @@ export default function RidesTab ({
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-neutral-500">
                       {rides.length === 0
-                        ? 'No rides in the database yet. Pick All under Status, or check the backend connection.'
-                        : 'No rides match your search or filter.'}
+                        ? t('no_rides_db')
+                        : t('no_rides_match')}
                     </td>
                   </tr>
                 )}
@@ -125,7 +130,7 @@ export default function RidesTab ({
                         className="text-sm font-medium text-neutral-600 underline hover:text-black"
                         onClick={() => deleteRide(r._id)}
                       >
-                        Delete
+                        {t('delete')}
                       </button>
                     </td>
                   </tr>

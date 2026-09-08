@@ -1,12 +1,15 @@
 import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { useLanguage } from '../i18n'
 
 const BottomNav = ({ onMoreClick }) => {
+  const { t } = useLanguage()
   const location = useLocation()
   const path = location.pathname
   const hidden =
     path === '/login' ||
     path === '/signup' ||
+    path === '/welcome' ||
     path === '/user/logout' ||
     path === '/location'
 
@@ -14,6 +17,9 @@ const BottomNav = ({ onMoreClick }) => {
 
   const base =
     'flex flex-col items-center justify-center flex-1 gap-0.5 text-xs font-medium transition-colors'
+
+  const itemCls = (isActive) =>
+    `${base} ${isActive ? 'text-brand' : 'text-zinc-500'}`
 
   return (
     <nav
@@ -23,30 +29,31 @@ const BottomNav = ({ onMoreClick }) => {
       <div className="mx-auto flex h-[68px] max-w-[430px] items-center justify-between px-1 min-[400px]:px-3 sm:px-4">
         <NavLink
           to="/home"
-          className={({ isActive }) =>
-            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
-          }
+          className={({ isActive }) => itemCls(isActive)}
         >
           <i className="ri-home-5-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Home</span>
+          <span className="max-[380px]:text-[10px]">{t('book')}</span>
         </NavLink>
         <NavLink
-          to="/profile"
-          className={({ isActive }) =>
-            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
-          }
+          to="/riding"
+          className={() => itemCls(path === '/riding')}
         >
-          <i className="ri-user-3-line text-lg" />
-          <span className="max-[380px]:text-[10px]">Account</span>
+          <i className="ri-roadster-line text-lg" />
+          <span className="max-[380px]:text-[10px]">{t('live')}</span>
         </NavLink>
         <NavLink
           to="/history"
-          className={({ isActive }) =>
-            `${base} ${isActive ? 'text-[#FFC800]' : 'text-[#777777]'}`
-          }
+          className={({ isActive }) => itemCls(isActive)}
         >
           <i className="ri-history-line text-lg" />
-          <span className="max-[380px]:text-[10px]">History</span>
+          <span className="max-[380px]:text-[10px]">{t('trips')}</span>
+        </NavLink>
+        <NavLink
+          to="/profile"
+          className={({ isActive }) => itemCls(isActive)}
+        >
+          <i className="ri-user-3-line text-lg" />
+          <span className="max-[380px]:text-[10px]">{t('profile')}</span>
         </NavLink>
         <button
           type="button"

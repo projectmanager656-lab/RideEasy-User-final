@@ -21,6 +21,7 @@ import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
 import { addRecentSearch, getRecentSearches } from '../utils/recentSearches'
+import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
@@ -70,6 +71,7 @@ function mergeServicePlaces(localList, apiList) {
 }
 
 const Home = () => {
+    const { t } = useLanguage()
     const [ pickup, setPickup ] = useState('')
     const [ destination, setDestination ] = useState('')
     const [ serviceCity ] = useState(readStoredServiceCity)
@@ -285,7 +287,7 @@ const Home = () => {
             }
             if (!hasShownAcceptAlert) {
                 setHasShownAcceptAlert(true)
-                alert("Driver has accepted your ride")
+                alert(t('driver_accepted_ride'))
             }
         };
 
@@ -424,7 +426,7 @@ const Home = () => {
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
         }
-    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer]);
+    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer, t]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -573,7 +575,7 @@ const Home = () => {
             cancelled = true
             stopTimers()
         }
-    }, [ride?._id, ride?.status, ride?.captain, syncRideFromServer]);
+}, [ride?._id, ride?.status, ride?.captain, syncRideFromServer]);
 
 
     /** Debounced prefix search with stale-response protection and graceful 429 handling. */
@@ -840,7 +842,7 @@ const Home = () => {
     }
 
     async function findTrip() {
-        if (!pickupSelection || !dropSelection) {
+if (!pickupSelection || !dropSelection) {
             setBookingError('Please select both pickup and drop locations from the suggestions.')
             return
         }
@@ -891,7 +893,7 @@ const Home = () => {
         const vehicleTypeNorm = tier ? tier.vehicleType : 'AUTO'
         const price = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? null)
         if (price == null) {
-            alert('Please select pickup, drop and vehicle type again.')
+            alert(t('select_pickup_drop_vehicle'))
             return
         }
         try {
@@ -947,7 +949,7 @@ const Home = () => {
 
     const continueFromVehiclePanel = () => {
         if (!vehicleType) {
-            alert('Please choose a ride')
+            alert(t('please_choose_ride'))
             return
         }
         setVehiclePanel(false)
@@ -1104,6 +1106,63 @@ const Home = () => {
                                 onForMeOpen={() => setForMeOpen(true)}
                             />
                         </div>
+
+                        {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {currentUser.savedAddresses?.home ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-full border border-brand-border bg-brand-card px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-brand-cardSoft"
+                                        onClick={() => {
+                                            const a = currentUser.savedAddresses.home
+                                            setPickup(a)
+                                            fetchPickupCoords(a)
+                                        }}
+                                    >
+                                        {t('home_to_pickup')}
+                                    </button>
+                                ) : null}
+                                {currentUser.savedAddresses?.work ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-full border border-brand-border bg-brand-card px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-brand-cardSoft"
+                                        onClick={() => {
+                                            const a = currentUser.savedAddresses.work
+                                            setDestination(a)
+                                            fetchDropCoords(a)
+                                        }}
+                                    >
+                                        {t('work_to_drop')}
+                                    </button>
+                                ) : null}
+                                {currentUser.savedAddresses?.home ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-full border border-brand-border bg-brand-card px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-brand-cardSoft"
+                                        onClick={() => {
+                                            const a = currentUser.savedAddresses.home
+                                            setDestination(a)
+                                            fetchDropCoords(a)
+                                        }}
+                                    >
+                                        {t('home_to_drop')}
+                                    </button>
+                                ) : null}
+                                {currentUser.savedAddresses?.work ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-full border border-brand-border bg-brand-card px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-brand-cardSoft"
+                                        onClick={() => {
+                                            const a = currentUser.savedAddresses.work
+                                            setPickup(a)
+                                            fetchPickupCoords(a)
+                                        }}
+                                    >
+                                        {t('work_to_pickup')}
+                                    </button>
+                                ) : null}
+                            </div>
+                        )}
 
                         <div className="mt-auto shrink-0 pb-2">
                             <SafetyPromoCard />

@@ -10,10 +10,12 @@ import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { useLanguage } from '../i18n'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
 const Riding = () => {
+    const { t } = useLanguage()
     const location = useLocation()
     const { ride: initialRide } = location.state || {}
     const [ride, setRide] = useState(initialRide)
@@ -27,6 +29,9 @@ const Riding = () => {
         return null
     })
     const [passengerLiveCoords, setPassengerLiveCoords] = useState(null)
+    const [emergencyContact, setEmergencyContact] = useState(null) // { name, phone, relationship }
+    const [ecLoading, setEcLoading] = useState(true)
+    const [ecError, setEcError] = useState('')
     const socket = useSocket()
     const navigate = useNavigate()
     const rideIdRef = useRef(null)
@@ -142,6 +147,37 @@ const Riding = () => {
         }
     }, [socket, ride?.status])
 
+    // Fetch emergency contact
+    useEffect(() => {
+        const fetchEmergencyContact = async () => {
+            if (!ride?._id) {
+                setEcLoading(false)
+                return
+            }
+            
+            setEcLoading(true)
+            setEcError('')
+            try {
+                const token = getPassengerToken()
+                const response = await axios.get(`${API_BASE_URL}/users/emergency-contact`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+                setEmergencyContact(response.data.emergencyContact ?? null)
+            } catch (err) {
+                // If no emergency contact exists, that's okay
+                if (err.response?.status === 404) {
+                    setEmergencyContact(null)
+                } else {
+                    setEcError(err.response?.data?.message || err.message || 'Failed to load emergency contact')
+                }
+            } finally {
+                setEcLoading(false)
+            }
+        }
+
+        fetchEmergencyContact()
+    }, [ride?._id])
+
     useEffect(() => {
         if (!ride?.pickupLocation?.trim()) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
@@ -183,7 +219,7 @@ const Riding = () => {
                     }
                 })
                 .catch((e) => {
-                    const msg = e.response?.data?.message || e.message || 'Could not refresh ride'
+                    const msg = e.response?.data?.message || e.message || t('could_not_refresh_ride')
                     setRideFetchError(msg)
                 })
         }
@@ -191,7 +227,7 @@ const Riding = () => {
         const intervalMs = ride?.status === 'started' ? 4_000 : 12_000
         const id = setInterval(poll, intervalMs)
         return () => clearInterval(id)
-    }, [ride?._id, ride?.status])
+    }, [ride?._id, ride?.status, t])
 
     useEffect(() => {
         if (ride?.status !== 'completed' || !ride?._id) return
@@ -205,10 +241,10 @@ const Riding = () => {
                 setRide(res.data)
             })
             .catch((e) => {
-                const msg = e.response?.data?.message || e.message || 'Could not refresh ride'
+                const msg = e.response?.data?.message || e.message || t('could_not_refresh_ride')
                 setRideFetchError(msg)
             })
-    }, [ride?._id, ride?.status])
+    }, [ride?._id, ride?.status, t])
 
     const openInGoogleMaps = () => {
         const dest = dropCoords || (ride?.dropLocation ? encodeURIComponent(ride.dropLocation) : null)
@@ -226,9 +262,9 @@ const Riding = () => {
         && dropCoords?.lat != null
     const paymentLabel = useMemo(() => {
         const m = ride?.paymentMethod || 'Cash'
-        if (m === 'UPI') return 'UPI / Online'
+        if (m === 'UPI') return t('upi_online')
         return m
-    }, [ride?.paymentMethod])
+    }, [ride?.paymentMethod, t])
 
     const confirmRidePayment = useCallback(async (method) => {
         if (!ride?._id) return
@@ -240,12 +276,12 @@ const Riding = () => {
             })
             if (data?.ride) setRide(data.ride)
         } catch (e) {
-            const message = e.response?.data?.message || e.message || 'Payment failed'
+            const message = e.response?.data?.message || e.message || t('payment_failed')
             setPayError(message)
         } finally {
             setPaying(false)
         }
-    }, [ride?._id])
+    }, [ride?._id, t])
 
     const submitRating = useCallback(async (value, comment) => {
         if (!ride?._id) return
@@ -261,11 +297,11 @@ const Riding = () => {
             })
             setRide(res.data)
         } catch (err) {
-            setRateError(err.response?.data?.message || err.message || 'Failed to submit rating')
+            setRateError(err.response?.data?.message || err.message || t('failed_submit_rating'))
         } finally {
             setSubmittingRating(false)
         }
-    }, [ride?._id])
+    }, [ride?._id, t])
 
     const goHome = useCallback(() => {
         navigate('/home', { replace: true })
@@ -330,7 +366,7 @@ const Riding = () => {
                         className="absolute bottom-3 left-3 right-3 z-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
                     >
                         <i className="ri-navigation-line" />
-                        Open in Google Maps
+                        {t('open_google_maps')}
                     </button>
                 )}
             </div>
@@ -350,7 +386,7 @@ const Riding = () => {
                     <div className='text-right min-w-0'>
                         <h2 className='text-lg font-medium capitalize text-white'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
                         <h4 className='text-xl font-semibold -mt-1 -mb-1 text-zinc-100'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
-                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : 'Vehicle'}</p>
+                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
                     </div>
                 </div>
 
@@ -359,14 +395,14 @@ const Riding = () => {
                         <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
                             <i className="text-lg ri-map-pin-user-fill text-emerald-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>Pickup</h3>
+                                <h3 className='text-lg font-medium text-white'>{t('pickup')}</h3>
                                 <p className='text-sm -mt-1 text-zinc-400'>{ride?.pickupLocation || '—'}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
                             <i className="text-lg ri-map-pin-2-fill text-rose-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>Drop</h3>
+                                <h3 className='text-lg font-medium text-white'>{t('drop')}</h3>
                                 <p className='text-sm -mt-1 text-zinc-400'>{ride?.dropLocation || ride?.destination}</p>
                             </div>
                         </div>
@@ -379,8 +415,79 @@ const Riding = () => {
                         </div>
                     </div>
                 </div>
+                
+                {/* Emergency Contact Section */}
+                {ride?.status === 'started' && (
+                    <div className='w-full mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40'>
+                        <div className='flex items-center gap-4 p-4'>
+                            <div className='flex-1'>
+                                <h3 className='text-lg font-medium text-white'>{t('emergency_contact')}</h3>
+                                {ecLoading ? (
+                                    <p className='text-sm text-zinc-400'>{t('loading')}</p>
+                                ) : ecError ? (
+                                    <p className='text-sm text-red-500'>{ecError}</p>
+                                ) : emergencyContact ? (
+                                    <>
+                                        <p className='text-sm font-semibold text-white mb-1'>{emergencyContact.name}</p>
+                                        <p className='text-sm text-zinc-300'>{emergencyContact.phone}</p>
+                                        <p className='text-xs text-zinc-400'>{emergencyContact.relationship}</p>
+                                    </>
+                                ) : (
+                                    <p className='text-sm text-zinc-400'>{t('emergency_contact_sub')}</p>
+                                )}
+                            </div>
+                            <div className='flex space-x-3'>
+                                {!ecLoading && !ecError && emergencyContact ? (
+                                    <>
+                                        <button
+                                            onClick={() => {
+                                                if (emergencyContact.phone) {
+                                                    window.location.href = `tel:${emergencyContact.phone}`
+                                                }
+                                            }}
+                                            className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
+                                        >
+                                            <i className="ri-phone-line text-lg" />
+                                            {t('call')}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (emergencyContact.phone) {
+                                                    const rideDetails = {
+                                                        driverName: ride?.captain?.name || 'Driver',
+                                                        vehicleInfo: `${ride?.captain?.vehicleType || 'Vehicle'} ${ride?.captain?.vehicleNumber || ''}`,
+                                                        pickup: ride?.pickupLocation || '—',
+                                                        destination: ride?.dropLocation || ride?.destination || '—',
+                                                        status: ride?.status || '—',
+                                                        eta: ride?.eta || 'Calculating...',
+                                                        rideId: ride?._id || '—'
+                                                    }
+                                                    const message = `RideEasy Emergency Alert: I'm currently in a ride and need to share my ride details for safety.\n\nDriver: ${rideDetails.driverName}\nVehicle: ${rideDetails.vehicleInfo}\nPickup: ${rideDetails.pickup}\nDestination: ${rideDetails.destination}\nStatus: ${rideDetails.status}\nETA: ${rideDetails.eta}\nRide ID: ${rideDetails.rideId}\n\nPlease check on me if needed.`
+                                                    window.location.href = `https://wa.me/${emergencyContact.phone}?text=${encodeURIComponent(message)}`
+                                                }
+                                            }}
+                                            className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
+                                        >
+                                            <i className="ri-chat-3-line text-lg" />
+                                            {t('share')}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={() => navigate('/emergency-contact')}
+                                        className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
+                                    >
+                                        <i className="ri-add-line text-lg" />
+                                        {t('add_contact')}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
                 <button className='w-full mt-5 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-400 font-semibold p-3' disabled>
-                    Payment & receipt when the driver ends the ride
+                    {t('payment_receipt_when_ends')}
                 </button>
             </div>
         </div>

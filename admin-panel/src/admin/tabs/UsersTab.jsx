@@ -1,5 +1,6 @@
 import React from 'react'
 import { displayName, rowStableKey } from '../adminUtils'
+import { useLanguage } from '../../i18n'
 
 export default function UsersTab ({
   usersLoading,
@@ -16,25 +17,27 @@ export default function UsersTab ({
   deleteUser,
   bulkDeleteUsers,
 }) {
+  const { t } = useLanguage()
+
   return (
     <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl">
       {usersLoading ? (
-        <div className="p-12 text-center text-neutral-600">Loading users…</div>
+        <div className="p-12 text-center text-neutral-600">{t('loading_users')}</div>
       ) : (
         <>
           <div className="flex flex-col gap-3 border-b border-neutral-200 px-3 py-3 sm:px-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <input
               type="search"
-              placeholder="Search name, email, phone, city…"
+              placeholder={t('search_users_placeholder')}
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
               className="w-full max-w-full sm:max-w-md rounded-lg border border-neutral-300 bg-white text-black px-3 py-2 text-sm placeholder:text-neutral-500 focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
             {selectedIds.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-neutral-600">{selectedIds.length} selected</span>
-                <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">Clear</button>
-                <button type="button" onClick={bulkDeleteUsers} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">Delete selected</button>
+                <span className="text-xs text-neutral-600">{t('selected_count', { count: selectedIds.length })}</span>
+                <button type="button" onClick={clearSelection} className="text-xs text-neutral-600 hover:text-black">{t('clear')}</button>
+                <button type="button" onClick={bulkDeleteUsers} className="rounded-lg border border-black bg-black px-2 py-1.5 sm:px-3 text-xs font-medium text-white hover:bg-neutral-800">{t('delete_selected')}</button>
               </div>
             )}
           </div>
@@ -51,19 +54,19 @@ export default function UsersTab ({
                       onChange={(e) => (e.target.checked ? selectAllVisible(filteredUsers) : clearSelection())}
                     />
                   </th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Phone</th>
-                  <th className="px-4 py-3">City</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Action</th>
+                  <th className="px-4 py-3">{t('name_col')}</th>
+                  <th className="px-4 py-3">{t('email_col')}</th>
+                  <th className="px-4 py-3">{t('phone_col')}</th>
+                  <th className="px-4 py-3">{t('city_col')}</th>
+                  <th className="px-4 py-3">{t('status_col')}</th>
+                  <th className="px-4 py-3">{t('action_col')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-200">
                 {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                      {users.length === 0 ? 'No users yet.' : 'No users match your search.'}
+                      {users.length === 0 ? t('no_users_yet') : t('no_users_match')}
                     </td>
                   </tr>
                 )}
@@ -83,7 +86,7 @@ export default function UsersTab ({
                     <td className="px-4 py-3 text-neutral-600">{u.city || '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${u.blocked ? 'border border-black/30 bg-neutral-100 text-black' : 'bg-black text-white'}`}>
-                        {u.blocked ? 'Blocked' : 'Active'}
+                        {u.blocked ? t('blocked_status') : t('active_status')}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -93,14 +96,14 @@ export default function UsersTab ({
                           className="font-medium text-black underline decoration-neutral-400 hover:decoration-black"
                           onClick={() => toggleUserBlock(u._id, !u.blocked)}
                         >
-                          {u.blocked ? 'Unblock' : 'Block'}
+                          {u.blocked ? t('unblock') : t('block')}
                         </button>
                         <button
                           type="button"
                           className="font-medium text-neutral-600 hover:text-black underline"
                           onClick={() => deleteUser(u._id)}
                         >
-                          Delete
+                          {t('delete')}
                         </button>
                       </div>
                     </td>

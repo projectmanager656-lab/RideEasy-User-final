@@ -10,18 +10,31 @@ import {
   PaymentsTab,
   PricingTab,
 } from '../admin/tabs'
+import { useLanguage, LANGUAGE_OPTIONS } from '../i18n'
 
 const TAB_LABELS = {
-  analytics: 'Overview',
-  users: 'Users',
-  drivers: 'Drivers',
-  rides: 'Rides',
-  payments: 'Payments',
-  pricing: 'Pricing',
+  analytics: 'overview',
+  users: 'users',
+  drivers: 'drivers',
+  rides: 'rides',
+  payments: 'payments',
+  pricing: 'pricing',
 }
 
 const AdminDashboard = () => {
+  const { t, language, setLanguage } = useLanguage()
   const navigate = useNavigate()
+  const [langOpen, setLangOpen] = useState(false)
+  const langRef = useRef(null)
+
+  useEffect(() => {
+    const click = (e) => {
+      if (langRef.current && !langRef.current.contains(e.target)) setLangOpen(false)
+    }
+    window.addEventListener('mousedown', click)
+    return () => window.removeEventListener('mousedown', click)
+  }, [])
+
   const dataLoadedRef = useRef(new Set())
   const [statsNonce, setStatsNonce] = useState(0)
 
@@ -66,7 +79,7 @@ const AdminDashboard = () => {
     setTableSearch('')
   }, [tab])
 
-  const fmtErr = (e) => e?.response?.data?.message || e?.message || 'Request failed'
+  const fmtErr = (e) => e?.response?.data?.message || e?.message || t('request_failed')
 
   /** Overview only — `statsNonce` bumps on "Refresh stats" without re-fetching rides/users/etc. */
   useEffect(() => {
@@ -210,17 +223,17 @@ const AdminDashboard = () => {
         const d = data?.driver
         if (d) mergeDriver(d)
       })
-      .catch((e) => alert(e.response?.data?.message || 'Failed'))
+      .catch((e) => alert(e.response?.data?.message || t('failed')))
   }
 
   const rejectDriver = (driverId) => {
-    if (!window.confirm('Remove driver approval? They will need approval again before going online.')) return
+    if (!window.confirm(t('confirm_remove_driver_approval'))) return
     adminApi.rejectDriver(driverId)
       .then((data) => {
         const d = data?.driver
         if (d) mergeDriver(d)
       })
-      .catch((e) => alert(e.response?.data?.message || 'Failed'))
+      .catch((e) => alert(e.response?.data?.message || t('failed')))
   }
 
   const toggleUserBlock = (userId, blocked) => {
@@ -231,7 +244,7 @@ const AdminDashboard = () => {
           setUsers((list) => list.map((x) => (String(x._id) === String(u._id) ? { ...x, ...u } : x)))
         }
       })
-      .catch((e) => alert(e.response?.data?.message || 'Failed'))
+      .catch((e) => alert(e.response?.data?.message || t('failed')))
   }
 
   const toggleDriverBlock = (driverId, blocked) => {
@@ -240,31 +253,31 @@ const AdminDashboard = () => {
         const d = data?.driver
         if (d) mergeDriver(d)
       })
-      .catch((e) => alert(e.response?.data?.message || 'Failed'))
+      .catch((e) => alert(e.response?.data?.message || t('failed')))
   }
 
   const deleteUser = (userId) => {
-    if (!window.confirm('Permanently delete this user from the database? This cannot be undone.')) return
+    if (!window.confirm(t('confirm_delete_user'))) return
     adminApi.deleteUser(userId)
       .then(() => {
         setUsers((list) => list.filter((x) => String(x._id) !== String(userId)))
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('delete_failed')))
   }
 
   const deleteDriver = (driverId) => {
-    if (!window.confirm('Permanently delete this driver from the database? This cannot be undone.')) return
+    if (!window.confirm(t('confirm_delete_driver'))) return
     adminApi.deleteDriver(driverId)
       .then(() => {
         setDrivers((list) => list.filter((x) => String(x._id) !== String(driverId)))
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('delete_failed')))
   }
 
   const deleteRide = (rideId) => {
-    if (!window.confirm('Permanently delete this ride record? This cannot be undone.')) return
+    if (!window.confirm(t('confirm_delete_ride'))) return
     adminApi.deleteRide(rideId)
       .then(() => {
         setRides((list) => list.filter((x) => String(x._id) !== String(rideId)))
@@ -272,7 +285,7 @@ const AdminDashboard = () => {
         setSelectedIds((prev) => prev.filter((x) => x !== String(rideId)))
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('delete_failed')))
   }
 
   const filteredUsers = useMemo(() => {
@@ -348,33 +361,33 @@ const AdminDashboard = () => {
   const bulkDeleteUsers = () => {
     const ids = selectedIds.filter((id) => users.some((u) => String(u._id) === id))
     if (ids.length === 0) return
-    if (!window.confirm(`Delete ${ids.length} user(s) permanently?`)) return
+    if (!window.confirm(t('confirm_bulk_delete_users', { count: ids.length }))) return
     Promise.all(ids.map((id) => adminApi.deleteUser(id)))
       .then(() => {
         setUsers((list) => list.filter((u) => !ids.includes(String(u._id))))
         clearSelection()
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Bulk delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('bulk_delete_failed')))
   }
 
   const bulkDeleteDrivers = () => {
     const ids = selectedIds.filter((id) => drivers.some((d) => String(d._id) === id))
     if (ids.length === 0) return
-    if (!window.confirm(`Delete ${ids.length} driver(s) permanently?`)) return
+    if (!window.confirm(t('confirm_bulk_delete_drivers', { count: ids.length }))) return
     Promise.all(ids.map((id) => adminApi.deleteDriver(id)))
       .then(() => {
         setDrivers((list) => list.filter((d) => !ids.includes(String(d._id))))
         clearSelection()
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Bulk delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('bulk_delete_failed')))
   }
 
   const bulkDeleteRides = () => {
     const ids = selectedIds.filter((id) => rides.some((r) => String(r._id) === id))
     if (ids.length === 0) return
-    if (!window.confirm(`Delete ${ids.length} ride record(s) permanently?`)) return
+    if (!window.confirm(t('confirm_bulk_delete_rides', { count: ids.length }))) return
     Promise.all(ids.map((id) => adminApi.deleteRide(id)))
       .then(() => {
         setRides((list) => list.filter((r) => !ids.includes(String(r._id))))
@@ -382,7 +395,7 @@ const AdminDashboard = () => {
         clearSelection()
         silentRefreshAnalytics()
       })
-      .catch((e) => alert(e.response?.data?.message || e.message || 'Bulk delete failed'))
+      .catch((e) => alert(e.response?.data?.message || e.message || t('bulk_delete_failed')))
   }
 
   const bulkDeletePayments = () => {
@@ -407,11 +420,11 @@ const AdminDashboard = () => {
             rates: d.rates || {},
             driverPlans: d.driverPlans || {},
           }, null, 2))
-          alert('Pricing saved')
+          alert(t('pricing_saved'))
         })
-        .catch((e) => alert(e.response?.data?.message || 'Failed'))
+        .catch((e) => alert(e.response?.data?.message || t('failed')))
     } catch {
-      alert('Invalid JSON')
+      alert(t('invalid_json'))
     }
   }
 
@@ -422,24 +435,65 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black">
-      <nav className="sticky top-0 z-20 border-b border-black/10 bg-white/95 backdrop-blur">
+    <div className="min-h-screen bg-white text-black font-sans">
+      <nav className="sticky top-0 z-30 border-b border-black/10 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 py-3 sm:gap-4 sm:px-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-500">RideEasy</p>
-            <h1 className="text-base sm:text-lg font-semibold text-black">Super Admin</h1>
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:block">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">RideEasy</p>
+              <h1 className="text-base font-bold text-slate-900">{t('super_admin')}</h1>
+            </div>
+            <div className="sm:hidden">
+              <h1 className="text-base font-bold text-slate-900">RE Admin</h1>
+            </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <div className="relative" ref={langRef}>
+              <button
+                type="button"
+                onClick={() => setLangOpen(!langOpen)}
+                className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                  langOpen ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-neutral-300 bg-white text-slate-700 hover:border-slate-400'
+                }`}
+              >
+                <i className="ri-translate-2 text-sm" />
+                <span className="hidden min-[400px]:inline">{LANGUAGE_OPTIONS.find(o => o.code === language)?.label}</span>
+                <i className={`ri-arrow-down-s-line transition-transform duration-200 ${langOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {langOpen && (
+                <div className="absolute right-0 mt-2 w-32 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+                  {LANGUAGE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.code}
+                      onClick={() => {
+                        setLanguage(opt.code)
+                        setLangOpen(false)
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-neutral-50 ${
+                        opt.code === language ? 'bg-emerald-50 font-semibold text-emerald-600' : 'text-slate-700'
+                      }`}
+                    >
+                      {opt.label}
+                      {opt.code === language && <i className="ri-check-line text-sm" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={refreshStats}
-              className="rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-black hover:bg-neutral-100 sm:px-3"
+              className="rounded-lg border border-neutral-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-neutral-50 sm:px-3"
             >
-              Refresh
+              <i className="ri-refresh-line sm:mr-1" />
+              <span className="hidden sm:inline">{t('refresh')}</span>
             </button>
-            <Link to="/" className="text-xs sm:text-sm text-neutral-600 hover:text-black hidden sm:block">Site</Link>
-            <button type="button" onClick={logout} className="text-xs sm:text-sm font-medium text-neutral-600 hover:text-black underline">
-              Log out
+
+            <button type="button" onClick={logout} className="text-xs font-semibold text-slate-500 hover:text-red-600 px-1 py-1">
+              {t('logout')}
             </button>
           </div>
         </div>
@@ -447,26 +501,26 @@ const AdminDashboard = () => {
 
       <div className="mx-auto max-w-7xl px-3 py-4 sm:px-4 sm:py-6">
         <div className="mb-4 sm:mb-6 max-w-3xl rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 sm:px-5 sm:py-4">
-          <p className="text-base sm:text-lg font-semibold text-black">Welcome, Super Admin</p>
+          <p className="text-base sm:text-lg font-semibold text-black">{t('welcome_super_admin')}</p>
           <p className="mt-1 text-xs sm:text-sm text-neutral-600">
-            You are signed in with an admin JWT (<code className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] sm:text-xs font-mono text-black">role: admin</code>).
-            This console covers users, drivers (captains), rides, payments from completed rides, and pricing.
+            {t('signed_in_with_admin_jwt')} (<code className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-[10px] sm:text-xs font-mono text-black">role: admin</code>).
+            {t('console_covers_text')}
           </p>
         </div>
 
         <div className="mb-4 sm:mb-6 flex flex-wrap gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:pb-0">
-          {['analytics', 'users', 'drivers', 'rides', 'payments', 'pricing'].map((t) => (
+          {['analytics', 'users', 'drivers', 'rides', 'payments', 'pricing'].map((tabId) => (
             <button
-              key={t}
+              key={tabId}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => setTab(tabId)}
               className={`rounded-lg px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition flex-shrink-0 ${
-                tab === t
+                tab === tabId
                   ? 'bg-black text-white shadow-sm'
                   : 'border border-neutral-300 bg-white text-neutral-700 hover:border-black hover:text-black'
               }`}
             >
-              {TAB_LABELS[t] || t}
+              {t(TAB_LABELS[tabId] || tabId)}
             </button>
           ))}
         </div>

@@ -12,20 +12,21 @@ import { driverBackendJson } from '../services/driverBackendFetch'
 import { useDriverLocationSocket } from '../hooks/useDriverLocationSocket'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { useLanguage } from '../i18n'
 
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }
 const LIVE_EMIT_MS = 2000
 
-function geoErrorMessage (err) {
-    if (!err) return 'Location unavailable.'
-    if (err.code === 1) return 'Location permission denied. Enable location in settings.'
-    if (err.code === 2) return 'Location unavailable.'
-    if (err.code === 3) return 'Location request timed out.'
-    return err.message || 'Location error.'
+function geoErrorMessage (err, t) {
+    if (!err) return t('location_unavailable')
+    if (err.code === 1) return t('location_permission_denied_settings')
+    if (err.code === 2) return t('location_unavailable')
+    if (err.code === 3) return t('location_request_timed_out')
+    return err.message || t('location_error')
 }
 
 const CaptainRiding = () => {
-
+    const { t } = useLanguage()
     const [ finishRidePanel, setFinishRidePanel ] = useState(false)
     const finishRidePanelRef = useRef(null)
     const location = useLocation()
@@ -71,7 +72,7 @@ const CaptainRiding = () => {
         return () => {
             socket.off(RIDE_COMPLETED, onCompleted)
         }
-    }, [socket, rideData?._id, navigate])
+    }, [socket, rideData?._id, navigate, startOtp])
 
     useEffect(() => {
         if (!socket || !rideData?._id) return
@@ -141,7 +142,7 @@ const CaptainRiding = () => {
         intervalMs: LIVE_EMIT_MS,
         onPosition: (loc) => setCurrentLocation(loc),
         onGeoError: (err) => {
-            setGeoError(geoErrorMessage(err))
+            setGeoError(geoErrorMessage(err, t))
             setCurrentLocation(defaultCenter)
         },
     })
@@ -170,7 +171,7 @@ const CaptainRiding = () => {
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
                             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                         </span>
-                        <span className="truncate text-xs font-medium text-emerald-400">Live location · passenger map</span>
+                        <span className="truncate text-xs font-medium text-emerald-400">{t('live_location_passenger_map')}</span>
                     </div>
                     {geoError ? (
                         <p role="alert" className="truncate text-[11px] text-amber-300">{geoError}</p>
@@ -180,7 +181,7 @@ const CaptainRiding = () => {
                     to='/captain-home'
                     className='shrink-0 rounded-full bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-700'
                 >
-                    Dashboard
+                    {t('dashboard')}
                 </Link>
             </div>
 
@@ -190,14 +191,14 @@ const CaptainRiding = () => {
                 }}
             >
                 <h5 className='p-1 text-center w-[90%] absolute top-0'><i className="text-3xl text-gray-800 ri-arrow-up-wide-line"></i></h5>
-                <h4 className='text-xl font-semibold'>Route to drop</h4>
+                <h4 className='text-xl font-semibold'>{t('route_to_drop')}</h4>
                 <div className='flex items-center gap-2'>
                     {showRideMap && (
                         <button type="button" onClick={(e) => { e.stopPropagation(); openInGoogleMaps(); }} className='bg-slate-700 hover:bg-slate-800 text-white font-semibold p-3 px-5 rounded-lg flex items-center gap-2'>
-                            <i className="ri-navigation-line" /> Navigate
+                            <i className="ri-navigation-line" /> {t('navigate')}
                         </button>
                     )}
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setFinishRidePanel(true); }} className='bg-green-600 text-white font-semibold p-3 px-10 rounded-lg'>Complete Ride</button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setFinishRidePanel(true); }} className='bg-green-600 text-white font-semibold p-3 px-10 rounded-lg'>{t('complete_ride')}</button>
                 </div>
             </div>
             <div ref={finishRidePanelRef} className={`fixed left-0 right-0 mx-auto w-full max-w-[480px] z-[500] bottom-0 rounded-t-3xl border-t border-zinc-800 bg-zinc-950 px-4 pb-10 pt-14 shadow-[0_-12px_48px_rgba(0,0,0,0.55)] max-h-[88dvh] overflow-y-auto transition-transform duration-300 ease-in-out ${finishRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
