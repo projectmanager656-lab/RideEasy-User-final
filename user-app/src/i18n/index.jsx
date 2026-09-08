@@ -212,6 +212,19 @@ const en = {
   vehicle: 'Vehicle',
   pickup: 'Pickup',
   drop: 'Drop',
+
+  // --- Shared / live-ride strings ---
+  call: 'Call',
+  share: 'Share',
+  upi_online: 'UPI / Online',
+  payment_receipt_when_ends: 'Payment receipt will appear when the trip ends',
+  payment_failed: 'Payment failed',
+  could_not_refresh_ride: 'Could not refresh ride',
+  failed_submit_rating: 'Failed to submit rating',
+  driver_accepted_ride: 'Driver accepted your ride',
+  please_choose_ride: 'Please choose a ride first',
+  select_pickup_drop_vehicle: 'Please select pickup, drop and a vehicle first',
+  quick_pick_map: 'Pick on map',
 }
 
 const hi = {
@@ -403,6 +416,45 @@ const hi = {
   vehicle: 'वाहन',
   pickup: 'पिकअप',
   drop: 'ड्रॉप',
+
+  // --- RideHistory.jsx (calendar / stats / modal) ---
+  all_rides: 'सभी राइड्स',
+  completed: 'पूर्ण',
+  cancelled: 'रद्द',
+  upcoming: 'आगामी',
+  total_rides: 'कुल राइड्स',
+  search_rides: 'राइड्स खोजें…',
+  view_ride: 'राइड देखें',
+  no_rides_found: 'कोई राइड नहीं मिली',
+  no_rides_sub: 'आपका राइड इतिहास यहाँ दिखेगा।',
+  cant_find_ride: 'अपनी राइड नहीं मिल रही?',
+  check_older_dates: 'पुरानी तारीखों की राइड्स देखें',
+  view_past_rides: 'पिछली राइड्स देखें →',
+  ride_details: 'राइड विवरण',
+  payment_method: 'भुगतान का तरीका',
+  cancellation_fee: 'रद्दीकरण शुल्क',
+  rating: 'रेटिंग',
+  driver: 'ड्राइवर',
+  distance_duration: 'दूरी / अवधि',
+  total_fare: 'कुल किराया',
+  view_invoice: 'इनवॉइस देखें',
+  sample_data_notice: 'नमूना राइड्स दिखाई जा रही हैं — बैकएंड उपलब्ध नहीं है।',
+  close: 'बंद करें',
+  add_contact: 'संपर्क जोड़ें',
+  call_emergent_contact: 'आपातकालीन संपर्क को कॉल करें',
+
+  // --- Shared / live-ride strings ---
+  call: 'कॉल करें',
+  share: 'शेयर करें',
+  upi_online: 'UPI / ऑनलाइन',
+  payment_receipt_when_ends: 'भुगतान रसीद ट्रिप समाप्त होने पर दिखाई देगी',
+  payment_failed: 'भुगतान विफल रहा',
+  could_not_refresh_ride: 'राइड रीफ़्रेश नहीं हो सकी',
+  failed_submit_rating: 'रेटिंग सबमिट नहीं हो सकी',
+  driver_accepted_ride: 'ड्राइवर ने आपकी राइड स्वीकार कर ली',
+  please_choose_ride: 'कृपया पहले राइड चुनें',
+  select_pickup_drop_vehicle: 'कृपया पहले पिकअप, ड्रॉप और वाहन चुनें',
+  quick_pick_map: 'मैप पर चुनें',
 }
 
 const mr = {
@@ -594,6 +646,45 @@ const mr = {
   vehicle: 'वाहन',
   pickup: 'पिकअप',
   drop: 'ड्रॉप',
+
+  // --- RideHistory.jsx (calendar / stats / modal) ---
+  all_rides: 'सर्व राइड्स',
+  completed: 'पूर्ण',
+  cancelled: 'रद्द',
+  upcoming: 'आगामी',
+  total_rides: 'एकूण राइड्स',
+  search_rides: 'राइड्स शोधा…',
+  view_ride: 'राइड पहा',
+  no_rides_found: 'राइड सापडली नाही',
+  no_rides_sub: 'तुमचा राइड इतिहास इथे दिसेल.',
+  cant_find_ride: 'तुमची राइड सापडत नाही?',
+  check_older_dates: 'जुन्या तारखांच्या राइड्स पहा',
+  view_past_rides: 'मागील राइड्स पहा →',
+  ride_details: 'राइड तपशील',
+  payment_method: 'पेमेंट पद्धत',
+  cancellation_fee: 'रद्दीकरण शुल्क',
+  rating: 'रेटिंग',
+  driver: 'ड्रायव्हर',
+  distance_duration: 'अंतर / कालावधी',
+  total_fare: 'एकूण भाडे',
+  view_invoice: 'इनव्हॉइस पहा',
+  sample_data_notice: 'नमुना राइड्स दाखवत आहोत — बॅकएंड उपलब्ध नाही.',
+  close: 'बंद करा',
+  add_contact: 'संपर्क जोडा',
+  call_emergent_contact: 'आपत्कालीन संपर्काला कॉल करा',
+
+  // --- Shared / live-ride strings ---
+  call: 'कॉल करा',
+  share: 'शेअर करा',
+  upi_online: 'UPI / ऑनलाइन',
+  payment_receipt_when_ends: 'ट्रिप संपल्यावर पेमेंट पावती दिसेल',
+  payment_failed: 'पेमेंट अयशस्वी',
+  could_not_refresh_ride: 'राइड रिफ्रेश करता आली नाही',
+  failed_submit_rating: 'रेटिंग सबमिट करता आली नाही',
+  driver_accepted_ride: 'ड्रायव्हरने तुमची राइड स्वीकारली',
+  please_choose_ride: 'कृपया आधी राइड निवडा',
+  select_pickup_drop_vehicle: 'कृपया आधी पिकअप, ड्रॉप आणि वाहन निवडा',
+  quick_pick_map: 'नकाशावर निवडा',
 }
 
 export const DEFAULT_LANGUAGE = 'en'

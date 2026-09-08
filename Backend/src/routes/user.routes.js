@@ -26,6 +26,7 @@ router.post('/google', googleLoginValidators, userController.googleLogin);
 
 router.post('/check-user', checkUserValidators, userController.checkUserExists);
 
+router.get('/onboarding/status', onboardingController.getOnboardingStatus);
 router.post('/onboarding/status', onboardingController.getOnboardingStatus);
 router.post('/onboarding/complete', onboardingController.markOnboardingComplete);
 

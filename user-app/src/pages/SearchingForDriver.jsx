@@ -4,6 +4,7 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { useUserData } from '../context/UserContext'
 import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
 import RideMap from '../components/RideMap'
@@ -161,8 +162,20 @@ const SearchingForDriver = () => {
   const rideTierId = state.tierId || null
   const fare = state.price != null ? state.price : (ride?.price ?? ride?.fare ?? null)
 
-  const pickupCoords = state.pickupCoords || null
-  const dropCoords = state.dropCoords || null
+  const [pickupCoords, setPickupCoords] = useState(state.pickupCoords || null)
+  const [dropCoords, setDropCoords] = useState(state.dropCoords || null)
+
+  /** Fill map coords from the fetched ride (GeoJSON) when arriving without navigation state. */
+  const applyGeoFromRide = (o) => {
+    const pc = o?.pickup?.coordinates
+    const dc = o?.drop?.coordinates
+    if (Array.isArray(pc) && pc.length === 2) {
+      setPickupCoords((prev) => prev || { lat: Number(pc[1]), lng: Number(pc[0]) })
+    }
+    if (Array.isArray(dc) && dc.length === 2) {
+      setDropCoords((prev) => prev || { lat: Number(dc[1]), lng: Number(dc[0]) })
+    }
+  }
 
   const [rideConfirmation, setRideConfirmation] = useState(null)
   const [cancelError, setCancelError] = useState('')
@@ -191,6 +204,19 @@ const SearchingForDriver = () => {
     } catch { /* ignore */ }
   }, [rideId])
 
+  /** Join the passenger room so status/location events reach this page (also after a refresh). */
+  const { user: currentUser } = useUserData()
+  useEffect(() => {
+    if (!socket || !currentUser?._id) return
+    const uid = String(currentUser._id)
+    const emitJoin = () => socket.emit('join', { userType: 'user', userId: uid })
+    emitJoin()
+    socket.on('connect', emitJoin)
+    return () => {
+      socket.off('connect', emitJoin)
+    }
+  }, [socket, currentUser?._id])
+
   /** Missing ride — nothing to search for. */
   useEffect(() => {
     if (rideId) return
@@ -208,6 +234,7 @@ const SearchingForDriver = () => {
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
         if (conf) setRideConfirmation(conf)
+        applyGeoFromRide(o)
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
       })
@@ -237,7 +264,7 @@ const SearchingForDriver = () => {
         const base = { ...(prev || {}) }
         const next = data.ride ? { ...base, ...data.ride, status: data.status } : { ...base, status: data.status }
         if (data.confirmation) setRideConfirmation((prevConf) => ({ ...(prevConf || {}), ...data.confirmation }))
-        if (data.status === 'started' || data.status === 'completed' || data.status === 'cancelled') {
+        if (data.status === 'completed' || data.status === 'cancelled') {
           try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
         }
         if (data.status === 'started') {
@@ -324,13 +351,13 @@ const SearchingForDriver = () => {
         if (dst === 'started') {
           if (startedHandledRef.current === rideId) return
           startedHandledRef.current = rideId
-          try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
           navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'started' } } })
           return
         }
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+        applyGeoFromRide(o)
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
       } catch { /* transient — keep polling */ }

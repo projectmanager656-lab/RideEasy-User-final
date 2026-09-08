@@ -18,8 +18,8 @@ if (!token && !hasCompletedOnboarding() && !fromWelcome) {
     return <Navigate to="/welcome" replace />
   }
 
-  // TEMP: arriving from the Welcome page must show the login form even when an
-  // old session exists (remove along with TEMP_RELOAD_TO_WELCOME).
+  // When arriving from the Welcome page, show the login form even if an old
+  // session exists (the user chose to go through the welcome/get-started flow).
   return <AuthScreen skipTokenRedirect={fromWelcome} />
 }
 

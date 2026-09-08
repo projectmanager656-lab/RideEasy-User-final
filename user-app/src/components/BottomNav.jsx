@@ -35,13 +35,6 @@ const BottomNav = ({ onMoreClick }) => {
           <span className="max-[380px]:text-[10px]">{t('book')}</span>
         </NavLink>
         <NavLink
-          to="/riding"
-          className={() => itemCls(path === '/riding')}
-        >
-          <i className="ri-roadster-line text-lg" />
-          <span className="max-[380px]:text-[10px]">{t('live')}</span>
-        </NavLink>
-        <NavLink
           to="/history"
           className={({ isActive }) => itemCls(isActive)}
         >

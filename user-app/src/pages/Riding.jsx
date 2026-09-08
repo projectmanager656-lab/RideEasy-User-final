@@ -14,11 +14,34 @@ import { useLanguage } from '../i18n'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
+/** Session key written by ChooseRide / SearchingForDriver / Home for the passenger's current ride. */
+const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+
+function readSessionRideId () {
+    try {
+        return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
+    } catch {
+        return null
+    }
+}
+
+function clearSessionRide () {
+    try {
+        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
+    } catch { /* ignore */ }
+}
+
 const Riding = () => {
     const { t } = useLanguage()
     const location = useLocation()
     const { ride: initialRide } = location.state || {}
-    const [ride, setRide] = useState(initialRide)
+    // When the page is opened without ride state (Live tab, refresh, bookmark)
+    // the session key still points at the active ride — hydrate it below.
+    const [ride, setRide] = useState(() => {
+        if (initialRide?._id) return initialRide
+        const id = readSessionRideId()
+        return id ? { _id: id } : null
+    })
     const [pickupCoords, setPickupCoords] = useState(null)
     const [dropCoords, setDropCoords] = useState(null)
     const [driverCoords, setDriverCoords] = useState(() => {
@@ -45,12 +68,44 @@ const Riding = () => {
             navigate('/login', { replace: true })
             return
         }
-        const st = String(initialRide?.status || '').trim().toLowerCase()
-        const allowed = st === 'started' || st === 'completed'
-        if (!initialRide?._id || !allowed) {
+        const st = String(ride?.status || '').trim().toLowerCase()
+        if (st === 'started' || st === 'completed') return
+        if (!ride?._id || st) {
+            // Not a live/completed ride — the guard already rejects invalid
+            // state entries, so anything else simply goes back home.
             navigate('/home', { replace: true })
+            return
         }
-    }, [ initialRide?._id, initialRide?.status, navigate ])
+        // Session-only entry (Live tab / refresh): fetch the ride and let the
+        // server decide where this ride actually belongs.
+        let cancelled = false
+        axios
+            .get(`${API_BASE_URL}/rides/${ride._id}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => {
+                if (cancelled) return
+                const doc = res.data
+                const next = String(doc?.status || '').trim().toLowerCase()
+                if (next === 'started' || next === 'completed') {
+                    setRide(doc)
+                    return
+                }
+                if (next === 'cancelled') {
+                    clearSessionRide()
+                    navigate('/home', { replace: true })
+                    return
+                }
+                // searching / accepted / arrived → belongs on the driver-search screen.
+                navigate('/searching-for-driver', { replace: true })
+            })
+            .catch(() => {
+                if (cancelled) return
+                clearSessionRide()
+                navigate('/home', { replace: true })
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [ ride?._id, ride?.status, navigate ])
     const [paying, setPaying] = useState(false)
     const [payError, setPayError] = useState('')
     const [rateError, setRateError] = useState('')
@@ -304,6 +359,7 @@ const Riding = () => {
     }, [ride?._id, t])
 
     const goHome = useCallback(() => {
+        clearSessionRide()
         navigate('/home', { replace: true })
     }, [navigate])
 
@@ -317,6 +373,7 @@ const Riding = () => {
     useEffect(() => {
         if (ride?.status !== 'completed') return
         const t = setTimeout(() => {
+            clearSessionRide()
             navigate('/home', { replace: true })
         }, 120000)
         return () => clearTimeout(t)

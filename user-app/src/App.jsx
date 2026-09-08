@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useContext, useEffect, useRef, useState } from 'react'
+import React, { Suspense, lazy, useContext, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
@@ -38,10 +38,10 @@ const authShellLoader = (
   </div>
 )
 
-// TODO: TEMPORARY — remove after project completion.
-// Every page refresh jumps to the Welcome ("Get started") page.
-const TEMP_RELOAD_TO_WELCOME = true
-
+// Redirect rules (see UserAppRoot above):
+//  - no token + onboarding not done → /welcome
+//  - no token + onboarding done     → /login
+//  - token (session restored)       → /location (the ride home screen)
 const UserAppRoot = () => {
   const { authLoading, token } = useContext(UserDataContext)
   const [ serverSynced, setServerSynced ] = useState(false)
@@ -78,15 +78,6 @@ const App = () => {
   const [moreOpen, setMoreOpen] = useState(false)
   const location = useLocation()
   const hideScrollbar = ['/help', '/safety', '/faq'].includes(location.pathname) || location.pathname.startsWith('/invoice/')
-
-  // TEMP: on a fresh page load (refresh) always land on the Welcome page.
-  // The ref is consumed only on the very first render, so in-app
-  // navigation (swipe/tap Get started, login) is never redirected.
-  const isInitialRender = useRef(true)
-  useEffect(() => { isInitialRender.current = false }, [])
-  if (TEMP_RELOAD_TO_WELCOME && isInitialRender.current && location.pathname !== '/welcome') {
-    return <Navigate to="/welcome" replace />
-  }
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-black text-white">

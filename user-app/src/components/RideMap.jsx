@@ -6,7 +6,7 @@ import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndp
 import bikeVehicleImg from '../assets/Bike-img-ride.png'
 import autoVehicleImg from '../assets/Auto-img-ride.png'
 import carVehicleImg from '../assets/Car-img-ride.png'
-import luxuryVehicleImg from '../assets/Luxury-img-ride.png'
+import luxuryVehicleImg from '../assets/luxury-img-ride.png'
 
 const containerStyle = { width: '100%', height: '100%' }
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }

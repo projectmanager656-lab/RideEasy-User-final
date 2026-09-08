@@ -19,11 +19,13 @@ import darkBg from '../../assets/rideeasy-welcome.png'
 /**
  * RideEasy authentication flow (smart detection):
  *   email/phone → /users/check-user → EXISTING → password → login verifies
- *                                              → OTP sent → verify → Home
+ *                                              → OTP sent → verify → /location
  *                                  → NEW      → registration panel slides up
  *                                              → Send OTP → OTP verification
- *                                              → auto-authenticated → Home
- * There is no "Sign up" button: new users are detected automatically.
+ *                                              → auto-authenticated → /location
+ * The /location screen runs the geolocation + Location Accuracy flow; the user
+ * continues to Home from there ("Where to go?"). No "Sign up" button: new
+ * users are detected automatically.
  */
 const AuthScreen = ({ skipTokenRedirect = false }) => {
   const { t } = useLanguage()
@@ -69,7 +71,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   useEffect(() => {
     if (authLoading) return
     if (token && !skipTokenRedirect) {
-      navigate('/home', { replace: true })
+      // Session already active → land on the /location home screen, where the
+      // existing LocationScreen geolocation / Location Accuracy flow lives.
+      navigate('/location', { replace: true })
     }
   }, [ authLoading, token, navigate, skipTokenRedirect ])
 
@@ -144,7 +148,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const completeAuth = (nextToken, nextUser) => {
     markOnboardingComplete()
     setSession(nextToken, nextUser)
-    navigate('/home', { replace: true, state: location?.state })
+    // Fresh login/registration → run the LocationScreen geolocation +
+    // Location Accuracy flow first; the user continues to Home from there.
+    navigate('/location', { replace: true, state: location?.state })
   }
 
   const handleIdentifierChange = (value) => {

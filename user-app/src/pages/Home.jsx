@@ -123,6 +123,8 @@ const Home = () => {
     const rideGeocodeOnceRef = useRef({ pick: '', drop: '' })
     /** On app open, keep search form visible until user explicitly resumes/creates a ride. */
     const keepSearchFirstRef = useRef(true)
+    /** True when Home restored an active ride from the session key (refresh / re-entry). */
+    const resumedRideFromSessionRef = useRef(false)
 
     const navigate = useNavigate()
     const location = useLocation()
@@ -242,14 +244,24 @@ const Home = () => {
                 return
             }
             const st = normalizeRideStatus(data.status)
+            if (st === 'started' || st === 'completed') {
+                /* Refresh during a live/completed ride — take the passenger back
+                   to the ride screen with the fresh server ride. */
+                navigate('/riding', {
+                    replace: true,
+                    state: { ride: { ...data, status: st } },
+                })
+                return
+            }
             if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
                 try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
                 return
             }
+            resumedRideFromSessionRef.current = true
             setVehicleFound(false)
             setWaitingForDriver(false)
         })
-    }, [ride, currentUser?._id, syncRideFromServer])
+    }, [ride, currentUser?._id, syncRideFromServer, navigate])
 
     useEffect(() => {
         if (!socket) return;
@@ -307,7 +319,7 @@ const Home = () => {
                     return { ...base, status: data.status }
                 })
                 const st = data.status
-                if (st === 'started' || st === 'completed') {
+                if (st === 'completed' || st === 'cancelled') {
                     try {
                         sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
                     } catch { /* ignore */ }
@@ -344,16 +356,31 @@ const Home = () => {
                 if (st === 'arrived' && !keepSearchFirstRef.current) setWaitingForDriver(true)
                 if (st === 'started') {
                     setWaitingForDriver(false)
-                    /* Only auto-jump to the live-ride screen while the user is
-                       actively in this booking/ride flow. A stale catch-up
-                       `started` event (sent when Home mounts after the ride
-                       already began) must not hijack normal tab navigation. */
-                    if (!keepSearchFirstRef.current) {
+                    /* Jump to the live-ride screen when the passenger is actively
+                       in this booking flow (created here) or resumed it from the
+                       session key (refresh / re-entry mid-ride). An idle Home
+                       tab never hijacks navigation — the ride stays recoverable
+                       from the Live tab via the session key. */
+                    if (!keepSearchFirstRef.current || resumedRideFromSessionRef.current) {
                         const r = data.ride || rideRef.current
                         navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
                     }
                 }
                 if (st === 'completed') {
+                    setWaitingForDriver(false)
+                    setVehicleFound(false)
+                    setRideConfirmation(null)
+                    setRide(null)
+                    setPassengerOtp('')
+                    setDriverCoords(null)
+                    setPickup('')
+                    setDestination('')
+                    setPickupCoords(null)
+                    setDropCoords(null)
+                    setFare({})
+                    setVehicleType(null)
+                }
+                if (st === 'cancelled') {
                     setWaitingForDriver(false)
                     setVehicleFound(false)
                     setRideConfirmation(null)
