@@ -1,0 +1,7 @@
+[33m5f14bb8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Fix CORS: production fallback origin, Socket.IO alignment, debug logs
+ Backend/app.js                         | 18 [32m+++++++++[m[31m----[m
+ Backend/config/cors.config.js          | 49 [32m+++++++++++++++++++++++++[m[31m---------[m
+ Backend/server.js                      |  6 [32m++++[m[31m-[m
+ frontend/.env.production               |  7 [32m+++++[m
+ frontend/src/context/SocketContext.jsx |  3 [32m++[m[31m-[m
+ 5 files changed, 63 insertions(+), 20 deletions(-)

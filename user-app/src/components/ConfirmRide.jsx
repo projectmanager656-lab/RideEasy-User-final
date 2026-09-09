@@ -1,0 +1,143 @@
+import React, { useState, useContext } from 'react'
+import { UserDataContext } from '../context/UserContext'
+import Payment from './Payment'
+import axios from 'axios'
+import { API_BASE_URL } from '../config/apiBaseUrl'
+import { findRideTier } from '../constants/rideTiers'
+import { useLanguage } from '../i18n'
+
+function passengerVehicleLabel (vehicleType) {
+    const tier = findRideTier(vehicleType)
+    if (tier) return tier.label
+    const t = String(vehicleType || '').toUpperCase()
+    if (t === 'BIKE') return 'Bike'
+    if (t === 'AUTO') return 'Auto'
+    if (t === 'CAR' || t === 'MINI' || t === 'SEDAN') return 'Cab'
+    return t || '—'
+}
+
+function passengerVehicleIconClass (vehicleType) {
+    const tier = findRideTier(vehicleType)
+    if (tier) return tier.icon
+    const t = String(vehicleType || '').toUpperCase()
+    if (t === 'BIKE') return 'ri-motorbike-line'
+    if (t === 'AUTO') return 'ri-taxi-line'
+    if (t === 'CAR' || t === 'MINI' || t === 'SEDAN') return 'ri-car-line'
+    return 'ri-roadster-line'
+}
+
+const ConfirmRide = (props) => {
+    const { t } = useLanguage()
+    const { user } = useContext(UserDataContext)
+    const [paymentMethod, setPaymentMethod] = useState(props.paymentMethod || 'Cash')
+
+    const vehicleType = props.vehicleType || 'ECONOMY'
+    const fare = props.fare || {}
+    const u = String(vehicleType).toUpperCase()
+    const tier = findRideTier(vehicleType)
+    const vehicleTypeNorm = tier
+        ? tier.vehicleType
+        : (u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO'))
+    const priceRaw = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? fare.price)
+    const price = Number.isFinite(Number(priceRaw)) && Number(priceRaw) > 0 ? Number(priceRaw) : null
+
+    const isUpiLike = paymentMethod === 'UPI' || paymentMethod === 'Online'
+
+    const handleConfirm = async (paymentMeta = {}) => {
+        if (isUpiLike && !paymentMeta?.paymentAttempted) {
+            alert('Complete UPI / online payment first, or use QR + Confirm on desktop.')
+            return
+        }
+        props.setVehicleFound(true)
+        props.setConfirmRidePanel(false)
+        const createdRide = await props.createRide({
+            paymentMethod,
+            customerName: user?.name,
+            customerPhone: user?.phone
+        })
+        if (isUpiLike && createdRide?._id) {
+            try {
+                const token = localStorage.getItem('token')
+                await axios.post(`${API_BASE_URL}/rides/upi/verify`, {
+                    rideId: createdRide._id,
+                    transactionRef: paymentMeta.transactionRef || `txn_${Date.now()}`,
+                    status: paymentMeta.status || 'PENDING',
+                    amount: paymentMeta.amount || price,
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+            } catch {
+                /* UPI verify is best-effort; ride already created */
+            }
+        }
+    }
+
+    return (
+        <div className="text-theme-primary">
+            <h5 className="p-1 text-center w-[93%] absolute top-0 cursor-pointer" onClick={() => props.setConfirmRidePanel(false)}>
+                <i className="text-3xl text-theme-muted ri-arrow-down-wide-line"></i>
+            </h5>
+            <h3 className="text-2xl font-semibold mb-4 text-theme-primary">{t('confirm_your_ride')}</h3>
+
+            <div className="w-full space-y-0 rounded-xl border border-theme overflow-hidden bg-theme-card">
+                <div className="flex items-center gap-3 p-3 border-b border-theme">
+                    <i className="ri-map-pin-user-fill text-yellow-400"></i>
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('pickup')}</p>
+                        <p className="font-medium text-theme-primary break-words">{props.pickup}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 border-b border-theme">
+                    <i className="ri-map-pin-2-fill text-yellow-400"></i>
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('drop')}</p>
+                        <p className="font-medium text-theme-primary break-words">{props.destination}</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 border-b border-theme">
+                    <i className={`${passengerVehicleIconClass(vehicleType)} text-xl text-yellow-400`} />
+                    <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('ride_type')}</p>
+                        <p className="font-medium text-theme-primary">{passengerVehicleLabel(vehicleType)}</p>
+                    </div>
+                </div>
+                {fare.distanceKm != null && (
+                    <div className="flex items-center gap-3 p-3 border-b border-theme">
+                        <i className="ri-roadster-line text-yellow-400"></i>
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('distance')}</p>
+                            <p className="font-medium text-theme-primary">{fare.distanceKm} km</p>
+                        </div>
+                    </div>
+                )}
+                {props.scheduledAt && (
+                    <div className="flex items-center gap-3 p-3 border-b border-theme">
+                        <i className="ri-calendar-event-line text-yellow-400"></i>
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('scheduled_for')}</p>
+                            <p className="font-medium text-theme-primary">{new Date(props.scheduledAt).toLocaleString()}</p>
+                        </div>
+                    </div>
+                )}
+                <div className="flex items-center gap-3 p-3 border-b border-theme">
+                    <i className="ri-currency-line text-yellow-400"></i>
+                    <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-theme-muted">{t('total_fare')}</p>
+                        <p className="text-lg font-semibold text-theme-primary">{price != null ? `₹${price}` : t('fare_unavailable')}</p>
+                    </div>
+                </div>
+
+                {price != null ? (
+                    <Payment
+                        amount={price}
+                        method={paymentMethod}
+                        onMethodChange={setPaymentMethod}
+                        onContinue={handleConfirm}
+                    />
+                ) : null}
+            </div>
+        </div>
+    )
+}
+
+export default ConfirmRide

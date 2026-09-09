@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RideEasy Passenger</string>
+    <string name="title_activity_main">RideEasy Passenger</string>
+    <string name="package_name">com.rideeasy.passenger</string>
+    <string name="custom_url_scheme">com.rideeasy.passenger</string>
+</resources>

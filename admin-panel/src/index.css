@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply overflow-x-hidden antialiased text-neutral-900 bg-white;
+  }
+  #root {
+    @apply min-h-dvh min-h-screen min-h-[100dvh] text-neutral-900;
+  }
+}

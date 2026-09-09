@@ -1,0 +1,6 @@
+export { default as OverviewTab } from './OverviewTab'
+export { default as UsersTab } from './UsersTab'
+export { default as DriversTab } from './DriversTab'
+export { default as RidesTab } from './RidesTab'
+export { default as PaymentsTab } from './PaymentsTab'
+export { default as PricingTab } from './PricingTab'
