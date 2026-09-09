@@ -8,6 +8,8 @@
     "seed:captain": "node src/scripts/seed-test-captain.js",
     "migrate:vehicle-types": "node src/scripts/migrate-legacy-vehicle-types.js",
     "migrate:services": "node src/scripts/ensure-services-doc.js",
+    "migrate:user-city-bank-details": "node src/scripts/remove-user-city-bank-details.js",
+    "migrate:captain-onboarding-serving-city": "node src/scripts/migrate-captain-onboarding-serving-city.js",
     "test": "jest",
     "test:coverage": "jest --coverage"
   },
@@ -23,6 +25,7 @@
     "express-validator": "^7.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.2",
+    "razorpay": "^2.9.8",
     "serverless-http": "^4.0.0",
     "socket.io": "^4.8.3",
     "zod": "^4.4.3"

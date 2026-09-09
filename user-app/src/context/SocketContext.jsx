@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useMemo } from 'react'
 import { io } from 'socket.io-client'
 import { getSocketBaseUrl } from '../config/apiBaseUrl'
+import { getPassengerToken } from '../utils/authTokens'
 
 /** Default `undefined` when no Provider (must not destructure directly from useContext). */
 export const SocketContext = createContext(undefined)
@@ -64,7 +65,12 @@ const SocketProvider = ({ children }) => {
         }
         await new Promise((r) => setTimeout(r, 400))
       }
-      if (!cancelled) socket.connect()
+      if (cancelled) return
+      // Backend Socket.IO middleware rejects handshakes without a valid JWT.
+      const token = getPassengerToken()
+      if (!token) return
+      socket.auth = { token }
+      socket.connect()
     })()
 
     return () => {

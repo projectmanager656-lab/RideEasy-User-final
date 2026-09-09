@@ -93,7 +93,13 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
                 showNotice(t('google_login_failed'))
               }
             } catch (err) {
-              showNotice(formatApiError(err))
+              // Backend may not expose Google sign-in yet — surface that honestly
+              // instead of a generic failure.
+              if (err?.response?.status === 404) {
+                showNotice(t('social_login_unavailable'))
+              } else {
+                showNotice(formatApiError(err))
+              }
             }
           },
         })
@@ -120,6 +126,12 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
       return
     }
     setNotice('')
+    // Without a Google OAuth backend endpoint the sign-in cannot complete —
+    // show an honest notice rather than launching a flow that will 404.
+    if (!GOOGLE_CLIENT_ID) {
+      showNotice(t('social_login_unavailable'))
+      return
+    }
     loadGoogleIdentity()
       .then((google) => {
         google.accounts.id.prompt()

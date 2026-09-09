@@ -111,8 +111,6 @@ module.exports.authAdmin = async (req, res, next) => {
         const admin = await adminModel.findById(aid);
         if (!admin) return fail(res, req, 401, 'Unauthorized');
         req.admin = admin;
-        req.authId = admin._id;
-        req.authRole = 'admin';
         return next();
     } catch (err) {
         if (err && err.message === 'JWT_SECRET is not configured') {

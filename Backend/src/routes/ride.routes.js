@@ -9,9 +9,8 @@ router.post('/create',
     auth.authUser,
     body('pickupLocation').isString().isLength({ min: 3 }),
     body('dropLocation').isString().isLength({ min: 3 }),
-    body('city').optional().isIn([ 'Kolhapur', 'Ichalkaranji', 'Sangli' ]),
     body('vehicleType').isString().isIn([ 'BIKE', 'AUTO', 'CAR' ]),
-    body('paymentMethod').isString(),
+    body('paymentMethod').optional().isString().isIn([ 'Cash' ]),
     body('price').isNumeric(),
     body('distanceKm').optional().isNumeric(),
     body('pickupLat').optional().isFloat({ min: -90, max: 90 }),
@@ -47,22 +46,6 @@ router.get('/user/history', auth.authUser, rideController.userRideHistory);
 router.get('/history', auth.authUser, rideController.userRideHistory);
 router.get('/:id/passenger-otp', auth.authUser, rideController.getPassengerOtp);
 
-router.post('/pay-mock',
-    auth.authUser,
-    body('rideId').isMongoId(),
-    body('method').isString(),
-    body('part').optional().isIn([ 'advance', 'remaining' ]),
-    rideController.payMock
-);
-router.post('/upi/verify',
-    auth.authUser,
-    body('rideId').isMongoId(),
-    body('transactionRef').isString().isLength({ min: 3 }),
-    body('status').isString(),
-    body('amount').optional().isNumeric(),
-    rideController.verifyUpiIntent
-);
-
 router.patch('/:id/accept', auth.authCaptain, rideController.acceptRide);
 router.patch('/:id/reject', auth.authCaptain, rideController.rejectRide);
 router.patch('/:id/cancel', auth.authUser, body('reason').optional().isString().isLength({ max: 240 }), rideController.cancelRideByUser);
@@ -91,7 +74,11 @@ router.post('/rate',
 
 router.post('/:id/retry-assign', auth.authUser, rideController.retryAssign);
 
-/** Passenger invoice for a completed ride — keep before the catch-all GET /:id. */
+/** Passenger records a real ride payment (advance/remaining) — persists a ledger row. */
+router.post('/pay-mock', auth.authUser, rideController.payMock);
+/** Passenger verifies a UPI payment intent (real, idempotent ledger write). */
+router.post('/upi/verify', auth.authUser, rideController.verifyUpiPayment);
+/** Passenger invoice built from the actual ride + payment ledger. */
 router.get('/:id/invoice', auth.authUser, rideController.getRideInvoice);
 
 router.get('/:id', auth.authUserOrCaptain, rideController.getRideById); // keep after /:id/passenger-otp

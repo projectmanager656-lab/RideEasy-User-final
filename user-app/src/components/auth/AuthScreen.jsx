@@ -47,7 +47,11 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const [ loginLoading, setLoginLoading ] = useState(false)
 
   // account-detection state: unknown → checking → existing | new
-  const [ accountState, setAccountState ] = useState('unknown')
+  // Default to `existing` so the email/password login form is immediately
+  // usable. The backend signs users in with POST /users/login (email+password)
+  // and returns { token, user } directly — there is no separate check endpoint.
+  const initialAccountState = initialRegister ? 'new' : 'existing'
+  const [ accountState, setAccountState ] = useState(initialAccountState)
   const [ checkingAccount, setCheckingAccount ] = useState(false)
 
   // registration state (shared between the registration + OTP panes)
@@ -155,11 +159,13 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
 
   const handleIdentifierChange = (value) => {
     setIdentifier(value)
-    setAccountState('unknown')
+    setAccountState('existing') // keep the email/password login form visible as the user types
     setLoginError('')
   }
 
-  // Backend account lookup: decides the login vs auto-registration flow.
+  // Backend account lookup — no standalone check endpoint exists, so this is a
+  // local transition used when the user taps "Create account" / enters the flow.
+  // Accounts are verified by POST /users/login (email+password) directly.
   const checkAccount = async (id) => {
     if (checkingAccount) return
     const cleanId = String(id || identifier || '').trim()
@@ -167,13 +173,8 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setCheckingAccount(true)
     setLoginError('')
     try {
-      const response = await apiClient.post('/users/check-user', { identifier: cleanId })
-      const data = stripApiEnvelope(response.data)
-      if (data?.exists) {
-        setAccountState('existing')
-        return
-      }
-      // New user: auto-reveal registration with the identifier pre-filled.
+      // A phone/email that has no local record is treated as a new account:
+      // reveal the registration panel with the identifier pre-filled.
       setAccountState('new')
       const isEmailLike = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId)
       setDraft((prev) => ({
@@ -195,25 +196,20 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     e.preventDefault()
     const id = String(identifier || '').trim()
     if (!id || loginLoading) return
-    // Not yet classified → run the account check first.
-    if (accountState !== 'existing') {
-      await checkAccount(id)
-      return
-    }
     if (!password) return
     setLoginError('')
     setLoginLoading(true)
     try {
+      // Backend contract: POST /users/login with { email, password } → { token, user }.
       const response = await apiClient.post('/users/login', {
-        identifier: id,
+        email: id,
         password,
       })
       const data = stripApiEnvelope(response.data)
-      // Password verified → backend sent an OTP → open the OTP pane.
-      if (data?.passwordVerified) {
-        setLoginOtpIdentifier(id)
-        setLoginOtpDevOtp(data?.debugOtp ? String(data.debugOtp) : '')
-        setOtpOpen(true)
+      const token = data?.token
+      const user = data?.user ?? data
+      if (token && user) {
+        completeAuth(token, user)
       } else {
         setLoginError(t('login_response_missing'))
       }
@@ -253,7 +249,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const goToLogin = () => {
     const prefilled = String(draft.email || draft.phone || '').trim()
     if (prefilled) setIdentifier(prefilled)
-    setAccountState('unknown')
+    setAccountState('existing')
     setPassword('')
     setOtpOpen(false)
     setRegisterOpen(false)

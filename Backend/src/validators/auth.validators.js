@@ -5,11 +5,6 @@ const registerUserValidators = [
     body('phone').isString().isLength({ min: 6 }),
     body('email').isEmail(),
     body('password').isString().isLength({ min: 6 }),
-    body('city').optional().isIn([ 'Kolhapur', 'Ichalkaranji', 'Sangli' ]),
-    body('bankDetails.accountHolderName').isString().isLength({ min: 2 }),
-    body('bankDetails.accountNumber').isString().isLength({ min: 9, max: 18 }),
-    body('bankDetails.ifscCode').isString().isLength({ min: 11, max: 11 }),
-    body('bankDetails.upiId').isString().isLength({ min: 5 }),
     // Empty string from UI must be ignored (otherwise min length fails when referral is optional).
     body('referredByCode').optional({ checkFalsy: true }).isString().trim().isLength({ min: 4, max: 24 }),
 ];
@@ -19,52 +14,19 @@ const registerCaptainValidators = [
     body('phone').isString().isLength({ min: 6 }),
     body('email').isEmail(),
     body('password').isString().isLength({ min: 6 }),
-    body('vehicleType').isString().isIn([ 'BIKE', 'AUTO', 'CAR' ]),
-    body('vehicleNumber').isString().isLength({ min: 3 }),
-    body('license').isString().isLength({ min: 5 }),
-    body('city').optional().isIn([ 'Kolhapur', 'Ichalkaranji', 'Sangli' ]),
-    body('subscriptionPlan').optional().isIn([ 'weekly', 'monthly', 'yearly' ]),
-    body('upiId').optional({ checkFalsy: true }).isString().isLength({ min: 5, max: 100 }),
-    body('paymentQrUrl').optional({ checkFalsy: true }).isString().isLength({ max: 2048 }),
 ];
 
-// `identifier` accepts either an email or a 10+ digit phone number.
-// `email` remains supported for older clients.
 const loginValidators = [
-    body('identifier').optional().isString().trim().isLength({ min: 3, max: 320 }),
-    body('email').optional().isEmail(),
+    body('email').isEmail(),
     body('password').isString().isLength({ min: 1 }),
 ];
 
 const phoneOtpSendValidators = [
     body('phone').isString().isLength({ min: 10 }),
-    body('name').optional({ checkFalsy: true }).isString().trim().isLength({ min: 2, max: 80 }),
-    body('email').optional({ checkFalsy: true }).isEmail(),
 ];
 
 const phoneOtpVerifyValidators = [
     body('phone').isString().isLength({ min: 10 }),
-    body('otp').isString().isLength({ min: 6, max: 6 }),
-];
-
-// `identifier` accepts either an email or a 10+ digit phone number.
-// Used only to answer "does this account already exist?" — never returns
-// any user data, only a boolean.
-const checkUserValidators = [
-    body('identifier').isString().trim().isLength({ min: 3, max: 320 }),
-];
-
-const googleLoginValidators = [
-    body('idToken').isString().notEmpty(),
-];
-
-// OTP login: `identifier` accepts either an email or a 10+ digit phone number.
-const loginOtpSendValidators = [
-    body('identifier').isString().trim().isLength({ min: 3, max: 320 }),
-];
-
-const loginOtpVerifyValidators = [
-    body('identifier').isString().trim().isLength({ min: 3, max: 320 }),
     body('otp').isString().isLength({ min: 6, max: 6 }),
 ];
 
@@ -74,8 +36,4 @@ module.exports = {
     loginValidators,
     phoneOtpSendValidators,
     phoneOtpVerifyValidators,
-    checkUserValidators,
-    googleLoginValidators,
-    loginOtpSendValidators,
-    loginOtpVerifyValidators,
 };

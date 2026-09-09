@@ -28,7 +28,8 @@ const rideSchema = new mongoose.Schema({
         default: 'searching',
     },
 
-    paymentMethod: { type: String, enum: [ 'UPI', 'QR', 'Cash', 'WALLET' ], required: true },
+    /** Passenger ride fares are cash only; settlement is captain-confirmed after completion. */
+    paymentMethod: { type: String, enum: [ 'Cash' ], required: true, default: 'Cash' },
     paymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
     duration: { type: Number }, // seconds
     cancellationFee: { type: Number, default: 0 },
@@ -55,22 +56,8 @@ const rideSchema = new mongoose.Schema({
     discountAmount: { type: Number, default: 0 },
     discountReason: { type: String, default: '' },
     chargedAmount: { type: Number },
-    /** 25% UPI advance collected after driver acceptance; remaining is charged at completion. */
-    advanceAmount: { type: Number, default: 0 },
-    advancePaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
-    advanceRef: { type: String, default: '' },
-    advancePaidAt: { type: Date, default: null },
-    /** Remaining balance = fare − advance (set when the advance is paid). */
-    remainingAmount: { type: Number, default: 0 },
-    remainingPaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
-    remainingPaidAt: { type: Date, default: null },
     customerName: { type: String },
     customerPhone: { type: String },
-    /** Stable, human-readable invoice id — assigned once when the ride completes. */
-    invoiceNumber: { type: String, index: true },
-    /** Internal per-day invoice sequence counter (counter doc only). */
-    invoiceSeqKey: { type: String },
-    invoiceSeq: { type: Number, default: 0 },
 }, { timestamps: true });
 
 rideSchema.index({ pickup: '2dsphere' });
