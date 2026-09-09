@@ -199,18 +199,23 @@ const Home = () => {
     }, [socket, currentUser?._id]);
 
     /** Passenger GPS → map + Socket.IO for driver app (server forwards to assigned captain). */
+    const hasRide = Boolean(ride)
+    const rideStatus = normalizeRideStatus(ride?.status)
     useEffect(() => {
-        const st = normalizeRideStatus(ride?.status)
         const activeRide =
             vehicleFound
             || waitingForDriver
-            || (ride && [ 'searching', 'accepted', 'arrived', 'started' ].includes(st))
+            || (hasRide && [ 'searching', 'accepted', 'arrived', 'started' ].includes(rideStatus))
         if (!socket || !currentUser?._id || !activeRide || !navigator.geolocation) {
             if (!activeRide) setPassengerCoords(null)
             return
         }
         let emitTimer
-        const watchId = navigator.geolocation.watchPosition(
+        let watchId = null
+        const stopOnLocationError = () => {
+            if (watchId != null) navigator.geolocation.clearWatch(watchId)
+        }
+        watchId = navigator.geolocation.watchPosition(
             (pos) => {
                 const lat = pos.coords.latitude
                 const lng = pos.coords.longitude
@@ -220,14 +225,14 @@ const Home = () => {
                     socket.emit('user:location-update', { lat, lng })
                 }, 800)
             },
-            () => {},
+            stopOnLocationError,
             { enableHighAccuracy: true, maximumAge: 10_000 }
         )
         return () => {
             clearTimeout(emitTimer)
             navigator.geolocation.clearWatch(watchId)
         }
-    }, [socket, currentUser?._id, vehicleFound, waitingForDriver, ride])
+    }, [socket, currentUser?._id, vehicleFound, waitingForDriver, hasRide, rideStatus, ride?._id])
 
     /** Restore active booking after refresh (ride id in sessionStorage). */
     useEffect(() => {

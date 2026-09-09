@@ -193,6 +193,7 @@ const SearchingForDriver = () => {
   const [passengerOtp, setPassengerOtp] = useState('')
   /** Guard so a single "started" event can't fire duplicate /riding navigations. */
   const startedHandledRef = useRef(null)
+  const missingRideHandledRef = useRef(false)
 
   const socket = useSocket()
   const rideIdRef = useRef(null)
@@ -242,7 +243,12 @@ const SearchingForDriver = () => {
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
       })
-      .catch(() => { /* polling + socket will keep trying */ })
+      .catch((err) => {
+        if (err?.response?.status !== 404 || missingRideHandledRef.current) return
+        missingRideHandledRef.current = true
+        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+        navigateRef.current('/home', { replace: true })
+      })
     return () => { cancelled = true }
   }, [rideId])
 
@@ -364,7 +370,12 @@ const SearchingForDriver = () => {
         applyGeoFromRide(o)
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
-      } catch { /* transient — keep polling */ }
+      } catch (err) {
+        if (err?.response?.status !== 404 || missingRideHandledRef.current) return
+        missingRideHandledRef.current = true
+        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+        navigateRef.current('/home', { replace: true })
+      }
     }
 
     tick()
@@ -489,7 +500,13 @@ const SearchingForDriver = () => {
   /** Nearby vehicle markers only while still searching — cosmetic map markers, cleared on assignment. */
   const [nearbyVehicles, setNearbyVehicles] = useState([])
   const nearbyTimerRef = useRef(null)
+  const distanceTimeRequestRef = useRef('')
   const hasValidPickup = pickupCoords?.lat != null && pickupCoords?.lng != null
+    && String(pickupCoords.lat).trim() !== '' && String(pickupCoords.lng).trim() !== ''
+    && Number.isFinite(Number(pickupCoords.lat)) && Number.isFinite(Number(pickupCoords.lng))
+  const hasValidDestination = dropCoords?.lat != null && dropCoords?.lng != null
+    && String(dropCoords.lat).trim() !== '' && String(dropCoords.lng).trim() !== ''
+    && Number.isFinite(Number(dropCoords.lat)) && Number.isFinite(Number(dropCoords.lng))
   /** Only show markers matching the ride type the user selected. */
   const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
   useEffect(() => {
@@ -510,7 +527,7 @@ const SearchingForDriver = () => {
   /** Estimated connection time while searching (best-effort, non-blocking). */
   const [etaText, setEtaText] = useState('')
   useEffect(() => {
-    if (!isSearching || !hasValidPickup) {
+    if (!isSearching || !hasValidPickup || !hasValidDestination || !String(pickup).trim() || !String(destination).trim()) {
       setEtaText('')
       return
     }
@@ -521,8 +538,11 @@ const SearchingForDriver = () => {
       return
     }
     if (confirmation?.liveLocation?.lat != null && confirmation?.liveLocation?.lng != null) return
+    const requestKey = `${pickup}|${destination}|${pickupCoords.lat},${pickupCoords.lng}|${dropCoords.lat},${dropCoords.lng}`
+    if (distanceTimeRequestRef.current === requestKey) return
+    distanceTimeRequestRef.current = requestKey
     apiClient.get('/maps/get-distance-time', withAuth({
-      params: { pickupLat: pickupCoords.lat, pickupLng: pickupCoords.lng },
+      params: { origin: pickup, destination },
     }))
       .then((res) => {
         if (cancelled) return
@@ -534,7 +554,7 @@ const SearchingForDriver = () => {
       })
       .catch(() => { /* best-effort only */ })
     return () => { cancelled = true }
-  }, [isSearching, hasValidPickup, pickupCoords?.lat, pickupCoords?.lng, confirmation?.eta, confirmation?.etaMinutes, confirmation?.liveLocation?.lat, confirmation?.liveLocation?.lng])
+  }, [isSearching, hasValidPickup, hasValidDestination, pickup, destination, pickupCoords?.lat, pickupCoords?.lng, dropCoords?.lat, dropCoords?.lng, confirmation?.eta, confirmation?.etaMinutes, confirmation?.liveLocation?.lat, confirmation?.liveLocation?.lng])
 
   /** Live driver pin used once a driver is assigned/arrived (socket + polling feed it). */
   const liveDriverCoords = confirmation?.liveLocation || null
