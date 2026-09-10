@@ -1,6 +1,7 @@
 import React from 'react'
 import { useLanguage } from '../i18n'
 import RideStatusStepper from './RideStatusStepper'
+import RideMap from './RideMap'
 
 /**
  * Passenger ride confirmation: driver + vehicle + fare + OTP + ETA (from `confirmation` API/socket DTO).
@@ -10,7 +11,8 @@ export default function RideConfirmationPanel ({
   confirmation,
   passengerOtp,
   driverCoords,
-  pickupCoords: _pickupCoords,
+  pickupCoords,
+  dropCoords,
   onCloseWaiting,
 }) {
   const { t } = useLanguage()
@@ -34,7 +36,7 @@ export default function RideConfirmationPanel ({
     || (driverCoords?.lat != null ? { lat: driverCoords.lat, lng: driverCoords.lng } : null)
 
   return (
-    <div className="text-theme-primary">
+    <div className="min-w-0 text-theme-primary">
       <h5
         className="p-1 text-center w-[93%] absolute top-0 cursor-pointer"
         onClick={() => onCloseWaiting?.(false)}
@@ -48,6 +50,22 @@ export default function RideConfirmationPanel ({
       <div className="mb-4">
         <RideStatusStepper status={status === 'searching' ? 'accepted' : status} />
       </div>
+
+      {(pickupCoords || dropCoords || live) && (
+        <div className="mb-4 h-[30dvh] min-h-[210px] w-full shrink-0 overflow-hidden rounded-xl border border-theme bg-theme-card-muted">
+          <RideMap
+            pickupCoords={pickupCoords}
+            dropCoords={dropCoords}
+            driverCoords={live}
+            showRoute={Boolean(pickupCoords && dropCoords)}
+            trackingFrom={live?.lat != null && pickupCoords?.lat != null ? live : null}
+            trackingTo={live?.lat != null && pickupCoords?.lat != null ? pickupCoords : null}
+            showRouteStatsChip={false}
+            showTrackingEta={false}
+            zoomControlPosition="bottomleft"
+          />
+        </div>
+      )}
 
       {status === 'accepted' && (
         <div className="mb-3 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-emerald-800 text-sm">

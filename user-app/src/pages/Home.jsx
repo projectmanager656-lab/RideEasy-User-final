@@ -96,7 +96,6 @@ const Home = () => {
     const [ fare, setFare ] = useState({})
     const [ vehicleType, setVehicleType ] = useState(null)
     const [ ride, setRide ] = useState(null)
-    const [ hasShownAcceptAlert, setHasShownAcceptAlert ] = useState(false)
     const [ pickupCoords, setPickupCoords ] = useState(null)
     const [ dropCoords, setDropCoords ] = useState(null)
     const [ driverCoords, setDriverCoords ] = useState(null)
@@ -302,10 +301,6 @@ const Home = () => {
                 } catch { /* ignore */ }
                 syncRideFromServer(rid)
             }
-            if (!hasShownAcceptAlert) {
-                setHasShownAcceptAlert(true)
-                alert(t('driver_accepted_ride'))
-            }
         };
 
         const handleStatusUpdate = (data) => {
@@ -361,6 +356,8 @@ const Home = () => {
                 if (st === 'arrived' && !keepSearchFirstRef.current) setWaitingForDriver(true)
                 if (st === 'started') {
                     setWaitingForDriver(false)
+                    setVehicleFound(false)
+                    setPassengerOtp('')
                     /* Jump to the live-ride screen when the passenger is actively
                        in this booking flow (created here) or resumed it from the
                        session key (refresh / re-entry mid-ride). An idle Home
@@ -372,18 +369,16 @@ const Home = () => {
                     }
                 }
                 if (st === 'completed') {
-                    setWaitingForDriver(false)
-                    setVehicleFound(false)
-                    setRideConfirmation(null)
-                    setRide(null)
-                    setPassengerOtp('')
-                    setDriverCoords(null)
-                    setPickup('')
-                    setDestination('')
-                    setPickupCoords(null)
-                    setDropCoords(null)
-                    setFare({})
-                    setVehicleType(null)
+                    const completedRide = {
+                        ...(rideRef.current || {}),
+                        ...(data.ride || {}),
+                        status: 'completed',
+                    }
+                    try {
+                        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
+                    } catch { /* ignore */ }
+                    navigate('/riding', { replace: true, state: { ride: completedRide } })
+                    return
                 }
                 if (st === 'cancelled') {
                     setWaitingForDriver(false)
@@ -458,7 +453,7 @@ const Home = () => {
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
         }
-    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer, t]);
+    }, [socket, navigate, syncRideFromServer]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -957,7 +952,6 @@ if (!pickupSelection || !dropSelection) {
             setRide(ridePayload)
             setPassengerOtp('')
             setDriverCoords(null)
-            setHasShownAcceptAlert(false)
             if (pickup?.trim() || destination?.trim()) {
                 addRecentSearch({ pickup, destination })
                 setRecentSearches(getRecentSearches())
@@ -1002,6 +996,13 @@ if (!pickupSelection || !dropSelection) {
         waitingForDriver
         && driverCoords?.lat != null
         && pickupCoords?.lat != null
+
+    const closeWaitingPanel = () => {
+        setWaitingForDriver(false)
+        setVehicleFound(false)
+        setConfirmRidePanel(false)
+        setVehiclePanel(false)
+    }
 
     /** Once both pickup & drop are selected, move to the Choose Ride screen. */
     const chooseRideSentRef = useRef(false)
@@ -1071,9 +1072,9 @@ if (!pickupSelection || !dropSelection) {
         if (vehicleType) setVehicleType(vehicleType)
         if (scheduledAt) setScheduledAt(scheduledAt)
         setRide(ride || null)
+        keepSearchFirstRef.current = false
         setVehicleFound(true)
         setWaitingForDriver(false)
-        setHasShownAcceptAlert(false)
         try {
             sessionStorage.removeItem(DRAFT_BOOKING_KEY)
         } catch { /* ignore */ }
@@ -1288,15 +1289,16 @@ if (!pickupSelection || !dropSelection) {
                         setVehicleFound(false)
                     }} />
             </div>
-            <div ref={waitingForDriverRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={waitingForDriverRef} className={`absolute inset-x-0 bottom-0 z-50 flex max-h-[92dvh] w-full flex-col overflow-y-auto rounded-t-3xl border-t border-theme bg-theme-card px-3 pb-24 pt-12 text-theme-primary transition-transform duration-300 ease-in-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
                 <WaitingForDriver
                     ride={ride}
                     confirmation={rideConfirmation}
                     passengerOtp={passengerOtp}
                     driverCoords={driverCoords}
                     pickupCoords={pickupCoords}
+                    dropCoords={dropCoords}
                     setVehicleFound={setVehicleFound}
-                    setWaitingForDriver={setWaitingForDriver}
+                    setWaitingForDriver={closeWaitingPanel}
                     waitingForDriver={waitingForDriver} />
             </div>
         </div>

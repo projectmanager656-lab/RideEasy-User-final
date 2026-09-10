@@ -270,17 +270,21 @@ const SearchingForDriver = () => {
       const incomingRid = data?.rideId != null ? String(data.rideId) : ''
       const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
       if (incomingRid && currentRid && incomingRid !== currentRid) return
+      if (data.status === 'started') {
+        if (startedHandledRef.current === currentRid) return
+        startedHandledRef.current = currentRid
+        const nextRide = data.ride
+          ? { ...data.ride, status: 'started' }
+          : { _id: currentRid, status: 'started' }
+        navigateRef.current('/riding', { state: { ride: nextRide } })
+        return
+      }
       setRide((prev) => {
         const base = { ...(prev || {}) }
         const next = data.ride ? { ...base, ...data.ride, status: data.status } : { ...base, status: data.status }
         if (data.confirmation) setRideConfirmation((prevConf) => ({ ...(prevConf || {}), ...data.confirmation }))
         if (data.status === 'completed' || data.status === 'cancelled') {
           try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-        }
-        if (data.status === 'started') {
-          /* The REST poll effect below handles the actual navigation once the
-             server confirms `started` — no stale timeout here. */
-          startedHandledRef.current = null
         }
         return next
       })
@@ -569,10 +573,10 @@ const SearchingForDriver = () => {
   const mapShown = useMemo(() => !!pickupCoords || !!dropCoords, [pickupCoords, dropCoords])
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-theme-bg text-theme-primary">
+    <div className={`relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary ${isSearching ? '' : 'min-h-0'}`}>
       {/* Map is the primary visual area — route + nearby vehicles while searching */}
       {mapShown && (
-        <div className="absolute inset-0 z-0">
+        <div className={isSearching ? 'absolute inset-0 z-0' : 'relative z-0 h-[44dvh] min-h-[270px] shrink-0'}>
           <RideMap
             pickupCoords={pickupCoords}
             dropCoords={dropCoords}
@@ -614,11 +618,11 @@ const SearchingForDriver = () => {
       </div>
 
       {/* Dark rounded bottom sheet */}
-      <div className="absolute inset-x-0 bottom-0 z-40">
-        <div className="mx-auto max-w-[430px] rounded-t-[28px] border-t border-theme bg-theme-card pb-[max(env(safe-area-inset-bottom,0px),12px)] shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
+      <div className={isSearching ? 'absolute inset-x-0 bottom-0 z-40' : 'relative z-40 min-h-0 flex-1'}>
+        <div className={`mx-auto max-w-[430px] border-t border-theme bg-theme-card pb-[max(env(safe-area-inset-bottom,0px),12px)] shadow-[0_-8px_40px_rgba(0,0,0,0.45)] ${isSearching ? 'rounded-t-[28px]' : 'h-full overflow-hidden'}`}>
           <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-theme-muted" aria-hidden />
 
-          <div className="max-h-[46dvh] overflow-y-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className={`${isSearching ? 'max-h-[46dvh]' : 'h-full'} overflow-y-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
             {/* Status header */}
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="min-w-0">

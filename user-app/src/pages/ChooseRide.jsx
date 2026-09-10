@@ -40,6 +40,14 @@ function formatArrival (minutes) {
     return new Date(Date.now() + minutes * 60_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+function normalizeCoordinates (value) {
+    if (!value || typeof value !== 'object') return null
+    const lat = Number(value.lat ?? value.latitude)
+    const lng = Number(value.lng ?? value.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return { lat, lng }
+}
+
 const PAYMENT_METHODS = [ 'Cash', 'UPI' ]
 
 /** Ride facilities shown on Choose Ride, each with its branded logo. */
@@ -56,8 +64,12 @@ const ChooseRide = () => {
     const { t } = useLanguage()
     const state = location.state || {}
 
-    const [ pickupCoords ] = useState(state.pickupCoords || state.pickupCoordinate || null)
-    const [ dropCoords ] = useState(state.dropCoords || state.dropCoordinate || null)
+    const [ pickupCoords ] = useState(() => (
+        normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
+    ))
+    const [ dropCoords ] = useState(() => (
+        normalizeCoordinates(state.dropCoords || state.dropCoordinate || state.dropSelection)
+    ))
     const pickup = state.pickup || ''
     const destination = state.drop || state.destination || ''
 
@@ -221,7 +233,11 @@ const ChooseRide = () => {
     }
 
     const handleConfirm = async () => {
-        if (!selected || !hasRoute) return
+        if (!selected) return
+        if (!hasRoute) {
+            setBookingError(t('select_pickup_drop_first'))
+            return
+        }
         const tier = selected
         const vehicleType = tier.vehicleType
         const price = Number(tier.price) > 0 ? tier.price : null
@@ -255,19 +271,20 @@ const ChooseRide = () => {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
                 } catch { /* ignore */ }
             }
-            navigate('/searching-for-driver', {
+            navigate('/home', {
                 replace: true,
                 state: {
-                    ride: ridePayload,
-                    pickupCoords,
-                    dropCoords,
-                    pickup,
-                    destination,
-                    vehicleType,
-                    tierId: tier.id,
-                    paymentMethod,
-                    price,
-                    scheduledAt,
+                    chooseRideResult: {
+                        ride: ridePayload,
+                        pickupCoords,
+                        dropCoords,
+                        pickup,
+                        destination,
+                        vehicleType,
+                        paymentMethod,
+                        price,
+                        scheduledAt,
+                    },
                 },
             })
         } catch (err) {
