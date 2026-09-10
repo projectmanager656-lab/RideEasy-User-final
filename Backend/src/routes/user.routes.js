@@ -25,6 +25,9 @@ router.post('/phone/verify-otp',
 
 router.get('/profile', auth.authUser, userController.getProfile);
 router.get('/ride-history', auth.authUser, rideController.userRideHistory);
+
+router.post('/onboarding/complete', userController.completeOnboarding);
+router.get('/onboarding/status', userController.getOnboardingStatus);
 router.patch('/profile',
     auth.authUser,
     body('name').optional({ checkFalsy: true }).trim().isLength({ min: 2, max: 80 }),

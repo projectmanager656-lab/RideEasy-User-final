@@ -11,9 +11,8 @@ const LookingForDriver = (props) => {
     const { t } = useLanguage()
     const st = rideStatusNorm(props.ride?.status)
     const isSearching = !st || st === 'searching'
-    const isArrived = st === 'arrived'
-    /** OTP is shown to the passenger ONLY once the driver has arrived (never while searching or assigned). */
-    const showOtp = isArrived && Boolean(props.passengerOtp)
+    /** OTP shows once a driver accepts the ride (never while searching) — matches the copy and the accepted-state sync. */
+    const showOtp = !isSearching && Boolean(props.passengerOtp)
 
     return (
         <div>

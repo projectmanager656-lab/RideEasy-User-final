@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 const userModel = require('../models/user.model');
 const blackListTokenModel = require('../models/blackListToken.model');
+const userOnboardingModel = require('../models/userOnboarding.model');
 const { randomSixDigit, expiresInMinutes } = require('../utils/otp');
 const { getAuthCookieOptions } = require('../utils/authCookie');
 const { toPublicDoc } = require('../utils/publicDoc');
@@ -229,5 +230,39 @@ module.exports.verifyPhoneOtp = async (req, res) => {
     await user.save();
     const token = user.generateAuthToken();
     return res.status(200).json({ token, user: toPublicDoc(user) });
+};
+
+/** Persist per-device onboarding completion (client provides a stable deviceId). */
+module.exports.completeOnboarding = async (req, res) => {
+    const deviceId = String(req.body?.deviceId || '').trim();
+    if (!deviceId) return fail(res, req, 400, 'deviceId is required');
+
+    try {
+        await userOnboardingModel.findOneAndUpdate(
+            { deviceId },
+            { $set: { onboarded: true } },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        return ok(res, req, 200, 'Onboarding marked complete', { onboarded: true });
+    } catch (err) {
+        console.error('[users/onboarding/complete]', err?.message || err);
+        return fail(res, req, 500, 'Could not save onboarding state');
+    }
+};
+
+/** Return the server-side onboarding state for a deviceId (non-destructive, no auth). */
+module.exports.getOnboardingStatus = async (req, res) => {
+    const deviceId = String(req.query?.deviceId || '').trim();
+    if (!deviceId) return fail(res, req, 400, 'deviceId is required');
+
+    try {
+        const record = await userOnboardingModel.findOne({ deviceId }).select('onboarded');
+        return ok(res, req, 200, 'Onboarding status fetched', {
+            onboarded: Boolean(record?.onboarded),
+        });
+    } catch (err) {
+        console.error('[users/onboarding/status]', err?.message || err);
+        return fail(res, req, 500, 'Could not fetch onboarding state');
+    }
 };
 

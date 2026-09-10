@@ -18,7 +18,7 @@ function CenterOnLocation({ coords }) {
   const map = useMap()
   useEffect(() => {
     if (coords?.lat != null && coords?.lng != null) {
-      map.setView([Number(coords.lat), Number(coords.lng)], Math.max(map.getZoom(), 14), { animate: true })
+      map.setView([Number(coords.lat), Number(coords.lng)], Math.max(map.getZoom(), 14), { animate: false })
     }
   }, [map, coords?.lat, coords?.lng])
   return null

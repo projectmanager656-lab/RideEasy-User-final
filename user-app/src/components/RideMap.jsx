@@ -99,7 +99,7 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
         const isValid = (lat, lng) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
 
         if (isValid(driverCoords?.lat, driverCoords?.lng)) {
-            map.setView([Number(driverCoords.lat), Number(driverCoords.lng)], Math.max(map.getZoom(), 14), { animate: true })
+            map.setView([Number(driverCoords.lat), Number(driverCoords.lng)], Math.max(map.getZoom(), 14), { animate: false })
             return
         }
         const pts = []
@@ -114,10 +114,10 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
         }
         if (pts.length === 0) return
         if (pts.length === 1) {
-            map.setView(pts[0], 14, { animate: true })
+            map.setView(pts[0], 14, { animate: false })
             return
         }
-        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: true })
+        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: false })
     }, [
         map,
         pickupCoords?.lat,

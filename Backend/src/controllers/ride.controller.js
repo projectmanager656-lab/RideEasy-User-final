@@ -1140,9 +1140,9 @@ module.exports.getPassengerOtp = async (req, res) => {
     if (!ownerId || ownerId !== userIdOf(req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    if (ride.status !== "arrived") {
+    if (ride.status !== "accepted" && ride.status !== "arrived") {
       return res.status(400).json({
-        message: "OTP is available after the driver arrives",
+        message: "OTP is available after the driver accepts or arrives",
       });
     }
 

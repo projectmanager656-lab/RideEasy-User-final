@@ -754,8 +754,8 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Share PIN / OTP — only once the driver has ARRIVED */}
-            {isArrived && passengerOtp && (
+            {/* Share PIN / OTP — shown once a driver accepts (ready to share with the driver); matched to the accepted-state sync and the LookingForDriver sheet */}
+            {!isSearching && passengerOtp && (
               <div className="mt-3 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
                   <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />

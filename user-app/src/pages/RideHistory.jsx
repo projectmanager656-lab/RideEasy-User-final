@@ -480,12 +480,17 @@ const RideHistory = () => {
     return () => { mountedRef.current = false }
   }, [loadRides])
 
-  const items = useMemo(() => {
-    const src = rides.length > 0 ? rides : loading ? [] : demoRideHistory
-    return src.map(normalizeRide)
-  }, [rides, loading])
-
   const unreachable = !!error && rides.length === 0
+
+  const items = useMemo(() => {
+    // Prefer real backend rides. Only fall back to demo/sample entries when the
+    // backend is truly unreachable (an error occurred) — a successful empty
+    // response must show the real (empty) history, never fabricated static data.
+    const src = rides.length > 0 ? rides : loading ? [] : unreachable
+      ? demoRideHistory
+      : []
+    return src.map(normalizeRide)
+  }, [rides, loading, unreachable])
 
   const stats = useMemo(
     () => ({
