@@ -189,16 +189,27 @@ module.exports.logoutUser = async (req, res) => {
 module.exports.sendPhoneOtp = async (req, res) => {
     const phone = String(req.body?.phone || '').replace(/\D/g, '');
     if (phone.length < 10) return res.status(400).json({ message: 'Valid phone required' });
+    const requestedEmail = String(req.body?.email || '').trim().toLowerCase();
+    const requestedName = String(req.body?.name || '').trim();
+    if (requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail)) {
+        return res.status(400).json({ message: 'Valid email required' });
+    }
     const otp = randomSixDigit();
     const exposeOtp = process.env.OTP_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
     let user = await userModel.findOne({ phone });
+    if (!user && requestedEmail) {
+        user = await userModel.findOne({ email: requestedEmail });
+        if (user && String(user.phone || '').replace(/\D/g, '') !== phone) {
+            return res.status(409).json({ message: 'An account already uses this email' });
+        }
+    }
     if (!user) {
-        const syntheticEmail = `${phone}@phone.rideeasy.local`;
+        const accountEmail = requestedEmail || `${phone}@phone.rideeasy.local`;
         const hashed = await userModel.hashPassword(randomSixDigit() + 'Aa1!');
         user = await userModel.create({
-            name: 'Phone user',
+            name: requestedName.length >= 2 ? requestedName : 'Phone user',
             phone,
-            email: syntheticEmail,
+            email: accountEmail,
             password: hashed,
         });
     }
@@ -227,9 +238,46 @@ module.exports.verifyPhoneOtp = async (req, res) => {
     user.loginOtp = undefined;
     user.loginOtpExpiresAt = undefined;
     if (name && String(name).trim().length >= 2) user.name = String(name).trim();
+    if (req.body?.password && String(req.body.password).length >= 6) {
+        user.password = await userModel.hashPassword(String(req.body.password));
+    }
     await user.save();
     const token = user.generateAuthToken();
     return res.status(200).json({ token, user: toPublicDoc(user) });
+};
+
+module.exports.getEmergencyContact = async (req, res) => {
+    const user = await userModel.findById(req.user?._id).select('emergencyContact');
+    if (!user) return fail(res, req, 404, 'User not found');
+    return ok(res, req, 200, 'Emergency contact fetched', {
+        emergencyContact: user.emergencyContact?.name ? user.emergencyContact : null,
+    });
+};
+
+module.exports.saveEmergencyContact = async (req, res) => {
+    const name = String(req.body?.name || '').trim();
+    const phone = String(req.body?.phone || '').replace(/\D/g, '');
+    const relationship = String(req.body?.relationship || '').trim();
+    if (name.length < 2 || phone.length !== 10 || !relationship) {
+        return fail(res, req, 400, 'Valid emergency contact details are required');
+    }
+    const user = await userModel.findByIdAndUpdate(
+        req.user?._id,
+        { $set: { emergencyContact: { name, phone, relationship } } },
+        { new: true, runValidators: true },
+    ).select('emergencyContact');
+    if (!user) return fail(res, req, 404, 'User not found');
+    return ok(res, req, 200, 'Emergency contact saved', { emergencyContact: user.emergencyContact });
+};
+
+module.exports.deleteEmergencyContact = async (req, res) => {
+    const user = await userModel.findByIdAndUpdate(
+        req.user?._id,
+        { $set: { emergencyContact: { name: '', phone: '', relationship: '' } } },
+        { new: true },
+    ).select('emergencyContact');
+    if (!user) return fail(res, req, 404, 'User not found');
+    return ok(res, req, 200, 'Emergency contact deleted', { emergencyContact: null });
 };
 
 /** Persist per-device onboarding completion (client provides a stable deviceId). */

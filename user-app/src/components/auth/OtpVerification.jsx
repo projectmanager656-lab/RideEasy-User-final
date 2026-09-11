@@ -48,9 +48,9 @@ const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, lo
     setResendNotice('')
     try {
       const response = await apiClient.post(
-        isLogin ? '/users/login/send-otp' : '/users/phone/send-otp',
+        '/users/phone/send-otp',
         isLogin
-          ? { identifier: String(loginIdentifier).trim() }
+          ? { phone: String(loginIdentifier).trim() }
           : {
               phone: String(phone).trim(),
               ...(email ? { email } : {}),
@@ -72,9 +72,9 @@ const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, lo
     setLoading(true)
     try {
       const response = await apiClient.post(
-        isLogin ? '/users/login/verify-otp' : '/users/phone/verify-otp',
+        '/users/phone/verify-otp',
         isLogin
-          ? { identifier: String(loginIdentifier).trim(), otp: String(otp).replace(/\D/g, '') }
+          ? { phone: String(loginIdentifier).trim(), otp: String(otp).replace(/\D/g, '') }
           : {
               phone: String(phone).trim(),
               otp: String(otp).replace(/\D/g, ''),

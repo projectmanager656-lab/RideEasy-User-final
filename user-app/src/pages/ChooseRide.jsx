@@ -85,7 +85,7 @@ const ChooseRide = () => {
     const [ paymentOpen, setPaymentOpen ] = useState(false)
     const [ paymentMethod, setPaymentMethod ] = useState('Cash')
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
-    const [ scheduledAt, setScheduledAt ] = useState(null)
+    const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
     const [ booking, setBooking ] = useState(false)
     const [ bookingError, setBookingError ] = useState('')
 
@@ -264,27 +264,26 @@ const ChooseRide = () => {
                 ...(scheduledAt ? { scheduledAt } : {}),
             }, withAuth())
             const raw = stripApiEnvelope(res.data)
-            const ridePayload = { ...raw }
+            const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
             delete ridePayload.otp
             if (ridePayload?._id) {
                 try {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
                 } catch { /* ignore */ }
             }
-            navigate('/home', {
+            navigate('/searching-for-driver', {
                 replace: true,
                 state: {
-                    chooseRideResult: {
-                        ride: ridePayload,
-                        pickupCoords,
-                        dropCoords,
-                        pickup,
-                        destination,
-                        vehicleType,
-                        paymentMethod,
-                        price,
-                        scheduledAt,
-                    },
+                    ride: ridePayload,
+                    pickupCoords,
+                    dropCoords,
+                    pickup,
+                    destination,
+                    vehicleType,
+                    tierId: tier.id,
+                    paymentMethod,
+                    price,
+                    scheduledAt,
                 },
             })
         } catch (err) {

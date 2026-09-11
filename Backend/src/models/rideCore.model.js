@@ -28,8 +28,8 @@ const rideSchema = new mongoose.Schema({
         default: 'searching',
     },
 
-    /** Passenger ride fares are cash only; settlement is captain-confirmed after completion. */
-    paymentMethod: { type: String, enum: [ 'Cash' ], required: true, default: 'Cash' },
+    /** Passenger-selected payment rail; settlement is still confirmed after completion. */
+    paymentMethod: { type: String, enum: [ 'Cash', 'UPI', 'Online' ], required: true, default: 'Cash' },
     paymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
     duration: { type: Number }, // seconds
     cancellationFee: { type: Number, default: 0 },

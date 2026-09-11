@@ -11,6 +11,11 @@ const userSchema = new mongoose.Schema({
         home: { type: String, default: '' },
         work: { type: String, default: '' },
     },
+    emergencyContact: {
+        name: { type: String, default: '' },
+        phone: { type: String, default: '' },
+        relationship: { type: String, default: '' },
+    },
     password: { type: String, required: true, select: false },
     socketId: { type: String },
     walletBalance: { type: Number, default: 0 },

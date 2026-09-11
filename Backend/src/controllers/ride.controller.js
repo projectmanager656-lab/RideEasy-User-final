@@ -96,6 +96,13 @@ function inferCityFromLocationText(...values) {
   return null;
 }
 
+function normalizePaymentModeForLedger(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (v === "upi") return "UPI";
+  if (v === "online") return "Online";
+  return "Cash";
+}
+
 /** Normalize populated or lean user/captain refs to a Mongo id string (avoids "[object Object]" on emit). */
 function refToIdString(ref) {
   if (ref == null) return null;
@@ -413,6 +420,7 @@ module.exports.createRide = async (req, res) => {
     pickupLocation,
     dropLocation,
     vehicleType,
+    paymentMethod,
     customerName,
     customerPhone,
   } = req.body;
@@ -510,7 +518,7 @@ module.exports.createRide = async (req, res) => {
       dropLocation,
       city: rideCity,
       vehicleType: vehicleTypeNorm,
-      paymentMethod: "Cash",
+      paymentMethod,
       price: computedPrice,
       distanceKm: computedDistanceKm,
       customerName: customerName || req.user.name,
@@ -1788,7 +1796,7 @@ module.exports.payMock = async (req, res) => {
         userId: ride.user,
         driverId: ride.captain || null,
         amount,
-        paymentMode: String(method || "Cash") === "UPI" || String(method || "Cash") === "Online" ? "Cash" : "Cash",
+        paymentMode: normalizePaymentModeForLedger(method || ride.paymentMethod),
         paymentStatus: "success",
         paymentType: "ride_fare",
         externalRef: `txn_${Date.now()}`,
@@ -1862,7 +1870,7 @@ module.exports.verifyUpiPayment = async (req, res) => {
         userId: ride.user,
         driverId: ride.captain || null,
         amount: total,
-        paymentMode: "Cash",
+        paymentMode: normalizePaymentModeForLedger(method || ride.paymentMethod || "UPI"),
         paymentStatus: "success",
         paymentType: "ride_fare",
         externalRef: String(transactionRef || `upi_${Date.now()}`),

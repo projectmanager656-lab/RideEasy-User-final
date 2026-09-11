@@ -28,8 +28,8 @@ const paymentRecordSchema = new mongoose.Schema(
       sparse: true,
     },
     amount: { type: Number, required: true },
-    /** Cash ride settlements and captain subscription-plan records only. */
-    paymentMode: { type: String, enum: ["Cash", "PLAN"], required: true },
+    /** Ride settlements and captain subscription-plan records. */
+    paymentMode: { type: String, enum: ["Cash", "UPI", "Online", "PLAN"], required: true },
     paymentStatus: {
       type: String,
       enum: ["pending", "success", "failed"],

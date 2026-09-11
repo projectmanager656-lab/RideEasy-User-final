@@ -55,7 +55,12 @@ const SocketProvider = ({ children }) => {
     let cancelled = false
     const liveUrl = `${socketUrl}/health/live`
 
-    ;(async () => {
+    const syncConnection = async () => {
+      const token = getPassengerToken()
+      if (!token) {
+        if (socket.connected) socket.disconnect()
+        return
+      }
       for (let i = 0; i < 24 && !cancelled; i++) {
         try {
           const res = await fetch(liveUrl, { cache: 'no-store' })
@@ -66,15 +71,17 @@ const SocketProvider = ({ children }) => {
         await new Promise((r) => setTimeout(r, 400))
       }
       if (cancelled) return
-      // Backend Socket.IO middleware rejects handshakes without a valid JWT.
-      const token = getPassengerToken()
-      if (!token) return
       socket.auth = { token }
-      socket.connect()
-    })()
+      if (!socket.connected) socket.connect()
+    }
+
+    const onSessionChanged = () => { void syncConnection() }
+    window.addEventListener('rideeasy:session-changed', onSessionChanged)
+    void syncConnection()
 
     return () => {
       cancelled = true
+      window.removeEventListener('rideeasy:session-changed', onSessionChanged)
     }
   }, [])
 

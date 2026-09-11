@@ -865,11 +865,11 @@ const Home = () => {
     const handleScheduleContinue = (iso) => {
         setScheduledAt(iso)
         setScheduleOpen(false)
-        findTrip()
+        findTrip(iso)
     }
 
-    async function findTrip() {
-if (!pickupSelection || !dropSelection) {
+    async function findTrip(scheduledOverride = scheduledAt) {
+        if (!pickupSelection || !dropSelection) {
             setBookingError(t('select_both_pickup_drop'))
             return
         }
@@ -900,8 +900,33 @@ if (!pickupSelection || !dropSelection) {
                     dropLng: du.lng,
                 },
             }))
-            setFare(stripApiEnvelope(response.data))
-            setVehiclePanel(true)
+            const farePayload = stripApiEnvelope(response.data) || {}
+            setFare(farePayload)
+            chooseRideSentRef.current = true
+            try {
+                sessionStorage.setItem(DRAFT_BOOKING_KEY, JSON.stringify({
+                    pickup: p,
+                    destination: d,
+                    pickupCoords: pu,
+                    dropCoords: du,
+                    pickupSelection,
+                    dropSelection,
+                    fare: farePayload,
+                    scheduledAt: scheduledOverride || null,
+                }))
+            } catch { /* ignore */ }
+            navigate('/choose-ride', {
+                state: {
+                    pickup: p,
+                    destination: d,
+                    pickupCoords: pu,
+                    dropCoords: du,
+                    pickupSelection,
+                    dropSelection,
+                    fare: farePayload,
+                    scheduledAt: scheduledOverride || null,
+                },
+            })
         } catch (err) {
             if (err?.response?.status === 429) {
                 setBookingError(t('location_search_busy'))
@@ -947,7 +972,7 @@ if (!pickupSelection || !dropSelection) {
                 ...(scheduledAt ? { scheduledAt } : {})
             }, withAuth())
             const raw = stripApiEnvelope(response.data)
-            const ridePayload = { ...raw }
+            const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
             delete ridePayload.otp
             setRide(ridePayload)
             setPassengerOtp('')
@@ -1004,33 +1029,8 @@ if (!pickupSelection || !dropSelection) {
         setVehiclePanel(false)
     }
 
-    /** Once both pickup & drop are selected, move to the Choose Ride screen. */
+    /** Guards repeated handoffs while preserving the location draft for back navigation. */
     const chooseRideSentRef = useRef(false)
-    useEffect(() => {
-        if (hasRouteSelections && !chooseRideSentRef.current) {
-            chooseRideSentRef.current = true
-            try {
-                sessionStorage.setItem(DRAFT_BOOKING_KEY, JSON.stringify({
-                    pickup,
-                    destination,
-                    pickupCoords,
-                    dropCoords,
-                    pickupSelection,
-                    dropSelection,
-                }))
-            } catch { /* ignore */ }
-            navigate('/choose-ride', {
-                state: {
-                    pickup,
-                    destination,
-                    pickupCoords,
-                    dropCoords,
-                    pickupSelection,
-                    dropSelection,
-                },
-            })
-        }
-    }, [ hasRouteSelections, pickup, destination, pickupCoords, dropCoords, pickupSelection, dropSelection, navigate ])
 
     /** Restore the pickup/drop draft when returning from the Choose Ride screen (Back). */
     useEffect(() => {
@@ -1137,6 +1137,9 @@ if (!pickupSelection || !dropSelection) {
                                 suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
                                 onSelectSuggestion={handleSelectSuggestion}
                                 onForMeOpen={() => setForMeOpen(true)}
+                                onFindTrip={() => findTrip()}
+                                canFindTrip={hasRouteSelections}
+                                findingTrip={findingTrip}
                             />
                         </div>
 

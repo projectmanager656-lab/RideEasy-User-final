@@ -25,6 +25,9 @@ router.post('/phone/verify-otp',
 
 router.get('/profile', auth.authUser, userController.getProfile);
 router.get('/ride-history', auth.authUser, rideController.userRideHistory);
+router.get('/emergency-contact', auth.authUser, userController.getEmergencyContact);
+router.post('/emergency-contact', auth.authUser, userController.saveEmergencyContact);
+router.delete('/emergency-contact', auth.authUser, userController.deleteEmergencyContact);
 
 router.post('/onboarding/complete', userController.completeOnboarding);
 router.get('/onboarding/status', userController.getOnboardingStatus);

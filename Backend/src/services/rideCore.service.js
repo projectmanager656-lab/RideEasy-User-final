@@ -35,8 +35,10 @@ async function releaseCaptainBusyIfAvailable(captainRef) {
 
 module.exports.releaseCaptainBusyIfAvailable = releaseCaptainBusyIfAvailable;
 
-function normalizePaymentMethod() {
-    // Passenger ride payments are cash only. Retain this helper for older callers.
+function normalizePaymentMethod(method) {
+    const m = String(method || '').trim();
+    if (m === 'UPI') return 'UPI';
+    if (m === 'Online') return 'Online';
     return 'Cash';
 }
 module.exports.normalizePaymentMethod = normalizePaymentMethod;

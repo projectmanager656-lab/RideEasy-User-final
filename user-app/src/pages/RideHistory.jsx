@@ -8,106 +8,6 @@ import vehicleAutoImg from '../assets/logo-auto.png'
 import vehicleCarImg from '../assets/logo-car.png'
 import vehicleBikeImg from '../assets/logo-bike.png'
 
-// ===========================================================================
-//  Demo data — frontend only.
-//  Rendered when the backend is unreachable (or returns no rides) so the page
-//  always shows a realistic RideEasy ride history. No API/backend change.
-// ===========================================================================
-const demoRideHistory = [
-  {
-    id: 'demo-001',
-    vehicleType: 'Auto',
-    status: 'completed',
-    date: '12 Aug 2026',
-    time: '10:35 AM',
-    pickup: 'Ichalkaranji Bus Stand',
-    destination: 'Kabnur',
-    fare: 145,
-    distance: '4.2 km',
-    duration: '12 min',
-    paymentMethod: 'Cash',
-    passengers: 1,
-    captain: { name: 'Ramesh Patil', phone: '+91-9876543210', vehicleType: 'Auto', vehicleNumber: 'MH 12 AB 1234' },
-    rating: 4.8,
-  },
-  {
-    id: 'demo-002',
-    vehicleType: 'Car',
-    status: 'completed',
-    date: '10 Aug 2026',
-    time: '6:20 PM',
-    pickup: 'Kolhapur Road',
-    destination: 'Rankala Lake',
-    fare: 280,
-    distance: '8.5 km',
-    duration: '22 min',
-    paymentMethod: 'UPI',
-    passengers: 1,
-    captain: { name: 'Suresh Kumar', phone: '+91-9876543221', vehicleType: 'Car', vehicleNumber: 'MH 12 CD 5678' },
-    rating: 4.5,
-  },
-  {
-    id: 'demo-003',
-    vehicleType: 'Bike',
-    status: 'completed',
-    date: '09 Aug 2026',
-    time: '11:00 AM',
-    pickup: 'Shivaji University',
-    destination: 'DYP Colony',
-    fare: 98,
-    distance: '3.1 km',
-    duration: '8 min',
-    paymentMethod: 'Online',
-    passengers: 1,
-    captain: { name: 'Mahesh Rao', phone: '+91-9876543322', vehicleType: 'Bike', vehicleNumber: 'MH 12 EF 9012' },
-    rating: 5,
-  },
-  {
-    id: 'demo-004',
-    vehicleType: 'Auto',
-    status: 'cancelled',
-    date: '08 Aug 2026',
-    time: '8:15 PM',
-    pickup: 'Market Yard',
-    destination: 'Panhala Fort',
-    fare: 0,
-    cancellationFee: 15,
-    paymentMethod: 'Pay later',
-    passengers: 1,
-  },
-  {
-    id: 'demo-005',
-    vehicleType: 'Car',
-    status: 'completed',
-    date: '07 Aug 2026',
-    time: '4:45 PM',
-    pickup: 'Kolhapur ST Stand',
-    destination: 'Panhala',
-    fare: 312,
-    distance: '18 km',
-    duration: '35 min',
-    paymentMethod: 'UPI',
-    passengers: 1,
-    captain: { name: 'Dinesh Shah', phone: '+91-9876543423', vehicleType: 'Car', vehicleNumber: 'MH 12 GH 3456' },
-    rating: 4.2,
-  },
-  {
-    id: 'demo-006',
-    vehicleType: 'Bike',
-    status: 'accepted',
-    date: '21 Aug 2026',
-    time: '9:00 AM',
-    pickup: 'DYP Colony',
-    destination: 'Kolhapur Airport',
-    fare: 350,
-    distance: '9.4 km',
-    duration: '20 min',
-    paymentMethod: 'Online',
-    passengers: 1,
-    captain: { name: 'Nikhil Desai', phone: '+91-9876543524', vehicleType: 'Bike', vehicleNumber: 'MH 12 IJ 7890' },
-  },
-]
-
 // Backend ride statuses that represent an upcoming / active trip (not yet done).
 const ACTIVE_STATUSES = new Set(['searching', 'accepted', 'arrived', 'started'])
 
@@ -480,17 +380,9 @@ const RideHistory = () => {
     return () => { mountedRef.current = false }
   }, [loadRides])
 
-  const unreachable = !!error && rides.length === 0
-
   const items = useMemo(() => {
-    // Prefer real backend rides. Only fall back to demo/sample entries when the
-    // backend is truly unreachable (an error occurred) — a successful empty
-    // response must show the real (empty) history, never fabricated static data.
-    const src = rides.length > 0 ? rides : loading ? [] : unreachable
-      ? demoRideHistory
-      : []
-    return src.map(normalizeRide)
-  }, [rides, loading, unreachable])
+    return rides.map(normalizeRide)
+  }, [rides])
 
   const stats = useMemo(
     () => ({
@@ -762,12 +654,17 @@ const RideHistory = () => {
       ) : null}
 
       <div className="mx-auto w-full max-w-lg px-3 pt-3 sm:px-4">
-        {unreachable ? (
+        {error ? (
           <div
             role="status"
             className="mb-3 rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-brand"
           >
-            {t('sample_data_notice')}
+            <div className="flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button type="button" onClick={loadRides} className="shrink-0 font-semibold underline">
+                {t('retry')}
+              </button>
+            </div>
           </div>
         ) : null}
 

@@ -9,7 +9,7 @@ const rideCreateSchema = z.object({
     dropLocation: z.string().min(3),
     city: z.enum([ 'Kolhapur', 'Ichalkaranji', 'Sangli' ]).optional(),
     vehicleType: z.enum([ 'BIKE', 'AUTO', 'CAR' ]),
-    paymentMethod: z.literal('Cash').optional(),
+    paymentMethod: z.enum([ 'Cash', 'UPI', 'Online' ]).optional(),
     price: z.coerce.number().positive(),
     distanceKm: z.coerce.number().optional(),
 });

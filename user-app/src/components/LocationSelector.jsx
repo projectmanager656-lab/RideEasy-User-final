@@ -75,6 +75,9 @@ const LocationSelector = ({
     suggestions = [],
     onSelectSuggestion,
     onForMeOpen,
+    onFindTrip,
+    canFindTrip = false,
+    findingTrip = false,
 }) => {
     const { t } = useLanguage()
     const showSuggestions = searching && searchStatus !== 'idle'
@@ -188,6 +191,25 @@ const LocationSelector = ({
                     </>
                 )}
             </div>
+
+            <button
+                type="button"
+                onClick={onFindTrip}
+                disabled={!canFindTrip || findingTrip}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-yellow px-4 py-3 text-sm font-bold text-black transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+                {findingTrip ? (
+                    <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" aria-hidden />
+                        {t('getting_fare')}
+                    </>
+                ) : (
+                    <>
+                        <i className="ri-route-line text-base" aria-hidden />
+                        {t('find_trip')}
+                    </>
+                )}
+            </button>
         </div>
     )
 }
