@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 function formatINR (n) {
     const x = Number(n)
@@ -61,10 +61,30 @@ export default function RideCompletionFlow ({
     const [ feedback, setFeedback ] = useState('')
     const [ skippedRating, setSkippedRating ] = useState(false)
     const [ secLeft, setSecLeft ] = useState(autoRedirectSec)
+    const navigate = useNavigate()
 
     const paid = ride?.paymentStatus === 'success'
     const canRate = paid && ride?.rating == null && !skippedRating
     const doneWithRating = Boolean(ride?.rating || skippedRating)
+    const invoiceUrl = ride?._id ? `/invoice/${ride._id}` : null
+
+    /** 25% advance split — at completion we only collect the remaining 75%. */
+    const totalFare = Number(ride?.price || 0)
+    const advancePaid = ride?.advancePaymentStatus === 'success' ? Number(ride?.advanceAmount || 0) : 0
+    const remainingDue = Number(ride?.chargedAmount) > 0
+        ? Number(ride.chargedAmount)
+        : Math.max(0, totalFare - advancePaid)
+
+    /** Open the invoice for this exact ride; keep the user in the app. */
+    const openInvoice = () => {
+        if (!invoiceUrl) return
+        navigate(invoiceUrl, { state: { from: 'completion' } })
+    }
+    /** Download/print — the invoice page is print-optimized. */
+    const downloadInvoice = () => {
+        if (!invoiceUrl) return
+        navigate(invoiceUrl, { state: { from: 'completion' } })
+    }
 
     useEffect(() => {
         if (!paid || !doneWithRating) return undefined
@@ -217,6 +237,12 @@ export default function RideCompletionFlow ({
                                 ) : null}
                             </div>
                         )}
+                        {advancePaid > 0 && (
+                            <p className="mt-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400">
+                                Fare {formatINR(totalFare)} · Advance paid {formatINR(advancePaid)} ·{' '}
+                                <span className="font-semibold text-white">Remaining {formatINR(remainingDue)}</span>
+                            </p>
+                        )}
                         <button
                             type="button"
                             disabled={paying}
@@ -229,7 +255,7 @@ export default function RideCompletionFlow ({
                                     Processing…
                                 </span>
                             ) : (
-                                `Pay ${formatINR(ride?.price)}`
+                                `Pay ${formatINR(remainingDue)}`
                             )}
                         </button>
                     </section>
@@ -300,6 +326,12 @@ export default function RideCompletionFlow ({
                                 <span>Trip fare</span>
                                 <span className="text-white">{formatINR(ride?.price)}</span>
                             </div>
+                            {advancePaid > 0 ? (
+                                <div className="flex justify-between text-emerald-400/90">
+                                    <span>25% advance paid</span>
+                                    <span>{formatINR(advancePaid)}</span>
+                                </div>
+                            ) : null}
                             {Number(ride?.discountAmount) > 0 ? (
                                 <div className="flex justify-between text-emerald-400/90">
                                     <span>Discount</span>
@@ -314,7 +346,7 @@ export default function RideCompletionFlow ({
                             ) : null}
                             <div className="flex justify-between border-t border-white/10 pt-3 text-base font-semibold text-white">
                                 <span>Total paid</span>
-                                <span>{formatINR(ride?.chargedAmount ?? ride?.price)}</span>
+                                <span>{formatINR(advancePaid + Number(ride?.chargedAmount ?? 0))}</span>
                             </div>
                             <div className="flex justify-between text-xs text-slate-500">
                                 <span>Method</span>
@@ -336,6 +368,28 @@ export default function RideCompletionFlow ({
                                         <p className="text-xs text-slate-500">{captain.phone}</p>
                                     ) : null}
                                 </div>
+                            </div>
+                        ) : null}
+
+                        {/* Invoice actions — always available once the ride is completed */}
+                        {invoiceUrl ? (
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={openInvoice}
+                                    className="flex items-center justify-center gap-2 rounded-xl bg-white/10 py-3 text-sm font-semibold text-white ring-1 ring-white/10"
+                                >
+                                    <i className="ri-file-list-3-line text-base" aria-hidden />
+                                    View Invoice
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={downloadInvoice}
+                                    className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-semibold text-white"
+                                >
+                                    <i className="ri-download-2-line text-base" aria-hidden />
+                                    Download Invoice
+                                </button>
                             </div>
                         ) : null}
                     </section>

@@ -26,7 +26,7 @@ const PhoneInput = ({
 
   return (
     <div className="mb-4">
-      {label ? <label htmlFor={name} className={labelClass}>{label}</label> : null}
+      {label ? <label htmlFor={name} className={labelClass}>{label} {required ? <span className="text-red-500" aria-hidden>*</span> : null}</label> : null}
       <div className="relative">
         <span
           className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-base font-medium text-theme-secondary"

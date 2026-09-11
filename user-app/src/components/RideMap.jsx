@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndpoints'
+import bikeVehicleImg from '../assets/Bike-img-ride.png'
+import autoVehicleImg from '../assets/Auto-img-ride.png'
+import carVehicleImg from '../assets/Car-img-ride.png'
+import luxuryVehicleImg from '../assets/luxury-img-ride.png'
 
 const containerStyle = { width: '100%', height: '100%' }
 const defaultCenter = { lat: 18.5204, lng: 73.8567 }
@@ -10,13 +14,36 @@ const defaultCenter = { lat: 18.5204, lng: 73.8567 }
 const ROUTE_FETCH_DEBOUNCE_MS = 450
 const ROUTE_MIN_INTERVAL_MS = 10_000
 
-const DefaultIcon = L.icon({
-    iconUrl: new URL('leaflet/dist/images/marker-icon.png', import.meta.url).toString(),
-    iconRetinaUrl: new URL('leaflet/dist/images/marker-icon-2x.png', import.meta.url).toString(),
-    shadowUrl: new URL('leaflet/dist/images/marker-shadow.png', import.meta.url).toString(),
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-})
+/** OSRM returns distance in meters and duration in seconds. */
+function formatTripDistance(meters) {
+    if (!Number.isFinite(meters) || meters < 0) return ''
+    if (meters < 1000) return `${Math.max(1, Math.round(meters))} m`
+    return `${(meters / 1000).toFixed(1)} km`
+}
+
+function formatTripDuration(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return ''
+    const totalMin = Math.max(1, Math.round(seconds / 60))
+    if (totalMin < 60) return `${totalMin} min`
+    const h = Math.floor(totalMin / 60)
+    const m = totalMin % 60
+    return m ? `${h} hr ${m} min` : `${h} hr`
+}
+
+function makeLabeledPinIcon(color, label) {
+    return L.divIcon({
+        className: 'rideeasy-location-marker',
+        html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <span style="font-size:9px;font-weight:700;line-height:1;color:#fff;background:${color};border-radius:999px;padding:3px 7px;box-shadow:0 1px 3px rgba(0,0,0,.4);white-space:nowrap">${label}</span>
+            <span style="width:16px;height:16px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45)"></span>
+        </div>`,
+        iconSize: [54, 34],
+        iconAnchor: [27, 32],
+    })
+}
+
+const pickupDivIcon = makeLabeledPinIcon('#16C784', 'Pickup')
+const dropDivIcon = makeLabeledPinIcon('#FF4D4D', 'Drop')
 
 const driverDivIcon = L.divIcon({
     className: 'driver-live-marker',
@@ -32,6 +59,35 @@ const passengerDivIcon = L.divIcon({
     iconAnchor: [9, 9],
 })
 
+/** Exact asset per backend vehicle type — BIKE / AUTO / CAR / PREMIUM(LUXURY). */
+const NEARBY_VEHICLE_IMAGES = {
+    BIKE: bikeVehicleImg,
+    AUTO: autoVehicleImg,
+    CAR: carVehicleImg,
+    PREMIUM: luxuryVehicleImg,
+    LUXURY: luxuryVehicleImg,
+    PREMIUM_CAR: luxuryVehicleImg,
+}
+
+/**
+ * Floating map-vehicle marker: the real transparent vehicle photo directly on
+ * the map (no circular badge), anchored bottom-center to its map coordinate,
+ * with a subtle drop shadow for visibility against the tiles.
+ */
+const nearbyVehicleDivIcon = (vehicleType) => {
+    const type = String(vehicleType || 'AUTO').toUpperCase()
+    const img = NEARBY_VEHICLE_IMAGES[type] || autoVehicleImg
+    const alt = type === 'PREMIUM' || type === 'LUXURY' || type === 'PREMIUM_CAR' ? 'Premium Car' : String(type || 'Auto')
+    return L.divIcon({
+        className: 'nearby-vehicle-marker',
+        html: `<div style="display:flex;align-items:flex-end;justify-content:center;width:44px;height:44px">
+            <img src="${img}" alt="${alt}" style="width:42px;max-height:42px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35))" draggable="false" />
+        </div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 42],
+    })
+}
+
 function roundCoordKey(lat, lng) {
     return `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`
 }
@@ -43,7 +99,7 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
         const isValid = (lat, lng) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))
 
         if (isValid(driverCoords?.lat, driverCoords?.lng)) {
-            map.setView([Number(driverCoords.lat), Number(driverCoords.lng)], Math.max(map.getZoom(), 14), { animate: true })
+            map.setView([Number(driverCoords.lat), Number(driverCoords.lng)], Math.max(map.getZoom(), 14), { animate: false })
             return
         }
         const pts = []
@@ -58,10 +114,10 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
         }
         if (pts.length === 0) return
         if (pts.length === 1) {
-            map.setView(pts[0], 14, { animate: true })
+            map.setView(pts[0], 14, { animate: false })
             return
         }
-        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: true })
+        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: false })
     }, [
         map,
         pickupCoords?.lat,
@@ -82,6 +138,8 @@ const RideMap = ({
     driverCoords = null,
     passengerLiveCoords = null,
     currentLocation = null,
+    /** Optional nearby-vehicle markers (e.g. Autos around pickup while searching). */
+    nearbyVehicles = [],
     showRoute = true,
     zoom = 14,
     routeFromCurrent = false,
@@ -90,8 +148,13 @@ const RideMap = ({
     trackingTo = null,
     /** Show ETA chip for the tracking leg (requires trackingFrom/To). */
     showTrackingEta = true,
+    /** Show the built-in "Estimated trip" duration/distance chip (kept on by default). */
+    showRouteStatsChip = true,
+    /** Where the Leaflet zoom (+/−) control sits. */
+    zoomControlPosition = 'topleft',
 }) => {
     const [routeLine, setRouteLine] = useState([])
+    const [routeStats, setRouteStats] = useState(null)
     const [trackingLine, setTrackingLine] = useState([])
     const [trackingEtaMin, setTrackingEtaMin] = useState(null)
     const trackingMetaRef = useRef({ key: '', at: 0 })
@@ -125,6 +188,7 @@ const RideMap = ({
                 routeDLng == null
             ) {
                 setRouteLine([])
+                setRouteStats(null)
                 return
             }
             try {
@@ -132,11 +196,20 @@ const RideMap = ({
                 const url = `${base}/route/v1/driving/${routeOLng},${routeOLat};${routeDLng},${routeDLat}?overview=full&geometries=geojson`
                 const res = await fetch(url)
                 const data = await res.json()
-                const coords = data?.routes?.[0]?.geometry?.coordinates || []
+                const route = data?.routes?.[0]
+                const coords = route?.geometry?.coordinates || []
                 if (cancelled) return
                 setRouteLine(coords.map(([lng, lat]) => [lat, lng]))
+                if (typeof route?.distance === 'number' && typeof route?.duration === 'number') {
+                    setRouteStats({ distanceMeters: route.distance, durationSeconds: route.duration })
+                } else {
+                    setRouteStats(null)
+                }
             } catch {
-                if (!cancelled) setRouteLine([])
+                if (!cancelled) {
+                    setRouteLine([])
+                    setRouteStats(null)
+                }
             }
         }
         fetchRoute()
@@ -204,23 +277,44 @@ const RideMap = ({
                     ETA ~{trackingEtaMin} min
                 </div>
             )}
-            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl>
+            {showRouteStatsChip && !trackingFrom && routeStats && (
+                <div className="pointer-events-none absolute inset-x-0 bottom-3 z-[1000] flex justify-center">
+                    <div
+                        className="rounded-[14px] border px-3.5 py-2 shadow-lg"
+                        style={{ background: 'rgba(10,10,10,0.92)', borderColor: '#2A2A2A' }}
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <i className="ri-roadster-line text-base text-brand-yellow" aria-hidden />
+                            <span className="text-sm font-bold text-white">
+                                {formatTripDuration(routeStats.durationSeconds)}
+                            </span>
+                            <span className="text-xs text-[#9A9A9A]" aria-hidden>•</span>
+                            <span className="text-sm font-semibold text-white">
+                                {formatTripDistance(routeStats.distanceMeters)}
+                            </span>
+                        </div>
+                        <p className="mt-0.5 text-center text-[10px] text-[#9A9A9A]">Estimated trip</p>
+                    </div>
+                </div>
+            )}
+            <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl={false}>
                 <MapBoundsSync
                     pickupCoords={pickupCoords}
                     dropCoords={dropCoords}
                     driverCoords={driverCoords}
                     passengerLiveCoords={passengerLiveCoords}
                 />
+                <ZoomControl position={zoomControlPosition} />
                 <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
                     url={getMapTileUrlTemplate()}
                 />
 
                 {pickupCoords?.lat != null && pickupCoords?.lng != null && (
-                    <Marker position={[pickupCoords.lat, pickupCoords.lng]} icon={DefaultIcon} />
+                    <Marker position={[pickupCoords.lat, pickupCoords.lng]} icon={pickupDivIcon} />
                 )}
                 {dropCoords?.lat != null && dropCoords?.lng != null && (
-                    <Marker position={[dropCoords.lat, dropCoords.lng]} icon={DefaultIcon} />
+                    <Marker position={[dropCoords.lat, dropCoords.lng]} icon={dropDivIcon} />
                 )}
                 {driverCoords?.lat != null && driverCoords?.lng != null && (
                     <Marker position={[driverCoords.lat, driverCoords.lng]} icon={driverDivIcon} />
@@ -229,8 +323,22 @@ const RideMap = ({
                     <Marker position={[passengerLiveCoords.lat, passengerLiveCoords.lng]} icon={passengerDivIcon} />
                 )}
 
+                {Array.isArray(nearbyVehicles) && nearbyVehicles.map((v) => {
+                    const lat = Number(v?.lat)
+                    const lng = Number(v?.lng)
+                    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+                    return (
+                        <Marker
+                            key={v?.id || `${lat},${lng}`}
+                            position={[lat, lng]}
+                            icon={nearbyVehicleDivIcon(v?.vehicleType)}
+                            zIndexOffset={500}
+                        />
+                    )
+                })}
+
                 {routeLine.length > 1 && (
-                    <Polyline positions={routeLine} pathOptions={{ color: '#64748b', weight: 4, opacity: 0.85 }} />
+                    <Polyline positions={routeLine} pathOptions={{ color: '#FFC800', weight: 5, opacity: 0.95 }} />
                 )}
                 {trackingLine.length > 1 && (
                     <Polyline positions={trackingLine} pathOptions={{ color: '#2563eb', weight: 5 }} />

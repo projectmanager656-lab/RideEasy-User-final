@@ -1,1 +1,0 @@
-function t(r){return String(r||"").replace(/\/$/,"")}function e(){return t("https://router.project-osrm.org")}function a(){return"https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"}function n(){return t("https://www.google.com/maps/dir")}function i(){return"https://i.pinimg.com/236x/af/26/28/af26280b0ca305be47df0b799ed1b12b.jpg"}export{n as a,a as b,e as c,i as g};

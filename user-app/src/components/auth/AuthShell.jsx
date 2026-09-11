@@ -3,8 +3,8 @@ import { useLanguage } from '../../i18n'
 import { useTheme } from '../../context/ThemeContext'
 import ThemeSelector from '../ThemeSelector'
 import LanguageSelector from '../LanguageSelector'
-import lightBg from '../../assets/image.png'
-import darkBg from '../../assets/rideeasy-welcome.png'
+import lightBg from '../../assets/white.png'
+import darkBg from '../../assets/black.png'
 
 const BrandLogo = ({ tone = 'primary' }) => (
   <p className="text-3xl font-black tracking-tight">
@@ -16,8 +16,8 @@ const BrandLogo = ({ tone = 'primary' }) => (
 /**
  * Full-screen theme-aware auth layout:
  *  - The chosen theme artwork fills the whole screen:
- *      light theme → image.png
- *      dark theme  → rideeasy-welcome.png
+ *      light theme → white.png
+ *      dark theme  → black.png
  *  - Welcome (hideHeaderSub) keeps its branding overlay.
  *  - Login / registration / OTP (strongBackdrop) keep the same artwork behind
  *    the translucent forms — it switches live when the theme is changed.

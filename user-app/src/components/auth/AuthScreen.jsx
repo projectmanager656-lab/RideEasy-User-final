@@ -13,17 +13,19 @@ import OtpVerification from '../../components/auth/OtpVerification'
 import { markOnboardingComplete } from '../../utils/onboarding'
 import { useLanguage } from '../../i18n'
 import { useTheme } from '../../context/ThemeContext'
-import lightBg from '../../assets/image.png'
-import darkBg from '../../assets/rideeasy-welcome.png'
+import lightBg from '../../assets/white.png'
+import darkBg from '../../assets/black.png'
 
 /**
  * RideEasy authentication flow (smart detection):
  *   email/phone → /users/check-user → EXISTING → password → login verifies
- *                                              → OTP sent → verify → Home
+ *                                              → OTP sent → verify → /location
  *                                  → NEW      → registration panel slides up
  *                                              → Send OTP → OTP verification
- *                                              → auto-authenticated → Home
- * There is no "Sign up" button: new users are detected automatically.
+ *                                              → auto-authenticated → /location
+ * The /location screen runs the geolocation + Location Accuracy flow; the user
+ * continues to Home from there ("Where to go?"). No "Sign up" button: new
+ * users are detected automatically.
  */
 const AuthScreen = ({ skipTokenRedirect = false }) => {
   const { t } = useLanguage()
@@ -45,7 +47,11 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const [ loginLoading, setLoginLoading ] = useState(false)
 
   // account-detection state: unknown → checking → existing | new
-  const [ accountState, setAccountState ] = useState('unknown')
+  // Default to `existing` so the email/password login form is immediately
+  // usable. The backend signs users in with POST /users/login (email+password)
+  // and returns { token, user } directly — there is no separate check endpoint.
+  const initialAccountState = initialRegister ? 'new' : 'existing'
+  const [ accountState, setAccountState ] = useState(initialAccountState)
   const [ checkingAccount, setCheckingAccount ] = useState(false)
 
   // registration state (shared between the registration + OTP panes)
@@ -69,7 +75,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   useEffect(() => {
     if (authLoading) return
     if (token && !skipTokenRedirect) {
-      navigate('/home', { replace: true })
+      // Session already active → land on the /location home screen, where the
+      // existing LocationScreen geolocation / Location Accuracy flow lives.
+      navigate('/location', { replace: true })
     }
   }, [ authLoading, token, navigate, skipTokenRedirect ])
 
@@ -144,16 +152,20 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const completeAuth = (nextToken, nextUser) => {
     markOnboardingComplete()
     setSession(nextToken, nextUser)
-    navigate('/home', { replace: true, state: location?.state })
+    // Fresh login/registration → run the LocationScreen geolocation +
+    // Location Accuracy flow first; the user continues to Home from there.
+    navigate('/location', { replace: true, state: location?.state })
   }
 
   const handleIdentifierChange = (value) => {
     setIdentifier(value)
-    setAccountState('unknown')
+    setAccountState('existing') // keep the email/password login form visible as the user types
     setLoginError('')
   }
 
-  // Backend account lookup: decides the login vs auto-registration flow.
+  // Backend account lookup — no standalone check endpoint exists, so this is a
+  // local transition used when the user taps "Create account" / enters the flow.
+  // Accounts are verified by POST /users/login (email+password) directly.
   const checkAccount = async (id) => {
     if (checkingAccount) return
     const cleanId = String(id || identifier || '').trim()
@@ -161,13 +173,8 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     setCheckingAccount(true)
     setLoginError('')
     try {
-      const response = await apiClient.post('/users/check-user', { identifier: cleanId })
-      const data = stripApiEnvelope(response.data)
-      if (data?.exists) {
-        setAccountState('existing')
-        return
-      }
-      // New user: auto-reveal registration with the identifier pre-filled.
+      // A phone/email that has no local record is treated as a new account:
+      // reveal the registration panel with the identifier pre-filled.
       setAccountState('new')
       const isEmailLike = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanId)
       setDraft((prev) => ({
@@ -187,27 +194,32 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
 
   const submitLogin = async (e) => {
     e.preventDefault()
-    const id = String(identifier || '').trim()
-    if (!id || loginLoading) return
-    // Not yet classified → run the account check first.
-    if (accountState !== 'existing') {
-      await checkAccount(id)
+    const id = String(identifier || '').trim().toLowerCase()
+    if (!id || loginLoading) {
+      if (!id) setLoginError(t('valid_email_error'))
       return
     }
-    if (!password) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id) || id.includes('..')) {
+      setLoginError(t('valid_email_error'))
+      return
+    }
+    if (!password) {
+      setLoginError(t('password_required'))
+      return
+    }
     setLoginError('')
     setLoginLoading(true)
     try {
+      // Backend contract: POST /users/login with { email, password } → { token, user }.
       const response = await apiClient.post('/users/login', {
-        identifier: id,
+        email: id,
         password,
       })
       const data = stripApiEnvelope(response.data)
-      // Password verified → backend sent an OTP → open the OTP pane.
-      if (data?.passwordVerified) {
-        setLoginOtpIdentifier(id)
-        setLoginOtpDevOtp(data?.debugOtp ? String(data.debugOtp) : '')
-        setOtpOpen(true)
+      const token = data?.token
+      const user = data?.user ?? data
+      if (token && user) {
+        completeAuth(token, user)
       } else {
         setLoginError(t('login_response_missing'))
       }
@@ -229,7 +241,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     // finalize the account with a working password.
     if (payload?.password) setDraft((prev) => ({ ...prev, ...payload }))
     try {
-      const response = await apiClient.post('/users/phone/send-otp', payload)
+      const response = await apiClient.post('/users/phone/send-otp', { ...payload, registration: true })
       const data = stripApiEnvelope(response.data)
       if (data?.debugOtp) setRegDebugOtp(String(data.debugOtp))
       setOtpOpen(true)
@@ -247,7 +259,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   const goToLogin = () => {
     const prefilled = String(draft.email || draft.phone || '').trim()
     if (prefilled) setIdentifier(prefilled)
-    setAccountState('unknown')
+    setAccountState('existing')
     setPassword('')
     setOtpOpen(false)
     setRegisterOpen(false)
@@ -259,9 +271,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   // so the overlays can never block the login form even if GSAP is unavailable.
   // NOTE: no translate utility here — a CSS translate would be cached by GSAP as
   // pixels and keep the panel offset even after yPercent animates to 0.
-  const paneBase = 'absolute inset-0 z-0 overflow-hidden'
+  const paneBase = 'absolute inset-0 z-0 h-full max-h-full overflow-hidden'
   const paneScroller =
-    'absolute inset-0 overflow-y-auto pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]'
+    'absolute inset-0 h-full max-h-full min-h-0 overflow-y-scroll overscroll-contain touch-pan-y pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch]'
   const hiddenPaneBase = `${paneBase} invisible`
   const themeBg = isDark ? darkBg : lightBg
   const paneBackdrop = (

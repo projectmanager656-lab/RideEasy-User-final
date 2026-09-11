@@ -8,106 +8,6 @@ import vehicleAutoImg from '../assets/logo-auto.png'
 import vehicleCarImg from '../assets/logo-car.png'
 import vehicleBikeImg from '../assets/logo-bike.png'
 
-// ===========================================================================
-//  Demo data — frontend only.
-//  Rendered when the backend is unreachable (or returns no rides) so the page
-//  always shows a realistic RideEasy ride history. No API/backend change.
-// ===========================================================================
-const demoRideHistory = [
-  {
-    id: 'demo-001',
-    vehicleType: 'Auto',
-    status: 'completed',
-    date: '12 Aug 2026',
-    time: '10:35 AM',
-    pickup: 'Ichalkaranji Bus Stand',
-    destination: 'Kabnur',
-    fare: 145,
-    distance: '4.2 km',
-    duration: '12 min',
-    paymentMethod: 'Cash',
-    passengers: 1,
-    captain: { name: 'Ramesh Patil', phone: '+91-9876543210', vehicleType: 'Auto', vehicleNumber: 'MH 12 AB 1234' },
-    rating: 4.8,
-  },
-  {
-    id: 'demo-002',
-    vehicleType: 'Car',
-    status: 'completed',
-    date: '10 Aug 2026',
-    time: '6:20 PM',
-    pickup: 'Kolhapur Road',
-    destination: 'Rankala Lake',
-    fare: 280,
-    distance: '8.5 km',
-    duration: '22 min',
-    paymentMethod: 'UPI',
-    passengers: 1,
-    captain: { name: 'Suresh Kumar', phone: '+91-9876543221', vehicleType: 'Car', vehicleNumber: 'MH 12 CD 5678' },
-    rating: 4.5,
-  },
-  {
-    id: 'demo-003',
-    vehicleType: 'Bike',
-    status: 'completed',
-    date: '09 Aug 2026',
-    time: '11:00 AM',
-    pickup: 'Shivaji University',
-    destination: 'DYP Colony',
-    fare: 98,
-    distance: '3.1 km',
-    duration: '8 min',
-    paymentMethod: 'Online',
-    passengers: 1,
-    captain: { name: 'Mahesh Rao', phone: '+91-9876543322', vehicleType: 'Bike', vehicleNumber: 'MH 12 EF 9012' },
-    rating: 5,
-  },
-  {
-    id: 'demo-004',
-    vehicleType: 'Auto',
-    status: 'cancelled',
-    date: '08 Aug 2026',
-    time: '8:15 PM',
-    pickup: 'Market Yard',
-    destination: 'Panhala Fort',
-    fare: 0,
-    cancellationFee: 15,
-    paymentMethod: 'Pay later',
-    passengers: 1,
-  },
-  {
-    id: 'demo-005',
-    vehicleType: 'Car',
-    status: 'completed',
-    date: '07 Aug 2026',
-    time: '4:45 PM',
-    pickup: 'Kolhapur ST Stand',
-    destination: 'Panhala',
-    fare: 312,
-    distance: '18 km',
-    duration: '35 min',
-    paymentMethod: 'UPI',
-    passengers: 1,
-    captain: { name: 'Dinesh Shah', phone: '+91-9876543423', vehicleType: 'Car', vehicleNumber: 'MH 12 GH 3456' },
-    rating: 4.2,
-  },
-  {
-    id: 'demo-006',
-    vehicleType: 'Bike',
-    status: 'accepted',
-    date: '21 Aug 2026',
-    time: '9:00 AM',
-    pickup: 'DYP Colony',
-    destination: 'Kolhapur Airport',
-    fare: 350,
-    distance: '9.4 km',
-    duration: '20 min',
-    paymentMethod: 'Online',
-    passengers: 1,
-    captain: { name: 'Nikhil Desai', phone: '+91-9876543524', vehicleType: 'Bike', vehicleNumber: 'MH 12 IJ 7890' },
-  },
-]
-
 // Backend ride statuses that represent an upcoming / active trip (not yet done).
 const ACTIVE_STATUSES = new Set(['searching', 'accepted', 'arrived', 'started'])
 
@@ -170,12 +70,12 @@ function rideDateKey(r) {
   }
 }
 
-function statusBadge(status) {
+function statusBadge(status, t) {
   const s = String(status || '').toLowerCase()
-  if (s === 'completed') return { label: 'Completed', className: 'border border-emerald-500 text-emerald-600 dark:text-emerald-400' }
-  if (s === 'cancelled') return { label: 'Cancelled', className: 'bg-red-500 text-white' }
-  if (ACTIVE_STATUSES.has(s)) return { label: 'Upcoming', className: 'border border-sky-500 text-sky-600 dark:text-sky-400' }
-  return { label: s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}` : 'Pending', className: 'bg-theme-card-muted text-theme-muted' }
+  if (s === 'completed') return { label: t('completed'), className: 'border border-emerald-500 text-emerald-600 dark:text-emerald-400' }
+  if (s === 'cancelled') return { label: t('cancelled'), className: 'bg-red-500 text-white' }
+  if (ACTIVE_STATUSES.has(s)) return { label: t('upcoming'), className: 'border border-sky-500 text-sky-600 dark:text-sky-400' }
+  return { label: s ? `${s.charAt(0).toUpperCase()}${s.slice(1)}` : t('pending'), className: 'bg-theme-card-muted text-theme-muted' }
 }
 
 const VEHICLE_IMAGE = {
@@ -227,7 +127,7 @@ const StatCard = ({ accent, label, value }) => {
 }
 
 const RideCard = ({ ride, t, onView }) => {
-  const sb = statusBadge(ride.status)
+  const sb = statusBadge(ride.status, t)
   const v = vehicleMeta(ride.vehicleType)
   const dt = rideDate(ride)
   const fare = `₹${Number(ride.fare) || 0}`
@@ -275,7 +175,7 @@ const RideCard = ({ ride, t, onView }) => {
             <span className="text-theme-muted">|</span>
             <i className="ri-user-line text-xs" />
             <span className="shrink-0">
-              {ride.passengers} Passenger{ride.passengers > 1 ? 's' : ''}
+              {ride.passengers} {t(ride.passengers > 1 ? 'passengers' : 'passenger')}
             </span>
           </div>
         </div>
@@ -298,7 +198,7 @@ const RideCard = ({ ride, t, onView }) => {
 }
 
 const RideDetailModal = ({ ride, t, onClose }) => {
-  const sb = statusBadge(ride.status)
+  const sb = statusBadge(ride.status, t)
   const v = vehicleMeta(ride.vehicleType)
   const dt = rideDate(ride)
   const cancelled = ride.status === 'cancelled'
@@ -402,6 +302,19 @@ const RideDetailModal = ({ ride, t, onClose }) => {
           </span>
         </div>
 
+        {!cancelled && ride.id ? (
+          <div className="mt-4">
+            <Link
+              to={`/invoice/${ride.id}`}
+              state={{ from: 'history' }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2.5 text-sm font-semibold text-theme-primary transition-colors hover:bg-theme-card-muted"
+            >
+              <i className="ri-file-list-3-line text-sm" aria-hidden />
+              {t('view_invoice')}
+            </Link>
+          </div>
+        ) : null}
+
         <div className="mt-4">
           <button
             type="button"
@@ -468,11 +381,8 @@ const RideHistory = () => {
   }, [loadRides])
 
   const items = useMemo(() => {
-    const src = rides.length > 0 ? rides : loading ? [] : demoRideHistory
-    return src.map(normalizeRide)
-  }, [rides, loading])
-
-  const unreachable = !!error && rides.length === 0
+    return rides.map(normalizeRide)
+  }, [rides])
 
   const stats = useMemo(
     () => ({
@@ -524,18 +434,18 @@ const RideHistory = () => {
   return (
     <div className="min-h-dvh min-h-screen w-full max-w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
       {/* header */}
-      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-3 py-3 backdrop-blur sm:px-4">
-        <div className="mx-auto flex w-full max-w-lg items-center gap-2 sm:gap-3">
+      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-4 pt-4 pb-3 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-lg items-center gap-3">
           <Link
             to="/home"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-card text-theme-secondary"
-            aria-label="Back"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand"
+            aria-label={t('back')}
           >
-            <i className="ri-arrow-left-line text-lg" />
+            <i className="ri-arrow-left-line text-2xl" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-bold text-theme-primary sm:text-lg">{t('ride_history')}</h1>
-            <p className="text-xs text-theme-muted">{t('your_past_trips')}</p>
+            <h1 className="truncate text-2xl font-extrabold tracking-tight text-theme-primary">{t('ride_history')}</h1>
+            <p className="text-[13px] text-theme-muted">{t('your_past_trips')}</p>
           </div>
           <button
             type="button"
@@ -543,8 +453,8 @@ const RideHistory = () => {
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
               showCalendar ? 'bg-brand text-brand-ink' : 'bg-theme-card text-theme-secondary hover:bg-theme-card-muted'
             }`}
-            aria-label="Calendar"
-            title="Calendar"
+            aria-label={t('calendar')}
+            title={t('calendar')}
           >
             <i className="ri-calendar-2-line text-lg" />
           </button>
@@ -561,7 +471,7 @@ const RideHistory = () => {
                   type="button"
                   onClick={() => setCalView('years')}
                   className="rounded-lg px-1 py-0.5 text-sm font-semibold text-theme-primary hover:bg-theme-card-muted focus:outline-none"
-                  title="Choose year and month"
+                  title={t('choose_year_and_month')}
                 >
                   {new Date(calendarMonth.y, calendarMonth.m).toLocaleString(undefined, { month: 'long', year: 'numeric' })}
                   <i className="ri-arrow-down-s-line ml-0.5 text-xs text-theme-muted" />
@@ -576,7 +486,7 @@ const RideHistory = () => {
                   <i className="ri-arrow-down-s-line ml-0.5 text-xs text-theme-muted" />
                 </button>
               ) : (
-                <p className="text-sm font-semibold text-theme-primary">Select year</p>
+                <p className="text-sm font-semibold text-theme-primary">{t('select_year')}</p>
               )}
 
               <div className="flex items-center gap-1">
@@ -586,7 +496,7 @@ const RideHistory = () => {
                     onClick={() => setDateFilter('')}
                     className="text-xs font-medium text-brand"
                   >
-                    Clear
+                    {t('clear')}
                   </button>
                 ) : null}
 
@@ -599,7 +509,7 @@ const RideHistory = () => {
                         setCalendarMonth({ y: d.getFullYear(), m: d.getMonth() })
                       }}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
-                      aria-label="Previous month"
+                      aria-label={t('previous_month')}
                     >
                       <i className="ri-arrow-left-s-line text-lg" />
                     </button>
@@ -610,7 +520,7 @@ const RideHistory = () => {
                         setCalendarMonth({ y: d.getFullYear(), m: d.getMonth() })
                       }}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
-                      aria-label="Next month"
+                      aria-label={t('next_month')}
                     >
                       <i className="ri-arrow-right-s-line text-lg" />
                     </button>
@@ -623,7 +533,7 @@ const RideHistory = () => {
                       type="button"
                       onClick={() => setCalYearOffset((o) => o - 1)}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
-                      aria-label="Previous years"
+                      aria-label={t('previous_years')}
                     >
                       <i className="ri-arrow-left-s-line text-lg" />
                     </button>
@@ -631,7 +541,7 @@ const RideHistory = () => {
                       type="button"
                       onClick={() => setCalYearOffset((o) => o + 1)}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
-                      aria-label="Next years"
+                      aria-label={t('next_years')}
                     >
                       <i className="ri-arrow-right-s-line text-lg" />
                     </button>
@@ -643,8 +553,8 @@ const RideHistory = () => {
             {calView === 'days' ? (
               <>
                 <div className="mt-3 grid grid-cols-7 text-center text-[11px] font-medium text-theme-muted">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                    <span key={d} className="py-1">{d}</span>
+                  {['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map((d) => (
+                    <span key={d} className="py-1">{t(d)}</span>
                   ))}
                 </div>
                 <div className="grid grid-cols-7 gap-y-1">
@@ -690,7 +600,7 @@ const RideHistory = () => {
 
             {calView === 'months' ? (
               <div className="mt-3 grid grid-cols-3 gap-2">
-                {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, idx) => (
+                {['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].map((m, idx) => (
                   <button
                     key={m}
                     type="button"
@@ -704,7 +614,7 @@ const RideHistory = () => {
                         : 'border-theme bg-theme-card text-theme-secondary hover:bg-theme-card-muted'
                     }`}
                   >
-                    {m}
+                    {t(m)}
                   </button>
                 ))}
               </div>
@@ -744,12 +654,17 @@ const RideHistory = () => {
       ) : null}
 
       <div className="mx-auto w-full max-w-lg px-3 pt-3 sm:px-4">
-        {unreachable ? (
+        {error ? (
           <div
             role="status"
             className="mb-3 rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-xs text-brand"
           >
-            {t('sample_data_notice')}
+            <div className="flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button type="button" onClick={loadRides} className="shrink-0 font-semibold underline">
+                {t('retry')}
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -772,7 +687,7 @@ const RideHistory = () => {
         {!loading ? (
           <nav
             className="mb-3 grid grid-cols-4 gap-1.5"
-            aria-label="Filter rides"
+            aria-label={t('filter_rides')}
           >
             {FILTERS.map((f) => {
               const active = activeFilter === f.key
@@ -812,8 +727,8 @@ const RideHistory = () => {
               type="button"
               onClick={() => setActiveFilter('all')}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-theme bg-theme-card text-theme-secondary hover:bg-theme-card-muted"
-              aria-label="Filter"
-              title="Filter"
+              aria-label={t('filter')}
+              title={t('filter')}
             >
               <i className="ri-filter-2-line text-lg" />
             </button>

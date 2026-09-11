@@ -22,6 +22,7 @@ router.post('/phone/verify-otp',
 );
 
 router.get('/profile', auth.authCaptain, captainController.getCaptainProfile);
+router.post('/wallet/add', auth.authCaptain, captainController.addWalletBalance);
 router.patch('/profile', auth.authCaptain, captainController.updateCaptainPayee);
 router.get('/rides/history', auth.authCaptain, captainController.getRideHistory);
 router.get('/earnings', auth.authCaptain, captainController.getEarnings);

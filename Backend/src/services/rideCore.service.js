@@ -1,8 +1,7 @@
 const rideModel = require('../models/rideCore.model');
 const captainModel = require('../models/captain.model');
 const mapService = require('./maps.service');
-const crypto = require('crypto');
-const { expiresInMinutes } = require('../utils/otp');
+const { expiresInMinutes, randomSixDigit } = require('../utils/otp');
 const { encryptOtp, hashOtp, verifyOtp } = require('../utils/otpSecure');
 const pricingService = require('./pricing.service');
 const paymentService = require('./payment.service');
@@ -14,15 +13,32 @@ function rideError(message, statusCode = 400) {
     return err;
 }
 
-function getOtp(num) {
-    return crypto.randomInt(Math.pow(10, num - 1), Math.pow(10, num)).toString();
+const ACTIVE_RIDE_STATUSES = [ 'accepted', 'arrived', 'started' ];
+
+async function releaseCaptainBusyIfAvailable(captainRef) {
+    if (!captainRef) return;
+    const captainId = captainRef?._id || captainRef;
+    const activeRideQuery = rideModel.findOne({
+        captain: captainId,
+        status: { $in: ACTIVE_RIDE_STATUSES },
+    });
+    const activeRide = typeof activeRideQuery?.select === 'function'
+        ? await activeRideQuery.select('_id').lean()
+        : await activeRideQuery;
+    if (!activeRide) {
+        await captainModel.updateOne(
+            { _id: captainId, busy: true },
+            { $set: { busy: false } },
+        );
+    }
 }
 
-function normalizePaymentMethod(pm) {
-    const s = String(pm || 'Cash').trim().toLowerCase();
-    if (s === 'wallet') return 'WALLET';
-    if (s === 'upi' || s === 'online') return 'UPI';
-    if (s === 'qr') return 'QR';
+module.exports.releaseCaptainBusyIfAvailable = releaseCaptainBusyIfAvailable;
+
+function normalizePaymentMethod(method) {
+    const m = String(method || '').trim();
+    if (m === 'UPI') return 'UPI';
+    if (m === 'Online') return 'Online';
     return 'Cash';
 }
 module.exports.normalizePaymentMethod = normalizePaymentMethod;
@@ -80,7 +96,7 @@ module.exports.createRide = async ({
     pickupCoordinates,
     dropCoordinates,
 }) => {
-    /** OTP is created only when a driver accepts (see confirmRide) — shared start-ride code. */
+    /** OTP is created only when the driver arrives. */
     const ride = await rideModel.create({
         user,
         pickupLocation,
@@ -100,13 +116,8 @@ module.exports.createRide = async ({
     return { ride };
 };
 
-/** First driver wins — atomic claim while status is searching and no captain. Issues a fresh OTP for passenger + driver. */
+/** First driver wins — atomic claim while status is searching and no captain. */
 module.exports.confirmRide = async ({ rideId, captain }) => {
-    const plain = getOtp(6);
-    const [ otpHash, otpCipher ] = await Promise.all([
-        hashOtp(plain),
-        Promise.resolve(encryptOtp(plain)),
-    ]);
     const ride = await rideModel.findOneAndUpdate(
         {
             _id: rideId,
@@ -118,9 +129,11 @@ module.exports.confirmRide = async ({ rideId, captain }) => {
                 captain: captain._id,
                 status: 'accepted',
                 acceptedAt: new Date(),
-                otpHash,
-                otpCipher,
-                otpExpiresAt: expiresInMinutes(5),
+            },
+            $unset: {
+                otpHash: 1,
+                otpCipher: 1,
+                otpExpiresAt: 1,
             },
         },
         { new: true }
@@ -131,16 +144,44 @@ module.exports.confirmRide = async ({ rideId, captain }) => {
         if (!exists) throw rideError('Ride not found', 404);
         throw rideError('Ride already assigned or no longer available', 409);
     }
-    return { ride, otpPlain: plain };
+
+    const busyUpdate = await captainModel.updateOne(
+        { _id: captain._id, busy: { $ne: true } },
+        { $set: { busy: true } },
+    );
+    if (!busyUpdate?.matchedCount) {
+        await rideModel.updateOne(
+            { _id: ride._id, captain: captain._id, status: 'accepted' },
+            {
+                $set: { captain: null, status: 'searching' },
+                $unset: {
+                    acceptedAt: 1,
+                    otpHash: 1,
+                    otpCipher: 1,
+                    otpExpiresAt: 1,
+                },
+            },
+        );
+        throw rideError('Captain already has an active ride.', 409);
+    }
+    return { ride };
 };
 
 module.exports.rejectRide = async ({ rideId, captain }) => {
-    const ride = await rideModel.findOne({ _id: rideId, status: 'searching' });
-    if (!ride) throw rideError('Ride not found or already assigned', 409);
-    await rideModel.updateOne(
-        { _id: rideId },
+    const result = await rideModel.updateOne(
+        {
+            _id: rideId,
+            status: 'searching',
+            $or: [ { captain: null }, { captain: { $exists: false } } ],
+        },
         { $addToSet: { declinedBy: captain._id } }
     );
+    if (!result?.matchedCount) {
+        const ride = await rideModel.findById(rideId);
+
+        if (!ride) throw rideError('Ride not found', 404);
+        throw rideError('Ride already assigned or no longer available', 409);
+    }
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };
 
@@ -149,15 +190,28 @@ module.exports.markArrived = async ({ rideId, captain }) => {
         .populate('user')
         .populate('captain');
     if (!current) throw rideError('Ride not found', 404);
-    if (current.status === 'arrived') return current;
+    if (current.status === 'arrived') return { ride: current, otpPlain: null };
     if (current.status !== 'accepted') throw rideError('Ride not found / not accepted', 409);
+    const otpPlain = randomSixDigit();
+    const [ otpHash, otpCipher ] = await Promise.all([
+        hashOtp(otpPlain),
+        Promise.resolve(encryptOtp(otpPlain)),
+    ]);
     const ride = await rideModel.findOneAndUpdate(
         { _id: rideId, captain: captain._id, status: 'accepted' },
-        { status: 'arrived', arrivedAt: new Date() },
+        {
+            $set: {
+                status: 'arrived',
+                arrivedAt: new Date(),
+                otpHash,
+                otpCipher,
+                otpExpiresAt: expiresInMinutes(5),
+            },
+        },
         { new: true }
     ).populate('user').populate('captain');
     if (!ride) throw rideError('Ride not found / not accepted', 409);
-    return ride;
+    return { ride, otpPlain };
 };
 
 module.exports.startRide = async ({ rideId, otp, captain }) => {
@@ -188,17 +242,14 @@ module.exports.endRide = async ({ rideId, captain }) => {
         );
     }
 
-    const norm = normalizePaymentMethod(ride.paymentMethod);
     const patch = {
         status: 'completed',
         completedAt,
         ...(durationSec != null ? { duration: durationSec } : {}),
-        ...(norm === 'Cash' ? { paymentStatus: 'success' } : {}),
     };
     await rideModel.updateOne({ _id: rideId }, patch);
-    if (norm === 'Cash') {
-        await paymentService.settleRidePaymentIfNeeded(rideId);
-    }
+    await releaseCaptainBusyIfAvailable(captain._id);
+    // Cash is settled only when the assigned captain confirms receipt.
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };
 

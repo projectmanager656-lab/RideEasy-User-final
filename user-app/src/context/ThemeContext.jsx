@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 
 export const THEME_STORAGE_KEY = 'rideeasy_user_theme'

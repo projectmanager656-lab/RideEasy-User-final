@@ -4,20 +4,26 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
-import LocationSearchPanel from '../components/LocationSearchPanel';
 import VehiclePanel from '../components/VehiclePanel';
 import ConfirmRide from '../components/ConfirmRide';
 import LookingForDriver from '../components/LookingForDriver';
 import WaitingForDriver from '../components/WaitingForDriver';
 import { useSocket } from '../hooks/useSocket';
 import { UserDataContext } from '../context/UserContext';
-import { useNavigate } from 'react-router-dom';
-import LiveTracking from '../components/LiveTracking';
+import { useNavigate, useLocation } from 'react-router-dom';
 import RideMap from '../components/RideMap';
-import { getAppLogoUrl } from '../config/externalEndpoints'
-import { SERVICE_AREA_USER_MESSAGE, SERVICE_AREAS } from '../utils/serviceArea'
+import RideEasyHeader from '../components/RideEasyHeader';
+import LocationSelector from '../components/LocationSelector';
+import ForMeSheet from '../components/ForMeSheet';
+import SafetyPromoCard from '../components/SafetyPromoCard';
+import ScheduleModal from '../components/ScheduleModal';
+import { SERVICE_AREAS } from '../utils/serviceArea'
+import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
+import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
+import { addRecentSearch, getRecentSearches } from '../utils/recentSearches'
 import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
 
@@ -51,29 +57,45 @@ function normalizeRideStatus(s) {
     return String(s || '').trim().toLowerCase()
 }
 
+/** Merge deterministic local results first, then de-duped live API results. */
+function mergeServicePlaces(localList, apiList) {
+    const seen = new Set()
+    const out = []
+    for (const item of [ ...localList, ...apiList ]) {
+        const key = String(item?.name || '').trim().toLowerCase()
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        out.push(item)
+    }
+    return out
+}
+
 const Home = () => {
     const { t } = useLanguage()
     const [ pickup, setPickup ] = useState('')
     const [ destination, setDestination ] = useState('')
-    const [ serviceCity, setServiceCity ] = useState(readStoredServiceCity)
-    const [ panelOpen, setPanelOpen ] = useState(false)
+    const [ serviceCity ] = useState(readStoredServiceCity)
+    const [ recentSearches, setRecentSearches ] = useState(getRecentSearches)
+    const [ forMeUsers, setForMeUsers ] = useState([ { name: 'Me', phone: '' } ])
+    const [ forMeActive, setForMeActive ] = useState('Me')
+    const [ forMeOpen, setForMeOpen ] = useState(false)
+    const [ pickupSuggestions, setPickupSuggestions ] = useState([])
+    const [ destinationSuggestions, setDestinationSuggestions ] = useState([])
+    const [ activeField, setActiveField ] = useState(null)
+    const [ searchStatus, setSearchStatus ] = useState('idle')
+    const searchTimerRef = useRef(null)
+    const searchSeqRef = useRef(0)
     const vehiclePanelRef = useRef(null)
     const confirmRidePanelRef = useRef(null)
     const vehicleFoundRef = useRef(null)
     const waitingForDriverRef = useRef(null)
-    const panelRef = useRef(null)
-    const panelCloseRef = useRef(null)
     const [ vehiclePanel, setVehiclePanel ] = useState(false)
     const [ confirmRidePanel, setConfirmRidePanel ] = useState(false)
     const [ vehicleFound, setVehicleFound ] = useState(false)
     const [ waitingForDriver, setWaitingForDriver ] = useState(false)
-    const [ pickupSuggestions, setPickupSuggestions ] = useState([])
-    const [ destinationSuggestions, setDestinationSuggestions ] = useState([])
-    const [ activeField, setActiveField ] = useState(null)
     const [ fare, setFare ] = useState({})
     const [ vehicleType, setVehicleType ] = useState(null)
     const [ ride, setRide ] = useState(null)
-    const [ hasShownAcceptAlert, setHasShownAcceptAlert ] = useState(false)
     const [ pickupCoords, setPickupCoords ] = useState(null)
     const [ dropCoords, setDropCoords ] = useState(null)
     const [ driverCoords, setDriverCoords ] = useState(null)
@@ -81,6 +103,16 @@ const Home = () => {
     const [ passengerOtp, setPassengerOtp ] = useState('')
     const [ rideConfirmation, setRideConfirmation ] = useState(null)
     const [ bookingError, setBookingError ] = useState('')
+    const [ findingTrip, setFindingTrip ] = useState(false)
+    const [ scheduleOpen, setScheduleOpen ] = useState(false)
+    const [ notificationsOpen, setNotificationsOpen ] = useState(false)
+    const [ scheduledAt, setScheduledAt ] = useState(null)
+    const [ assignmentError, setAssignmentError ] = useState('')
+    const [ pickupSelection, setPickupSelection ] = useState(null)
+    const [ dropSelection, setDropSelection ] = useState(null)
+    /** Locks concurrent retry-assign calls; bounds the retry budget across polls. */
+    const retryAssignLockRef = useRef(false)
+    const retryAttemptRef = useRef(0)
     const passengerOtpRef = useRef('')
     passengerOtpRef.current = passengerOtp
     const rideRef = useRef(null)
@@ -90,14 +122,22 @@ const Home = () => {
     const rideGeocodeOnceRef = useRef({ pick: '', drop: '' })
     /** On app open, keep search form visible until user explicitly resumes/creates a ride. */
     const keepSearchFirstRef = useRef(true)
+    /** True when Home restored an active ride from the session key (refresh / re-entry). */
+    const resumedRideFromSessionRef = useRef(false)
 
     const navigate = useNavigate()
+    const location = useLocation()
+    const chooseRideResult = location.state?.chooseRideResult
 
     useEffect(() => {
         try {
             localStorage.setItem('rideeasy_user_service_city', serviceCity)
         } catch { /* ignore */ }
     }, [serviceCity])
+
+    useEffect(() => () => {
+        clearTimeout(searchTimerRef.current)
+    }, [])
 
     /** Single source of truth: GET ride (includes otp + captain location) then fallback passenger-otp. */
     const syncRideFromServer = useCallback((rideId) => {
@@ -159,18 +199,23 @@ const Home = () => {
     }, [socket, currentUser?._id]);
 
     /** Passenger GPS → map + Socket.IO for driver app (server forwards to assigned captain). */
+    const hasRide = Boolean(ride)
+    const rideStatus = normalizeRideStatus(ride?.status)
     useEffect(() => {
-        const st = normalizeRideStatus(ride?.status)
         const activeRide =
             vehicleFound
             || waitingForDriver
-            || (ride && [ 'searching', 'accepted', 'arrived', 'started' ].includes(st))
+            || (hasRide && [ 'searching', 'accepted', 'arrived', 'started' ].includes(rideStatus))
         if (!socket || !currentUser?._id || !activeRide || !navigator.geolocation) {
             if (!activeRide) setPassengerCoords(null)
             return
         }
         let emitTimer
-        const watchId = navigator.geolocation.watchPosition(
+        let watchId = null
+        const stopOnLocationError = () => {
+            if (watchId != null) navigator.geolocation.clearWatch(watchId)
+        }
+        watchId = navigator.geolocation.watchPosition(
             (pos) => {
                 const lat = pos.coords.latitude
                 const lng = pos.coords.longitude
@@ -180,18 +225,19 @@ const Home = () => {
                     socket.emit('user:location-update', { lat, lng })
                 }, 800)
             },
-            () => {},
+            stopOnLocationError,
             { enableHighAccuracy: true, maximumAge: 10_000 }
         )
         return () => {
             clearTimeout(emitTimer)
             navigator.geolocation.clearWatch(watchId)
         }
-    }, [socket, currentUser?._id, vehicleFound, waitingForDriver, ride])
+    }, [socket, currentUser?._id, vehicleFound, waitingForDriver, hasRide, rideStatus, ride?._id])
 
     /** Restore active booking after refresh (ride id in sessionStorage). */
     useEffect(() => {
         if (ride?._id) return
+        if (chooseRideResult) return
         const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
         if (!id || !currentUser?._id) return
         const token = localStorage.getItem('token')
@@ -203,14 +249,24 @@ const Home = () => {
                 return
             }
             const st = normalizeRideStatus(data.status)
+            if (st === 'started' || st === 'completed') {
+                /* Refresh during a live/completed ride — take the passenger back
+                   to the ride screen with the fresh server ride. */
+                navigate('/riding', {
+                    replace: true,
+                    state: { ride: { ...data, status: st } },
+                })
+                return
+            }
             if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
                 try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
                 return
             }
+            resumedRideFromSessionRef.current = true
             setVehicleFound(false)
             setWaitingForDriver(false)
         })
-    }, [ride, currentUser?._id, syncRideFromServer])
+    }, [ride, currentUser?._id, syncRideFromServer, navigate, chooseRideResult])
 
     useEffect(() => {
         if (!socket) return;
@@ -246,10 +302,6 @@ const Home = () => {
                 } catch { /* ignore */ }
                 syncRideFromServer(rid)
             }
-            if (!hasShownAcceptAlert) {
-                setHasShownAcceptAlert(true)
-                alert(t('driver_accepted_ride'))
-            }
         };
 
         const handleStatusUpdate = (data) => {
@@ -268,7 +320,7 @@ const Home = () => {
                     return { ...base, status: data.status }
                 })
                 const st = data.status
-                if (st === 'started' || st === 'completed') {
+                if (st === 'completed' || st === 'cancelled') {
                     try {
                         sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
                     } catch { /* ignore */ }
@@ -305,10 +357,31 @@ const Home = () => {
                 if (st === 'arrived' && !keepSearchFirstRef.current) setWaitingForDriver(true)
                 if (st === 'started') {
                     setWaitingForDriver(false)
-                    const r = data.ride || rideRef.current
-                    navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
+                    setVehicleFound(false)
+                    setPassengerOtp('')
+                    /* Jump to the live-ride screen when the passenger is actively
+                       in this booking flow (created here) or resumed it from the
+                       session key (refresh / re-entry mid-ride). An idle Home
+                       tab never hijacks navigation — the ride stays recoverable
+                       from the Live tab via the session key. */
+                    if (!keepSearchFirstRef.current || resumedRideFromSessionRef.current) {
+                        const r = data.ride || rideRef.current
+                        navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
+                    }
                 }
                 if (st === 'completed') {
+                    const completedRide = {
+                        ...(rideRef.current || {}),
+                        ...(data.ride || {}),
+                        status: 'completed',
+                    }
+                    try {
+                        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
+                    } catch { /* ignore */ }
+                    navigate('/riding', { replace: true, state: { ride: completedRide } })
+                    return
+                }
+                if (st === 'cancelled') {
                     setWaitingForDriver(false)
                     setVehicleFound(false)
                     setRideConfirmation(null)
@@ -381,7 +454,7 @@ const Home = () => {
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
         }
-    }, [socket, navigate, hasShownAcceptAlert, syncRideFromServer, t]);
+    }, [socket, navigate, syncRideFromServer]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -419,141 +492,317 @@ const Home = () => {
         return () => clearInterval(id)
     }, [ride?._id, ride?.status, syncRideFromServer]);
 
+    /**
+     * Controlled ride polling + bounded retry-assign while searching.
+     * Root-cause fix: the old effect depended on `ride` (an object) and re-ran on every
+     * `setRide(data)` — each re-run fired poll() + retry-assign immediately, creating a
+     * self-perpetuating loop that hammered the API into 429 territory.
+     */
     useEffect(() => {
-        if (!ride?._id) return
-        if (ride?.status && ride.status !== 'searching') return
+        const rideId = ride?._id
+        const st = normalizeRideStatus(ride?.status)
+        const hasCaptain = !!(ride?.captain?._id || ride?.captain)
+        if (!rideId || (st && st !== 'searching') || hasCaptain) return
 
         let cancelled = false
+        let intervalId = null
+        let backoffTimer = null
+
+        const stopTimers = () => {
+            if (intervalId) {
+                clearInterval(intervalId)
+                intervalId = null
+            }
+            if (backoffTimer) {
+                clearTimeout(backoffTimer)
+                backoffTimer = null
+            }
+        }
+
+        /** Stop the whole loop and surface a compact message — never keep hammering. */
+        const markUnavailable = () => {
+            setAssignmentError(t('driver_assignment_unavailable'))
+            stopTimers()
+        }
+
+        /** Bounded retry-assign: max 3 attempts, 1s/2s/4s backoff, respects Retry-After. */
+        const retryAssign = async () => {
+            if (cancelled || retryAssignLockRef.current || retryAttemptRef.current >= 3) return
+            retryAssignLockRef.current = true
+            try {
+                const res = await apiClient.post(`/rides/${rideId}/retry-assign`, {}, withAuth())
+                if (cancelled) return
+                if (res.status >= 200 && res.status < 300) retryAttemptRef.current = 0
+            } catch (err) {
+                if (cancelled) return
+                const retryAfter = Number(err?.response?.headers?.['retry-after'] ?? 0)
+                if (err?.response?.status === 429 || retryAfter > 0) {
+                    retryAttemptRef.current += 1
+                    if (retryAttemptRef.current >= 3) {
+                        markUnavailable()
+                        return
+                    }
+                    const delay = retryAfter > 0
+                        ? retryAfter * 1000
+                        : Math.min(1000 * (2 ** (retryAttemptRef.current - 1)), 4000)
+                    backoffTimer = setTimeout(retryAssign, delay)
+                    return
+                }
+                retryAttemptRef.current += 1
+            } finally {
+                retryAssignLockRef.current = false
+            }
+        }
 
         const poll = async () => {
+            if (cancelled) return
             try {
-                if (ride?.status === 'searching' && (!ride?.captain?._id && !ride?.captain)) {
-                    await apiClient.post(`/rides/${ride._id}/retry-assign`, {}, withAuth()).catch(() => {})
-                }
-                const res = await apiClient.get(`/rides/${ride._id}`, withAuth())
+                const res = await apiClient.get(`/rides/${rideId}`, withAuth())
                 if (cancelled) return
 
                 const { ride: data, confirmation: conf } = splitRideApiPayload(res.data)
+                const dst = normalizeRideStatus(data?.status)
+                if (data?._id && dst !== 'searching') {
+                    stopTimers()
+                    setRide(data)
+                    if (conf) setRideConfirmation(conf)
+                    if (dst === 'accepted' || dst === 'arrived') {
+                        setVehicleFound(false)
+                        setWaitingForDriver(true)
+                        setAssignmentError('')
+                        syncRideFromServer(data._id)
+                    }
+                    if (dst === 'started' || dst === 'completed') setAssignmentError('')
+                    return
+                }
                 setRide(data)
                 if (conf) setRideConfirmation(conf)
                 if (conf?.liveLocation?.lat != null && conf?.liveLocation?.lng != null) {
                     setDriverCoords({ lat: conf.liveLocation.lat, lng: conf.liveLocation.lng })
                 }
                 if (data?.otp) setPassengerOtp(String(data.otp).trim())
-
-                const dst = normalizeRideStatus(data?.status)
-                if (data?._id && (dst === 'accepted' || dst === 'arrived')) {
-                    syncRideFromServer(data._id)
+            } catch (err) {
+                if (cancelled) return
+                /* A single 429 stops the entire loop — no infinite retry. */
+                if (err?.response?.status === 429) {
+                    markUnavailable()
+                    return
                 }
-
-                if (data?.status === 'accepted') {
-                    setVehicleFound(false)
-                    setWaitingForDriver(true)
-                    syncRideFromServer(data._id)
-                    if (!hasShownAcceptAlert) {
-                        setHasShownAcceptAlert(true)
-                        alert(t('driver_accepted_ride'))
-                    }
-                }
-            } catch {
-                // ignore transient polling errors
+                /* Transient network/5xx: keep the normal polling cadence. */
             }
         }
 
         poll()
-        const id = setInterval(poll, 5000)
+        retryAssign()
+        intervalId = setInterval(() => {
+            poll()
+            retryAssign()
+        }, 8000)
+
         return () => {
             cancelled = true
-            clearInterval(id)
+            stopTimers()
         }
-    }, [ride, hasShownAcceptAlert, syncRideFromServer, t]);
+}, [ride?._id, ride?.status, ride?.captain, syncRideFromServer, t]);
 
 
-    const handlePickupChange = async (e) => {
-        const value = e.target.value
-        setPickup(value)
-        const trimmed = value.trim()
+    /** Debounced prefix search with stale-response protection and graceful 429 handling. */
+    const runLocationSearch = (field, query) => {
+        const trimmed = (query || '').trim()
+        const seq = ++searchSeqRef.current
+        clearTimeout(searchTimerRef.current)
         if (!trimmed) {
+            setSearchStatus('idle')
             setPickupSuggestions([])
+            setDestinationSuggestions([])
             return
         }
-        try {
-            const response = await apiClient.get('/maps/get-suggestions', withAuth({
-                params: { input: trimmed, city: serviceCity },
-            }))
-            setPickupSuggestions(response.data)
-        } catch {
-            setPickupSuggestions([])
-        }
+        setSearchStatus('loading')
+        searchTimerRef.current = setTimeout(async () => {
+            const localList = searchServiceAreaPlaces(trimmed, 8)
+            let merged = localList
+            try {
+                if (trimmed.length >= 3) {
+                    const response = await apiClient.get('/maps/get-suggestions', withAuth({
+                        params: { input: trimmed },
+                    }))
+                    if (seq !== searchSeqRef.current) return
+                    const raw = Array.isArray(response.data) ? response.data : []
+                    const cityKeys = SERVICE_AREAS.map((z) => z.key.toLowerCase())
+                    const apiList = raw
+                        .filter((s) => {
+                            const n = String(s?.name || '').trim()
+                            const nl = n.toLowerCase()
+                            return (
+                                s?.lat != null && s?.lng != null
+                                && n.length > 3
+                                && cityKeys.some((ck) => nl.includes(ck))
+                            )
+                        })
+                        .map((s) => ({ name: s.name, lat: s.lat, lng: s.lng, source: 'api' }))
+                    merged = mergeServicePlaces(localList, apiList)
+                }
+            } catch {
+                if (seq !== searchSeqRef.current) return
+            }
+            if (seq !== searchSeqRef.current) return
+            if (field === 'pickup') setPickupSuggestions(merged)
+            else setDestinationSuggestions(merged)
+            setSearchStatus(merged.length ? 'done' : 'empty')
+        }, 300)
     }
 
-    const handleDestinationChange = async (e) => {
+    const handlePickupChange = (e) => {
         const value = e.target.value
+        chooseRideSentRef.current = false
+        setPickup(value)
+        if (pickupSelection && value.trim() !== pickupSelection.name) {
+            setPickupSelection(null)
+            setPickupCoords(null)
+        }
+        runLocationSearch('pickup', value)
+    }
+
+    const handleDestinationChange = (e) => {
+        const value = e.target.value
+        chooseRideSentRef.current = false
         setDestination(value)
-        const trimmed = value.trim()
-        if (!trimmed) {
-            setDestinationSuggestions([])
-            return
+        if (dropSelection && value.trim() !== dropSelection.name) {
+            setDropSelection(null)
+            setDropCoords(null)
         }
-        try {
-            const response = await apiClient.get('/maps/get-suggestions', withAuth({
-                params: { input: trimmed, city: serviceCity },
-            }))
-            setDestinationSuggestions(response.data)
-        } catch {
-            setDestinationSuggestions([])
-        }
+        runLocationSearch('destination', value)
     }
 
     const fetchPickupCoords = async (address) => {
-        if (!address?.trim()) return
+        if (!address?.trim()) return null
         try {
             const res = await apiClient.get('/maps/get-coordinates', withAuth({
                 params: { address: address.trim() },
             }))
             if (res.data?.lat != null && res.data?.lng != null) {
-                setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
+                const c = { lat: res.data.lat, lng: res.data.lng }
+                setPickupCoords(c)
+                return c
             }
         } catch {
             setPickupCoords(null)
         }
+        return null
     }
 
     const fetchDropCoords = async (address) => {
-        if (!address?.trim()) return
+        if (!address?.trim()) return null
         try {
             const res = await apiClient.get('/maps/get-coordinates', withAuth({
                 params: { address: address.trim() },
             }))
             if (res.data?.lat != null && res.data?.lng != null) {
-                setDropCoords({ lat: res.data.lat, lng: res.data.lng })
+                const c = { lat: res.data.lat, lng: res.data.lng }
+                setDropCoords(c)
+                return c
             }
         } catch {
             setDropCoords(null)
         }
+        return null
     }
 
-    const handleSelectPickup = (suggestion) => {
-        const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
-        if (!name) return
-        if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
-            setPickupCoords({ lat: suggestion.lat, lng: suggestion.lng })
-        } else {
-            fetchPickupCoords(name)
+    const handleSelectRecent = async (item) => {
+        const from = String(item.pickup || '').trim()
+        const to = String(item.destination || item.name || '').trim()
+        if (!to) return
+        chooseRideSentRef.current = false
+        setBookingError('')
+        setPickup(from)
+        setDestination(to)
+        if (from) addRecentSearch({ pickup: from, destination: to })
+        else addRecentSearch({ name: to })
+        setRecentSearches(getRecentSearches())
+        const pc = from ? await fetchPickupCoords(from) : null
+        const dc = await fetchDropCoords(to)
+        if (pc) {
+            setPickupCoords(pc)
+            setPickupSelection({ name: from, latitude: pc.lat, longitude: pc.lng })
+        }
+        if (dc) {
+            setDropCoords(dc)
+            setDropSelection({ name: to, latitude: dc.lat, longitude: dc.lng })
+        }
+        if (!pc || !dc) {
+            setBookingError(t('could_not_resolve_locations'))
         }
     }
 
-    const handleSelectDestination = (suggestion) => {
+    /** Select a pickup suggestion from the search panel. */
+    const handleSelectPickup = async (suggestion) => {
         const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
         if (!name) return
+        clearTimeout(searchTimerRef.current)
+        setSearchStatus('idle')
+        setPickupSuggestions([])
+        setActiveField(null)
+        setPickup(name)
+        setBookingError('')
+        let coords = null
         if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
-            setDropCoords({ lat: suggestion.lat, lng: suggestion.lng })
+            coords = { lat: suggestion.lat, lng: suggestion.lng }
         } else {
-            fetchDropCoords(name)
+            coords = await fetchPickupCoords(name)
         }
+        if (coords?.lat != null && coords?.lng != null) {
+            setPickupCoords(coords)
+            setPickupSelection({ name, latitude: coords.lat, longitude: coords.lng })
+        } else {
+            setPickupCoords(null)
+            setPickupSelection(null)
+            setBookingError(t('could_not_resolve_pickup'))
+        }
+    }
+
+    /** Select a drop suggestion from the search panel — also records a recent search. */
+    const handleSelectDestination = async (suggestion) => {
+        const name = typeof suggestion === 'string' ? suggestion : suggestion?.name
+        if (!name) return
+        clearTimeout(searchTimerRef.current)
+        setSearchStatus('idle')
+        setDestinationSuggestions([])
+        setActiveField(null)
+        setDestination(name)
+        setBookingError('')
+        addRecentSearch({
+            pickup: pickup?.trim() || '',
+            destination: name,
+            detail: typeof suggestion === 'object' && suggestion?.description ? suggestion.description : '',
+        })
+        setRecentSearches(getRecentSearches())
+        let coords = null
+        if (typeof suggestion === 'object' && suggestion?.lat != null && suggestion?.lng != null) {
+            coords = { lat: suggestion.lat, lng: suggestion.lng }
+        } else {
+            coords = await fetchDropCoords(name)
+        }
+        if (coords?.lat != null && coords?.lng != null) {
+            setDropCoords(coords)
+            setDropSelection({ name, latitude: coords.lat, longitude: coords.lng })
+        } else {
+            setDropCoords(null)
+            setDropSelection(null)
+            setBookingError(t('could_not_resolve_drop'))
+        }
+    }
+
+    /** Route a tapped suggestion to the pickup or drop handler based on the focused field. */
+    const handleSelectSuggestion = (suggestion) => {
+        if (activeField === 'pickup') handleSelectPickup(suggestion)
+        else if (activeField === 'destination') handleSelectDestination(suggestion)
     }
 
     /** Keep pickup/drop text + map pins in sync with the active ride (refresh, socket, or restore). */
+    const ridePickupLng = ride?.pickup?.coordinates?.[0]
+    const ridePickupLat = ride?.pickup?.coordinates?.[1]
+    const rideDropLng = ride?.drop?.coordinates?.[0]
+    const rideDropLat = ride?.drop?.coordinates?.[1]
     useEffect(() => {
         if (!ride?._id) return
         const st = normalizeRideStatus(ride.status)
@@ -569,9 +818,9 @@ const Home = () => {
         const dr = typeof ride.dropLocation === 'string' ? ride.dropLocation.trim() : ''
         /* Keep From/To user-entered only; don't repopulate from previous ride payload. */
 
-        const pc = ride.pickup?.coordinates
-        if (Array.isArray(pc) && pc.length === 2) {
-            setPickupCoords((prev) => prev || { lat: pc[1], lng: pc[0] })
+        const hasPickupCoordinates = ridePickupLng != null && ridePickupLat != null
+        if (hasPickupCoordinates) {
+            setPickupCoords((prev) => prev || { lat: ridePickupLat, lng: ridePickupLng })
         } else if (pu) {
             const gk = `${ride._id}:pick:${pu}`
             if (rideGeocodeOnceRef.current.pick !== gk) {
@@ -579,9 +828,9 @@ const Home = () => {
                 fetchPickupCoords(pu)
             }
         }
-        const dc = ride.drop?.coordinates
-        if (Array.isArray(dc) && dc.length === 2) {
-            setDropCoords((prev) => prev || { lat: dc[1], lng: dc[0] })
+        const hasDropCoordinates = rideDropLng != null && rideDropLat != null
+        if (hasDropCoordinates) {
+            setDropCoords((prev) => prev || { lat: rideDropLat, lng: rideDropLng })
         } else if (dr) {
             const gk = `${ride._id}:drop:${dr}`
             if (rideGeocodeOnceRef.current.drop !== gk) {
@@ -597,17 +846,17 @@ const Home = () => {
                 const vt = String(ride.vehicleType).toUpperCase()
                 return { [vt]: price, price, distanceKm: ride.distance }
             })
-            setVehicleType((prev) => prev || ride.vehicleType)
+            setVehicleType((prev) => prev || (findTierByBackendType(ride.vehicleType)?.id ?? ride.vehicleType))
         }
     }, [
         ride?._id,
         ride?.status,
         ride?.pickupLocation,
         ride?.dropLocation,
-        ride?.pickup?.coordinates?.[0],
-        ride?.pickup?.coordinates?.[1],
-        ride?.drop?.coordinates?.[0],
-        ride?.drop?.coordinates?.[1],
+        ridePickupLng,
+        ridePickupLat,
+        rideDropLng,
+        rideDropLat,
         ride?.vehicleType,
         ride?.price,
         ride?.fare,
@@ -616,42 +865,36 @@ const Home = () => {
         waitingForDriver,
     ])
 
-    const submitHandler = (e) => {
-        e.preventDefault()
-    }
-
     // Replaced GSAP with Tailwind transitions for better reliability.
 
+    const handleScheduleContinue = (iso) => {
+        setScheduledAt(iso)
+        setScheduleOpen(false)
+        findTrip(iso)
+    }
 
-    async function findTrip() {
-        const p = (pickup || '').trim()
-        const d = (destination || '').trim()
-        if (!p || !d) {
-            alert(t('enter_pickup_drop_fare'))
+    async function findTrip(scheduledOverride = scheduledAt) {
+        if (!pickupSelection || !dropSelection) {
+            setBookingError(t('select_both_pickup_drop'))
             return
         }
-        setPanelOpen(false)
+        const p = (pickupSelection.name || '').trim()
+        const d = (dropSelection.name || '').trim()
+        if (!p || !d) {
+            setBookingError(t('select_pickup_and_drop_for_fare'))
+            return
+        }
+        if (p.toLowerCase() === d.toLowerCase()) {
+            setBookingError(t('pickup_destination_same'))
+            return
+        }
         setBookingError('')
+        setFindingTrip(true)
         try {
-            const pickPromise = (pickupCoords?.lat != null && pickupCoords?.lng != null)
-                ? Promise.resolve({ data: pickupCoords })
-                : apiClient.get('/maps/get-coordinates', withAuth({ params: { address: p } }))
-            const dropPromise = (dropCoords?.lat != null && dropCoords?.lng != null)
-                ? Promise.resolve({ data: dropCoords })
-                : apiClient.get('/maps/get-coordinates', withAuth({ params: { address: d } }))
-            const [ pickRes, dropRes ] = await Promise.all([ pickPromise, dropPromise ])
-            const pu = pickRes.data?.lat != null && pickRes.data?.lng != null
-                ? { lat: pickRes.data.lat, lng: pickRes.data.lng }
-                : null
-            const du = dropRes.data?.lat != null && dropRes.data?.lng != null
-                ? { lat: dropRes.data.lat, lng: dropRes.data.lng }
-                : null
+            const pu = { lat: pickupSelection.latitude, lng: pickupSelection.longitude }
+            const du = { lat: dropSelection.latitude, lng: dropSelection.longitude }
             setPickupCoords(pu)
             setDropCoords(du)
-            if (!pu || !du) {
-                setBookingError(t('could_not_resolve_location'))
-                return
-            }
             const response = await apiClient.get('/rides/get-fare', withAuth({
                 params: {
                     pickup: p,
@@ -662,25 +905,58 @@ const Home = () => {
                     dropLng: du.lng,
                 },
             }))
-            setFare(stripApiEnvelope(response.data))
-            setVehiclePanel(true)
+            const farePayload = stripApiEnvelope(response.data) || {}
+            setFare(farePayload)
+            chooseRideSentRef.current = true
+            try {
+                sessionStorage.setItem(DRAFT_BOOKING_KEY, JSON.stringify({
+                    pickup: p,
+                    destination: d,
+                    pickupCoords: pu,
+                    dropCoords: du,
+                    pickupSelection,
+                    dropSelection,
+                    fare: farePayload,
+                    scheduledAt: scheduledOverride || null,
+                }))
+            } catch { /* ignore */ }
+            navigate('/choose-ride', {
+                state: {
+                    pickup: p,
+                    destination: d,
+                    pickupCoords: pu,
+                    dropCoords: du,
+                    pickupSelection,
+                    dropSelection,
+                    fare: farePayload,
+                    scheduledAt: scheduledOverride || null,
+                },
+            })
         } catch (err) {
-            setBookingError(formatApiError(err))
+            if (err?.response?.status === 429) {
+                setBookingError(t('location_search_busy'))
+            } else {
+                setBookingError(formatApiError(err))
+            }
+        } finally {
+            setFindingTrip(false)
         }
     }
 
     async function createRide(opts = {}) {
         keepSearchFirstRef.current = false
         const { paymentMethod = 'Cash' } = opts
-        const u = String(vehicleType || 'AUTO').toUpperCase()
-        const vehicleTypeNorm = u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO')
-        const price = fare[vehicleTypeNorm] ?? fare[vehicleType]
+        const tier = findRideTier(vehicleType)
+        const vehicleTypeNorm = tier ? tier.vehicleType : 'AUTO'
+        const price = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? null)
         if (price == null) {
             alert(t('select_pickup_drop_vehicle'))
             return
         }
         try {
             setBookingError('')
+            setAssignmentError('')
+            retryAttemptRef.current = 0
             setRideConfirmation(null)
             setVehicleFound(true)
             setVehiclePanel(false)
@@ -697,15 +973,19 @@ const Home = () => {
                 vehicleType: vehicleTypeNorm,
                 paymentMethod: paymentMethod || 'Cash',
                 price,
-                distanceKm: fare.distanceKm
+                distanceKm: fare.distanceKm,
+                ...(scheduledAt ? { scheduledAt } : {})
             }, withAuth())
             const raw = stripApiEnvelope(response.data)
-            const ridePayload = { ...raw }
+            const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
             delete ridePayload.otp
             setRide(ridePayload)
             setPassengerOtp('')
             setDriverCoords(null)
-            setHasShownAcceptAlert(false)
+            if (pickup?.trim() || destination?.trim()) {
+                addRecentSearch({ pickup, destination })
+                setRecentSearches(getRecentSearches())
+            }
             if (ridePayload?._id) {
                 try {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
@@ -734,24 +1014,83 @@ const Home = () => {
 
     const showSearchPanel = !(vehiclePanel || confirmRidePanel || vehicleFound || waitingForDriver)
 
+    /** Map + Ride Now are driven ONLY by real selected locations (typing never counts). */
+    const hasRouteSelections = !!(
+        pickupSelection?.latitude != null
+        && pickupSelection?.longitude != null
+        && dropSelection?.latitude != null
+        && dropSelection?.longitude != null
+    )
+
     const trackingDriverToPickup =
         waitingForDriver
         && driverCoords?.lat != null
         && pickupCoords?.lat != null
 
+    const closeWaitingPanel = () => {
+        setWaitingForDriver(false)
+        setVehicleFound(false)
+        setConfirmRidePanel(false)
+        setVehiclePanel(false)
+    }
+
+    /** Guards repeated handoffs while preserving the location draft for back navigation. */
+    const chooseRideSentRef = useRef(false)
+
+    /** Restore the pickup/drop draft when returning from the Choose Ride screen (Back). */
+    useEffect(() => {
+        if (ride?._id) return
+        if (chooseRideResult) return
+        let draft = null
+        try {
+            draft = JSON.parse(sessionStorage.getItem(DRAFT_BOOKING_KEY) || 'null')
+        } catch { draft = null }
+        if (!draft || typeof draft !== 'object') return
+        if (draft.pickupCoords?.lat != null) setPickupCoords(draft.pickupCoords)
+        if (draft.dropCoords?.lat != null) setDropCoords(draft.dropCoords)
+        if (draft.pickup) setPickup(draft.pickup)
+        if (draft.destination) setDestination(draft.destination)
+        if (draft.pickupSelection) setPickupSelection(draft.pickupSelection)
+        if (draft.dropSelection) setDropSelection(draft.dropSelection)
+        chooseRideSentRef.current = true
+        try {
+            sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+        } catch { /* ignore */ }
+    }, [ ride?._id, chooseRideResult ])
+
+    /** Handoff from the Choose Ride screen: open the existing "Looking for driver" state. */
+    const chooseRideConsumedRef = useRef(false)
+    useEffect(() => {
+        const incoming = chooseRideResult
+        if (!incoming || chooseRideConsumedRef.current) return
+        chooseRideConsumedRef.current = true
+        const { ride, pickupCoords: pu, dropCoords: dr, pickup: p, destination: d, vehicleType, scheduledAt } = incoming
+        if (ride?._id) {
+            try {
+                sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ride._id))
+            } catch { /* ignore */ }
+        }
+        if (pu) setPickupCoords(pu)
+        if (dr) setDropCoords(dr)
+        if (p) setPickup(p)
+        if (d) setDestination(d)
+        if (vehicleType) setVehicleType(vehicleType)
+        if (scheduledAt) setScheduledAt(scheduledAt)
+        setRide(ride || null)
+        keepSearchFirstRef.current = false
+        setVehicleFound(true)
+        setWaitingForDriver(false)
+        try {
+            sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+        } catch { /* ignore */ }
+        navigate(location.pathname, { replace: true })
+    }, [ chooseRideResult, location.pathname, navigate ])
+
     return (
-        <div className='h-screen relative overflow-hidden w-full max-w-full'>
-            <div className="absolute z-20 top-4 left-0 right-0 flex justify-center pointer-events-none">
-                <img
-                    className="w-16"
-                    src={getAppLogoUrl()}
-                    alt="RideEasy"
-                />
-            </div>
-            <div className='h-screen w-full relative z-0'>
-                {showSearchPanel ? (
-                    <div className="h-full w-full bg-black" />
-                ) : (pickupCoords || dropCoords) ? (
+        <div className="relative h-full w-full overflow-hidden">
+            {/* Full-screen map layer — ONLY behind active booking sheets, never a home background */}
+            {!showSearchPanel && (pickupCoords || dropCoords) && (
+                <div className="absolute inset-0 z-0">
                     <RideMap
                         pickupCoords={pickupCoords}
                         dropCoords={dropCoords}
@@ -761,82 +1100,61 @@ const Home = () => {
                         trackingFrom={trackingDriverToPickup ? driverCoords : null}
                         trackingTo={trackingDriverToPickup ? pickupCoords : null}
                     />
-                ) : (
-                    <LiveTracking />
-                )}
-            </div>
-            <div className={`z-20 flex flex-col h-screen absolute top-0 left-0 right-0 mx-auto w-full max-w-lg ${showSearchPanel ? 'justify-center' : 'justify-end'}`}>
+                </div>
+            )}
+
+            {/* Foreground: fixed app viewport (no page scroll) — location suggestions render inline in the flow (no overlay) */}
+            <div className="relative z-20 mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden">
+                <RideEasyHeader
+                    onBack={() => navigate('/location', { replace: true })}
+                    onNotifications={() => setNotificationsOpen(true)}
+                    onSchedule={() => setScheduleOpen(true)}
+                />
+
                 {showSearchPanel && (
-                    <div className='max-h-[min(42vh,45%)] shrink-0 overflow-y-auto p-6 rounded-t-3xl border border-zinc-700/80 bg-zinc-950/65 backdrop-blur-md text-zinc-100 relative'>
-                    <h5 ref={panelCloseRef} onClick={() => {
-                        setPanelOpen(false)
-                    }} className={`absolute right-6 top-6 text-2xl transition-opacity duration-300 ${panelOpen ? 'opacity-100' : 'opacity-0'}`}>
-                        <i className="ri-arrow-down-wide-line"></i>
-                    </h5>
-                    <h4 className='text-2xl font-semibold text-white'>{t('find_a_trip')}</h4>
-                    <p className="mt-1 text-xs text-slate-500">{SERVICE_AREA_USER_MESSAGE}</p>
-                    <div className="mt-3">
-                        <label htmlFor="user-service-city" className="mb-1 block text-xs font-medium text-zinc-500">{t('city_for_search')}</label>
-                        <select
-                            id="user-service-city"
-                            value={serviceCity}
-                            onChange={(e) => setServiceCity(e.target.value)}
-                            className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-2.5 text-sm text-white"
-                        >
-                            {SERVICE_AREAS.map((z) => (
-                                <option key={`${z.key}-${z.name}`} value={z.key}>{z.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {bookingError ? (
-                        <div
-                            role="alert"
-                            className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 whitespace-pre-line"
-                        >
-                            {bookingError}
-                        </div>
-                    ) : null}
-                    <form className='relative py-3' onSubmit={(e) => {
-                        submitHandler(e)
-                    }}>
-                        <div className="mb-3">
-                            <label htmlFor="user-pickup" className="mb-1 block text-xs font-medium text-zinc-500">{t('from')}</label>
-                            <input
-                                id="user-pickup"
-                                onClick={() => {
-                                    setPanelOpen(true)
+                    <>
+                        <div className="relative shrink-0">
+                            <LocationSelector
+                                pickup={pickup}
+                                destination={destination}
+                                onPickupChange={handlePickupChange}
+                                onPickupFocus={() => {
                                     setActiveField('pickup')
+                                    if (pickup.trim()) runLocationSearch('pickup', pickup)
+                                    else {
+                                        setSearchStatus('idle')
+                                        setDestinationSuggestions([])
+                                    }
                                 }}
-                                value={pickup}
-                                onChange={handlePickupChange}
-                                className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
-                                type="text"
-                                autoComplete="off"
-                                placeholder={t('pickup_address')}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="user-drop" className="mb-1 block text-xs font-medium text-zinc-500">{t('to')}</label>
-                            <input
-                                id="user-drop"
-                                onClick={() => {
-                                    setPanelOpen(true)
+                                onDestinationChange={handleDestinationChange}
+                                onDestinationFocus={() => {
                                     setActiveField('destination')
+                                    if (destination.trim()) runLocationSearch('destination', destination)
+                                    else {
+                                        setSearchStatus('idle')
+                                        setPickupSuggestions([])
+                                    }
                                 }}
-                                value={destination}
-                                onChange={handleDestinationChange}
-                                className='bg-zinc-900 border border-zinc-700 px-4 py-2 text-lg rounded-xl w-full text-white placeholder:text-zinc-500'
-                                type="text"
-                                autoComplete="off"
-                                placeholder={t('drop_destination')}
+                                bookingError={bookingError}
+                                recents={recentSearches}
+                                onSelectRecent={handleSelectRecent}
+                                searching={!!activeField}
+                                searchStatus={searchStatus}
+                                suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
+                                onSelectSuggestion={handleSelectSuggestion}
+                                onForMeOpen={() => setForMeOpen(true)}
+                                onFindTrip={() => findTrip()}
+                                canFindTrip={hasRouteSelections}
+                                findingTrip={findingTrip}
                             />
                         </div>
+
                         {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {currentUser.savedAddresses?.home ? (
                                     <button
                                         type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
                                         onClick={() => {
                                             const a = currentUser.savedAddresses.home
                                             setPickup(a)
@@ -849,7 +1167,7 @@ const Home = () => {
                                 {currentUser.savedAddresses?.work ? (
                                     <button
                                         type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
                                         onClick={() => {
                                             const a = currentUser.savedAddresses.work
                                             setDestination(a)
@@ -862,7 +1180,7 @@ const Home = () => {
                                 {currentUser.savedAddresses?.home ? (
                                     <button
                                         type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
                                         onClick={() => {
                                             const a = currentUser.savedAddresses.home
                                             setDestination(a)
@@ -875,7 +1193,7 @@ const Home = () => {
                                 {currentUser.savedAddresses?.work ? (
                                     <button
                                         type="button"
-                                        className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-800"
+                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
                                         onClick={() => {
                                             const a = currentUser.savedAddresses.work
                                             setPickup(a)
@@ -887,34 +1205,64 @@ const Home = () => {
                                 ) : null}
                             </div>
                         )}
-                    </form>
-                    <button
-                        type="button"
-                        onClick={findTrip}
-                        disabled={
-                            !(pickup || '').trim()
-                            || !(destination || '').trim()
-                        }
-                        className='bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-xl mt-3 w-full font-semibold disabled:opacity-50 disabled:cursor-not-allowed'>
-                        {t('find_trip')}
-                    </button>
-                </div>
+
+                        <div className="mt-auto shrink-0 pb-2">
+                            <SafetyPromoCard />
+                        </div>
+                    </>
                 )}
-                <div
-                    ref={panelRef}
-                    className={`bg-zinc-950 text-zinc-100 overflow-y-auto transition-all duration-300 ease-in-out ${showSearchPanel ? '' : 'hidden'} ${panelOpen ? 'h-[70%] p-6' : 'h-0 p-0'}`}
-                >
-                    <LocationSearchPanel
-                        suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
-                        setPickup={setPickup}
-                        setDestination={setDestination}
-                        activeField={activeField}
-                        onSelectPickup={handleSelectPickup}
-                        onSelectDestination={handleSelectDestination}
-                    />
-                </div>
             </div>
-            <div ref={vehiclePanelRef} className={`absolute inset-x-0 w-full z-40 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 pt-10 pb-20 rounded-t-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-in-out ${(vehiclePanel && !confirmRidePanel) ? 'translate-y-0' : 'translate-y-full'}`}>
+
+            <ForMeSheet
+                open={forMeOpen}
+                users={forMeUsers}
+                active={forMeActive}
+                onClose={() => setForMeOpen(false)}
+                onSelect={(name) => {
+                    setForMeActive(name)
+                    setForMeOpen(false)
+                }}
+                onAdd={({ name, phone }) => {
+                    setForMeUsers((prev) => [ ...prev, { name, phone } ])
+                    setForMeActive(name)
+                    setForMeOpen(false)
+                }}
+            />
+
+            <ScheduleModal
+                open={scheduleOpen}
+                onClose={() => setScheduleOpen(false)}
+                onContinue={handleScheduleContinue}
+                findingTrip={findingTrip}
+            />
+
+            {notificationsOpen && (
+                <div className="absolute inset-0 z-[60] flex flex-col justify-end">
+                    <div
+                        className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
+                        onClick={() => setNotificationsOpen(false)}
+                        aria-hidden
+                    />
+                    <div className="relative max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
+                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="text-base font-bold text-theme-primary">{t('notifications')}</h2>
+                            <button
+                                type="button"
+                                onClick={() => setNotificationsOpen(false)}
+                                className="rounded-full border border-theme bg-theme-card px-2.5 py-1 text-xs text-theme-secondary active:scale-95"
+                            >
+                                {t('close')}
+                            </button>
+                        </div>
+                        <div className="rounded-xl border border-theme bg-theme-card p-4 text-center text-sm text-theme-secondary">
+                            {t('no_new_notifications')}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div ref={vehiclePanelRef} className={`absolute inset-x-0 w-full z-40 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 pt-10 pb-20 rounded-t-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-in-out ${(vehiclePanel && !confirmRidePanel) ? 'translate-y-0' : 'translate-y-full'}`}>
                 <div className="flex min-h-0 flex-1 flex-col">
                     <VehiclePanel
                         selectedVehicle={vehicleType}
@@ -924,17 +1272,18 @@ const Home = () => {
                         fare={fare} setConfirmRidePanel={setConfirmRidePanel} setVehiclePanel={setVehiclePanel} />
                 </div>
             </div>
-            <div ref={confirmRidePanelRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl max-h-[92dvh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${confirmRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={confirmRidePanelRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 py-6 pt-12 pb-24 rounded-t-3xl max-h-[92dvh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${confirmRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
                 <ConfirmRide
                     createRide={createRide}
                     pickup={pickup}
                     destination={destination}
                     fare={fare}
                     vehicleType={vehicleType}
+                    scheduledAt={scheduledAt}
 
                     setConfirmRidePanel={setConfirmRidePanel} setVehicleFound={setVehicleFound} />
             </div>
-            <div ref={vehicleFoundRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${vehicleFound ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={vehicleFoundRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${vehicleFound ? 'translate-y-0' : 'translate-y-full'}`}>
                 <LookingForDriver
                     createRide={createRide}
                     pickup={pickup}
@@ -943,22 +1292,22 @@ const Home = () => {
                     vehicleType={vehicleType}
                     ride={ride}
                     passengerOtp={passengerOtp}
+                    assignmentError={assignmentError}
                     setVehicleFound={setVehicleFound}
                     onEditLocations={() => {
                         setVehicleFound(false)
-                        setPanelOpen(true)
-                        setActiveField('pickup')
                     }} />
             </div>
-            <div ref={waitingForDriverRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-zinc-950 border-t border-zinc-800 text-zinc-100 px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
+            <div ref={waitingForDriverRef} className={`absolute inset-x-0 bottom-0 z-50 flex max-h-[92dvh] w-full flex-col overflow-y-auto rounded-t-3xl border-t border-theme bg-theme-card px-3 pb-24 pt-12 text-theme-primary transition-transform duration-300 ease-in-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
                 <WaitingForDriver
                     ride={ride}
                     confirmation={rideConfirmation}
                     passengerOtp={passengerOtp}
                     driverCoords={driverCoords}
                     pickupCoords={pickupCoords}
+                    dropCoords={dropCoords}
                     setVehicleFound={setVehicleFound}
-                    setWaitingForDriver={setWaitingForDriver}
+                    setWaitingForDriver={closeWaitingPanel}
                     waitingForDriver={waitingForDriver} />
             </div>
         </div>
