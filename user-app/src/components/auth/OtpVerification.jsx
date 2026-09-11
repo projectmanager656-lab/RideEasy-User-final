@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useLanguage } from '../../i18n'
 import { apiClient } from '../../services/http'
 import { formatApiError } from '../../utils/apiError'
@@ -29,7 +29,7 @@ const maskIdentifier = (id) => {
  * On success the API returns a token → user is authenticated immediately.
  * When `loginIdentifier` is provided this switches to login-OTP mode.
  */
-const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, loginIdentifier, onBack, onVerified }) => {
+const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, loginIdentifier, phoneLogin = false, autoSend = false, onBack, onVerified }) => {
   const { t } = useLanguage()
   const [ otp, setOtp ] = useState('')
   const [ loading, setLoading ] = useState(false)
@@ -48,7 +48,7 @@ const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, lo
     setResendNotice('')
     try {
       const response = await apiClient.post(
-        '/users/phone/send-otp',
+        phoneLogin ? '/users/phone/login-send-otp' : '/users/phone/send-otp',
         isLogin
           ? { phone: String(loginIdentifier).trim() }
           : {
@@ -65,6 +65,11 @@ const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, lo
       setError(formatApiError(err))
     }
   }
+
+  useEffect(() => {
+    if (autoSend) void sendOtp()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSend])
 
   const verifyOtp = async () => {
     if (!otpReady || loading) return
@@ -132,6 +137,7 @@ const OtpVerification = ({ phone, email, name, signupPassword = '', debugOtp, lo
           </button>
         ) : null}
         <div className="mb-5">
+          <p className="mb-2 text-sm font-medium text-theme-secondary">OTP <span className="text-red-500" aria-hidden>*</span></p>
           <OtpInputs otp={otp} onChange={setOtp} disabled={loading} />
         </div>
         <div className="mb-5 text-center">

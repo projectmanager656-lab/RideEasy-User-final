@@ -29,10 +29,6 @@ const EmergencyContact = () => {
     { value: 'other', label: t('other') },
   ]
 
-  useEffect(() => {
-    loadEmergencyContact()
-  }, [])
-
   const loadEmergencyContact = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -61,6 +57,10 @@ const EmergencyContact = () => {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadEmergencyContact()
+  }, [loadEmergencyContact])
 
   const saveEmergencyContact = useCallback(async (e) => {
     e.preventDefault()
@@ -103,7 +103,7 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [name, phone, relationship])
+  }, [name, phone, relationship, t])
 
   const deleteEmergencyContact = useCallback(async () => {
     if (!window.confirm(t('delete_contact'))) {
@@ -127,7 +127,7 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [t])
 
   const handleEditClick = () => {
     setEditing(true)

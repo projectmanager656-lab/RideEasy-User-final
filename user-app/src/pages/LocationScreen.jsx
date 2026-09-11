@@ -9,6 +9,7 @@ import bannerCopy2 from '../assets/image copy 2.png'
 import bannerCopy3 from '../assets/image copy 3.png'
 import bannerCopy4 from '../assets/image copy 4.png'
 import bannerCopy5 from '../assets/image copy 5.png'
+import RideEasyHeader from '../components/RideEasyHeader'
 
 const KOLHAPUR_CENTER = { lat: 16.705, lng: 74.2433 }
 const DEFAULT_ZOOM = 14
@@ -97,6 +98,7 @@ const LocationScreen = () => {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary">
+      <RideEasyHeader />
       {/* Map — upper portion */}
       <div className="relative h-80 min-h-[280px] w-full shrink-0 overflow-hidden">
         <MapContainer

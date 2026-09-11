@@ -412,11 +412,11 @@ const Safety = () => {
 
   return (
     <div className="min-h-dvh min-h-screen w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-theme bg-theme-bg/90 px-3 py-3 backdrop-blur sm:gap-3 sm:px-4">
-        <button type="button" onClick={handleBack} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-card text-theme-primary active:scale-95" aria-label={t('back')}>
-          <i className="ri-arrow-left-line text-lg" />
+      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-theme bg-theme-bg/90 px-4 pt-4 pb-3 backdrop-blur">
+        <button type="button" onClick={handleBack} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand active:scale-95" aria-label={t('back')}>
+          <i className="ri-arrow-left-line text-2xl" />
         </button>
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold sm:text-lg">{t('safety')}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-2xl font-extrabold tracking-tight">{t('safety')}</h1>
         <button type="button" onClick={reload} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-card text-theme-primary" aria-label={t('refresh')}>
           <i className={`ri-refresh-line text-lg ${loading ? 'animate-spin' : ''}`} />
         </button>

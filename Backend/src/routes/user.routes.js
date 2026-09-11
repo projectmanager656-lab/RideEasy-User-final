@@ -18,10 +18,12 @@ router.post('/register', registerUserValidators, userController.registerUser);
 router.post('/login', loginRateLimit, loginValidators, userController.loginUser);
 
 router.post('/phone/send-otp', phoneOtpSendValidators, userController.sendPhoneOtp);
+router.post('/phone/login-send-otp', phoneOtpSendValidators, userController.sendPhoneLoginOtp);
 router.post('/phone/verify-otp',
     phoneOtpVerifyValidators,
     userController.verifyPhoneOtp
 );
+router.post('/google', userController.googleLogin);
 
 router.get('/profile', auth.authUser, userController.getProfile);
 router.get('/ride-history', auth.authUser, rideController.userRideHistory);

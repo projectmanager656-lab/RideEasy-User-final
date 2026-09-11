@@ -434,18 +434,18 @@ const RideHistory = () => {
   return (
     <div className="min-h-dvh min-h-screen w-full max-w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
       {/* header */}
-      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-3 py-3 backdrop-blur sm:px-4">
-        <div className="mx-auto flex w-full max-w-lg items-center gap-2 sm:gap-3">
+      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-4 pt-4 pb-3 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-lg items-center gap-3">
           <Link
             to="/home"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-theme-card text-theme-secondary"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand"
             aria-label={t('back')}
           >
-            <i className="ri-arrow-left-line text-lg" />
+            <i className="ri-arrow-left-line text-2xl" />
           </Link>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-bold text-theme-primary sm:text-lg">{t('ride_history')}</h1>
-            <p className="text-xs text-theme-muted">{t('your_past_trips')}</p>
+            <h1 className="truncate text-2xl font-extrabold tracking-tight text-theme-primary">{t('ride_history')}</h1>
+            <p className="text-[13px] text-theme-muted">{t('your_past_trips')}</p>
           </div>
           <button
             type="button"

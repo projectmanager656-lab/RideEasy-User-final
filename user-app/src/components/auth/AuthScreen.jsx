@@ -194,9 +194,19 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
 
   const submitLogin = async (e) => {
     e.preventDefault()
-    const id = String(identifier || '').trim()
-    if (!id || loginLoading) return
-    if (!password) return
+    const id = String(identifier || '').trim().toLowerCase()
+    if (!id || loginLoading) {
+      if (!id) setLoginError(t('valid_email_error'))
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id) || id.includes('..')) {
+      setLoginError(t('valid_email_error'))
+      return
+    }
+    if (!password) {
+      setLoginError(t('password_required'))
+      return
+    }
     setLoginError('')
     setLoginLoading(true)
     try {
@@ -231,7 +241,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     // finalize the account with a working password.
     if (payload?.password) setDraft((prev) => ({ ...prev, ...payload }))
     try {
-      const response = await apiClient.post('/users/phone/send-otp', payload)
+      const response = await apiClient.post('/users/phone/send-otp', { ...payload, registration: true })
       const data = stripApiEnvelope(response.data)
       if (data?.debugOtp) setRegDebugOtp(String(data.debugOtp))
       setOtpOpen(true)
@@ -261,9 +271,9 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   // so the overlays can never block the login form even if GSAP is unavailable.
   // NOTE: no translate utility here — a CSS translate would be cached by GSAP as
   // pixels and keep the panel offset even after yPercent animates to 0.
-  const paneBase = 'absolute inset-0 z-0 overflow-hidden'
+  const paneBase = 'absolute inset-0 z-0 h-full max-h-full overflow-hidden'
   const paneScroller =
-    'absolute inset-0 overflow-y-auto pb-[max(2.5rem,env(safe-area-inset-bottom,0px))]'
+    'absolute inset-0 h-full max-h-full min-h-0 overflow-y-scroll overscroll-contain touch-pan-y pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch]'
   const hiddenPaneBase = `${paneBase} invisible`
   const themeBg = isDark ? darkBg : lightBg
   const paneBackdrop = (

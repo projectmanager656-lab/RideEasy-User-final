@@ -10,8 +10,7 @@ const BottomNav = ({ onMoreClick }) => {
     path === '/login' ||
     path === '/signup' ||
     path === '/welcome' ||
-    path === '/user/logout' ||
-    path === '/location'
+    path === '/user/logout'
 
   if (hidden) return null
 

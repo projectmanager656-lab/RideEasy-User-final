@@ -8,6 +8,7 @@ const { getAuthCookieOptions } = require('../utils/authCookie');
 const { toPublicDoc } = require('../utils/publicDoc');
 const { ok, fail } = require('../utils/apiResponse');
 const { logLoginRequestBody } = require('../utils/loginDebug');
+const axios = require('axios');
 
 async function generateUniqueReferralCode(seed = '') {
     const base = String(seed || 'RIDE').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5) || 'RIDE';
@@ -188,28 +189,40 @@ module.exports.logoutUser = async (req, res) => {
 /** Phone OTP — persisted on user; deliver via SMS provider in production (use OTP_DEBUG for dev). */
 module.exports.sendPhoneOtp = async (req, res) => {
     const phone = String(req.body?.phone || '').replace(/\D/g, '');
-    if (phone.length < 10) return res.status(400).json({ message: 'Valid phone required' });
+    if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ message: 'Valid phone required' });
+    const isRegistration = req.body?.registration === true;
     const requestedEmail = String(req.body?.email || '').trim().toLowerCase();
     const requestedName = String(req.body?.name || '').trim();
+    if (isRegistration && !requestedEmail) {
+        return res.status(400).json({ message: 'Email is required to create an account' });
+    }
     if (requestedEmail && !/^\S+@\S+\.\S+$/.test(requestedEmail)) {
         return res.status(400).json({ message: 'Valid email required' });
     }
     const otp = randomSixDigit();
     const exposeOtp = process.env.OTP_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
     let user = await userModel.findOne({ phone });
+    if (isRegistration && user) {
+        return res.status(409).json({ message: 'An account with this phone number already exists' });
+    }
     if (!user && requestedEmail) {
         user = await userModel.findOne({ email: requestedEmail });
         if (user && String(user.phone || '').replace(/\D/g, '') !== phone) {
             return res.status(409).json({ message: 'An account already uses this email' });
         }
     }
+    if (isRegistration && user) {
+        return res.status(409).json({ message: 'An account with this email already exists' });
+    }
     if (!user) {
-        const accountEmail = requestedEmail || `${phone}@phone.rideeasy.local`;
+        if (!requestedEmail) {
+            return res.status(404).json({ message: 'No account found for this phone number. Create an account with a real email address first.' });
+        }
         const hashed = await userModel.hashPassword(randomSixDigit() + 'Aa1!');
         user = await userModel.create({
             name: requestedName.length >= 2 ? requestedName : 'Phone user',
             phone,
-            email: accountEmail,
+            email: requestedEmail,
             password: hashed,
         });
     }
@@ -222,6 +235,47 @@ module.exports.sendPhoneOtp = async (req, res) => {
         expiresIn: 300,
         ...(exposeOtp ? { debugOtp: otp } : {}),
     });
+};
+
+module.exports.sendPhoneLoginOtp = async (req, res) => {
+    const phone = String(req.body?.phone || '').replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(phone)) return res.status(400).json({ message: 'Valid phone required' });
+    const user = await userModel.findOne({ phone });
+    if (!user) return res.status(404).json({ message: 'No account found for this phone number' });
+    const otp = randomSixDigit();
+    const exposeOtp = process.env.OTP_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
+    const secured = await userModel.findById(user._id).select('+loginOtp +loginOtpExpiresAt');
+    secured.loginOtp = otp;
+    secured.loginOtpExpiresAt = expiresInMinutes(5);
+    await secured.save();
+    return res.json({ message: exposeOtp ? 'OTP generated (dev)' : 'OTP sent', expiresIn: 300, ...(exposeOtp ? { debugOtp: otp } : {}) });
+};
+
+module.exports.googleLogin = async (req, res) => {
+    const idToken = String(req.body?.idToken || '').trim();
+    if (!idToken || !process.env.GOOGLE_CLIENT_ID) return fail(res, req, 503, 'Google sign-in is not configured');
+    try {
+        const response = await axios.get('https://oauth2.googleapis.com/tokeninfo', { params: { id_token: idToken }, timeout: 10000 });
+        const profile = response.data;
+        if (profile.aud !== process.env.GOOGLE_CLIENT_ID || profile.email_verified !== 'true') {
+            return fail(res, req, 401, 'Google sign-in verification failed');
+        }
+        const email = String(profile.email || '').trim().toLowerCase();
+        if (!email) return fail(res, req, 401, 'Google account email missing');
+        let user = await userModel.findOne({ email });
+        if (!user) {
+            const password = await userModel.hashPassword(`${randomSixDigit()}-${Date.now()}-Google!`);
+            user = await userModel.create({
+                name: String(profile.name || email.split('@')[0]).trim().slice(0, 80),
+                phone: `google-${String(profile.sub || Date.now())}`,
+                email,
+                password,
+            });
+        }
+        return ok(res, req, 200, 'Google login successful', { token: user.generateAuthToken(), user: toPublicDoc(user) });
+    } catch (err) {
+        return fail(res, req, 401, 'Google sign-in verification failed');
+    }
 };
 
 module.exports.verifyPhoneOtp = async (req, res) => {

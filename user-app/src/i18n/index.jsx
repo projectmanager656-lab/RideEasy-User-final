@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { en as extraEn, hi as extraHi, mr as extraMr } from './extras'
 
@@ -68,6 +69,7 @@ const en = {
   otp_sent: 'OTP sent',
   valid_name_error: 'Please enter your full name.',
   valid_email_error: 'Please enter a valid email address.',
+  password_required: 'Password is required.',
   valid_phone_error: 'Please enter a valid phone number.',
   account_exists: 'An account already exists with this email/phone. Please log in instead.',
   verify_your_number: 'Verify your number',
@@ -295,6 +297,7 @@ const hi = {
   otp_sent: 'OTP भेजा गया',
   valid_name_error: 'कृपया अपना पूरा नाम दर्ज करें।',
   valid_email_error: 'कृपया एक मान्य ईमेल पता दर्ज करें।',
+  password_required: 'पासवर्ड आवश्यक है।',
   valid_phone_error: 'कृपया एक मान्य फ़ोन नंबर दर्ज करें।',
   account_exists: 'इस ईमेल/फ़ोन के साथ पहले से एक खाता मौजूद है। कृपया इसके बजाय लॉगिन करें।',
   verify_your_number: 'अपना नंबर सत्यापित करें',
@@ -525,6 +528,7 @@ const mr = {
   otp_sent: 'OTP पाठवले',
   valid_name_error: 'कृपया तुमचे पूर्ण नाव प्रविष्ट करा.',
   valid_email_error: 'कृपया वैध ईमेल पत्ता प्रविष्ट करा.',
+  password_required: 'पासवर्ड आवश्यक आहे.',
   valid_phone_error: 'कृपया वैध फोन नंबर प्रविष्ट करा.',
   account_exists: 'या ईमेल/फोनसह आधीच खाते आहे. कृपया त्याऐवजी लॉगिन करा.',
   verify_your_number: 'तुमचा नंबर सत्यापित करा',

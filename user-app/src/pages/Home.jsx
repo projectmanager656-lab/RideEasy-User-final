@@ -127,6 +127,7 @@ const Home = () => {
 
     const navigate = useNavigate()
     const location = useLocation()
+    const chooseRideResult = location.state?.chooseRideResult
 
     useEffect(() => {
         try {
@@ -236,7 +237,7 @@ const Home = () => {
     /** Restore active booking after refresh (ride id in sessionStorage). */
     useEffect(() => {
         if (ride?._id) return
-        if (location.state?.chooseRideResult) return
+        if (chooseRideResult) return
         const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
         if (!id || !currentUser?._id) return
         const token = localStorage.getItem('token')
@@ -265,7 +266,7 @@ const Home = () => {
             setVehicleFound(false)
             setWaitingForDriver(false)
         })
-    }, [ride, currentUser?._id, syncRideFromServer, navigate])
+    }, [ride, currentUser?._id, syncRideFromServer, navigate, chooseRideResult])
 
     useEffect(() => {
         if (!socket) return;
@@ -798,6 +799,10 @@ const Home = () => {
     }
 
     /** Keep pickup/drop text + map pins in sync with the active ride (refresh, socket, or restore). */
+    const ridePickupLng = ride?.pickup?.coordinates?.[0]
+    const ridePickupLat = ride?.pickup?.coordinates?.[1]
+    const rideDropLng = ride?.drop?.coordinates?.[0]
+    const rideDropLat = ride?.drop?.coordinates?.[1]
     useEffect(() => {
         if (!ride?._id) return
         const st = normalizeRideStatus(ride.status)
@@ -813,9 +818,9 @@ const Home = () => {
         const dr = typeof ride.dropLocation === 'string' ? ride.dropLocation.trim() : ''
         /* Keep From/To user-entered only; don't repopulate from previous ride payload. */
 
-        const pc = ride.pickup?.coordinates
-        if (Array.isArray(pc) && pc.length === 2) {
-            setPickupCoords((prev) => prev || { lat: pc[1], lng: pc[0] })
+        const hasPickupCoordinates = ridePickupLng != null && ridePickupLat != null
+        if (hasPickupCoordinates) {
+            setPickupCoords((prev) => prev || { lat: ridePickupLat, lng: ridePickupLng })
         } else if (pu) {
             const gk = `${ride._id}:pick:${pu}`
             if (rideGeocodeOnceRef.current.pick !== gk) {
@@ -823,9 +828,9 @@ const Home = () => {
                 fetchPickupCoords(pu)
             }
         }
-        const dc = ride.drop?.coordinates
-        if (Array.isArray(dc) && dc.length === 2) {
-            setDropCoords((prev) => prev || { lat: dc[1], lng: dc[0] })
+        const hasDropCoordinates = rideDropLng != null && rideDropLat != null
+        if (hasDropCoordinates) {
+            setDropCoords((prev) => prev || { lat: rideDropLat, lng: rideDropLng })
         } else if (dr) {
             const gk = `${ride._id}:drop:${dr}`
             if (rideGeocodeOnceRef.current.drop !== gk) {
@@ -848,10 +853,10 @@ const Home = () => {
         ride?.status,
         ride?.pickupLocation,
         ride?.dropLocation,
-        ride?.pickup?.coordinates?.[0],
-        ride?.pickup?.coordinates?.[1],
-        ride?.drop?.coordinates?.[0],
-        ride?.drop?.coordinates?.[1],
+        ridePickupLng,
+        ridePickupLat,
+        rideDropLng,
+        rideDropLat,
         ride?.vehicleType,
         ride?.price,
         ride?.fare,
@@ -1035,7 +1040,7 @@ const Home = () => {
     /** Restore the pickup/drop draft when returning from the Choose Ride screen (Back). */
     useEffect(() => {
         if (ride?._id) return
-        if (location.state?.chooseRideResult) return
+        if (chooseRideResult) return
         let draft = null
         try {
             draft = JSON.parse(sessionStorage.getItem(DRAFT_BOOKING_KEY) || 'null')
@@ -1051,12 +1056,12 @@ const Home = () => {
         try {
             sessionStorage.removeItem(DRAFT_BOOKING_KEY)
         } catch { /* ignore */ }
-    }, [ ride?._id ])
+    }, [ ride?._id, chooseRideResult ])
 
     /** Handoff from the Choose Ride screen: open the existing "Looking for driver" state. */
     const chooseRideConsumedRef = useRef(false)
     useEffect(() => {
-        const incoming = location.state?.chooseRideResult
+        const incoming = chooseRideResult
         if (!incoming || chooseRideConsumedRef.current) return
         chooseRideConsumedRef.current = true
         const { ride, pickupCoords: pu, dropCoords: dr, pickup: p, destination: d, vehicleType, scheduledAt } = incoming
@@ -1079,7 +1084,7 @@ const Home = () => {
             sessionStorage.removeItem(DRAFT_BOOKING_KEY)
         } catch { /* ignore */ }
         navigate(location.pathname, { replace: true })
-    }, [ location.state, location.pathname, navigate ])
+    }, [ chooseRideResult, location.pathname, navigate ])
 
     return (
         <div className="relative h-full w-full overflow-hidden">
@@ -1101,6 +1106,7 @@ const Home = () => {
             {/* Foreground: fixed app viewport (no page scroll) — location suggestions render inline in the flow (no overlay) */}
             <div className="relative z-20 mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden">
                 <RideEasyHeader
+                    onBack={() => navigate('/location', { replace: true })}
                     onNotifications={() => setNotificationsOpen(true)}
                     onSchedule={() => setScheduleOpen(true)}
                 />
