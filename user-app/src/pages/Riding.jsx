@@ -326,8 +326,7 @@ const Riding = () => {
         setPaying(true)
         setPayError('')
         try {
-            const endpoint = method === 'Wallet' ? 'pay-wallet' : 'pay-mock'
-            const { data } = await axios.post(`${API_BASE_URL}/rides/${endpoint}`, { rideId: ride._id, method, part: 'remaining' }, {
+            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method, part: 'remaining' }, {
                 headers: { Authorization: `Bearer ${getPassengerToken()}` }
             })
             if (data?.ride) setRide(data.ride)
@@ -399,11 +398,11 @@ const Riding = () => {
     }
 
     return (
-        <div className='h-screen'>
+        <div className='flex min-h-dvh flex-col'>
             <Link to='/home' className='fixed right-2 top-2 z-10 h-10 w-10 bg-theme-bg/90 border border-theme text-theme-primary flex items-center justify-center rounded-full shadow'>
                 <i className="text-lg font-medium ri-home-5-line"></i>
             </Link>
-            <div className='h-1/2 relative'>
+            <div className='relative h-[38dvh] min-h-[240px] shrink-0'>
                 {showRideMap ? (
                     <RideMap
                         pickupCoords={pickupCoords}
@@ -421,14 +420,14 @@ const Riding = () => {
                     <button
                         type="button"
                         onClick={openInGoogleMaps}
-                        className="absolute bottom-3 left-3 right-3 z-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
+                        className="absolute bottom-3 left-3 right-3 z-10 bg-brand-yellow hover:bg-brand-light text-brand-dark font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
                     >
                         <i className="ri-navigation-line" />
                         {t('open_google_maps')}
                     </button>
                 )}
             </div>
-            <div className='h-1/2 p-4 bg-theme-bg border-t border-theme text-theme-primary overflow-y-auto rounded-t-3xl'>
+            <div className='min-h-0 flex-1 overflow-y-auto scrollbar-hide rounded-t-3xl border-t border-theme bg-theme-bg p-4 text-theme-primary'>
                 {rideFetchError ? (
                     <div role="alert" className="mb-3 rounded-lg border border-red-800/80 bg-red-950/50 px-3 py-2 text-sm text-red-200">
                         {rideFetchError}
@@ -438,7 +437,7 @@ const Riding = () => {
                     <RideStatusStepper status={ride?.status || 'accepted'} />
                 </div>
                 <div className='flex items-center justify-between gap-3'>
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-900/60 text-lg font-semibold text-emerald-200 ring-1 ring-emerald-700/50" aria-hidden>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-semibold text-brand-yellow ring-1 ring-brand-yellow/40" aria-hidden>
                         {(ride?.captain?.name || ride?.captain?.fullname?.firstname || 'D').toString().charAt(0)}
                     </div>
                     <div className='text-right min-w-0'>
@@ -451,7 +450,7 @@ const Riding = () => {
                 <div className='flex gap-2 justify-between flex-col items-center'>
                     <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card overflow-hidden'>
                         <div className='flex items-center gap-5 p-3 border-b border-theme'>
-                            <i className="text-lg ri-map-pin-user-fill text-emerald-400" aria-hidden />
+                            <i className="text-lg ri-map-pin-user-fill text-brand-yellow" aria-hidden />
                             <div className="min-w-0">
                                 <h3 className='text-lg font-medium text-theme-primary'>{t('pickup')}</h3>
                                 <p className='text-sm -mt-1 text-theme-secondary'>{ride?.pickupLocation || '—'}</p>
@@ -465,7 +464,7 @@ const Riding = () => {
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3'>
-                            <i className="ri-currency-line text-emerald-400"></i>
+                            <i className="ri-currency-line text-brand-yellow"></i>
                             <div>
                                 <h3 className='text-lg font-medium text-theme-primary'>₹{ride?.price ?? ride?.fare} </h3>
                                 <p className='text-sm -mt-1 text-theme-secondary'>{paymentLabel}</p>
@@ -544,9 +543,6 @@ const Riding = () => {
                     </div>
                 )}
                 
-                <button className='w-full mt-5 rounded-xl border border-theme bg-theme-card-muted text-theme-secondary font-semibold p-3' disabled>
-                    {t('payment_receipt_when_ends')}
-                </button>
             </div>
         </div>
     )
