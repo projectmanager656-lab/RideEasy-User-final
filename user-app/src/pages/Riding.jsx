@@ -14,11 +14,34 @@ import { useLanguage } from '../i18n'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
+/** Session key written by ChooseRide / SearchingForDriver / Home for the passenger's current ride. */
+const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+
+function readSessionRideId () {
+    try {
+        return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
+    } catch {
+        return null
+    }
+}
+
+function clearSessionRide () {
+    try {
+        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
+    } catch { /* ignore */ }
+}
+
 const Riding = () => {
     const { t } = useLanguage()
     const location = useLocation()
     const { ride: initialRide } = location.state || {}
-    const [ride, setRide] = useState(initialRide)
+    // When the page is opened without ride state (Live tab, refresh, bookmark)
+    // the session key still points at the active ride — hydrate it below.
+    const [ride, setRide] = useState(() => {
+        if (initialRide?._id) return initialRide
+        const id = readSessionRideId()
+        return id ? { _id: id } : null
+    })
     const [pickupCoords, setPickupCoords] = useState(null)
     const [dropCoords, setDropCoords] = useState(null)
     const [driverCoords, setDriverCoords] = useState(() => {
@@ -45,12 +68,44 @@ const Riding = () => {
             navigate('/login', { replace: true })
             return
         }
-        const st = String(initialRide?.status || '').trim().toLowerCase()
-        const allowed = st === 'started' || st === 'completed'
-        if (!initialRide?._id || !allowed) {
+        const st = String(ride?.status || '').trim().toLowerCase()
+        if (st === 'started' || st === 'completed') return
+        if (!ride?._id || st) {
+            // Not a live/completed ride — the guard already rejects invalid
+            // state entries, so anything else simply goes back home.
             navigate('/home', { replace: true })
+            return
         }
-    }, [ initialRide?._id, initialRide?.status, navigate ])
+        // Session-only entry (Live tab / refresh): fetch the ride and let the
+        // server decide where this ride actually belongs.
+        let cancelled = false
+        axios
+            .get(`${API_BASE_URL}/rides/${ride._id}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => {
+                if (cancelled) return
+                const doc = res.data
+                const next = String(doc?.status || '').trim().toLowerCase()
+                if (next === 'started' || next === 'completed') {
+                    setRide(doc)
+                    return
+                }
+                if (next === 'cancelled') {
+                    clearSessionRide()
+                    navigate('/home', { replace: true })
+                    return
+                }
+                // searching / accepted / arrived → belongs on the driver-search screen.
+                navigate('/searching-for-driver', { replace: true })
+            })
+            .catch(() => {
+                if (cancelled) return
+                clearSessionRide()
+                navigate('/home', { replace: true })
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [ ride?._id, ride?.status, navigate ])
     const [paying, setPaying] = useState(false)
     const [payError, setPayError] = useState('')
     const [rateError, setRateError] = useState('')
@@ -271,7 +326,7 @@ const Riding = () => {
         setPaying(true)
         setPayError('')
         try {
-            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method }, {
+            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method, part: 'remaining' }, {
                 headers: { Authorization: `Bearer ${getPassengerToken()}` }
             })
             if (data?.ride) setRide(data.ride)
@@ -304,14 +359,23 @@ const Riding = () => {
     }, [ride?._id, t])
 
     const goHome = useCallback(() => {
+        clearSessionRide()
         navigate('/home', { replace: true })
     }, [navigate])
 
+    /*
+     * Completion redirect: the old fixed 2.5s timer kicked the user home before
+     * they could rate the driver or open the invoice. The RideCompletionFlow
+     * handles its own countdown + "Book another ride" once completed; we keep a
+     * long safety net here so a user who leaves the completion flow open still
+     * ends up back on Home — without being yanked mid-interaction.
+     */
     useEffect(() => {
         if (ride?.status !== 'completed') return
         const t = setTimeout(() => {
+            clearSessionRide()
             navigate('/home', { replace: true })
-        }, 2500)
+        }, 120000)
         return () => clearTimeout(t)
     }, [ride?.status, navigate])
 
@@ -334,11 +398,11 @@ const Riding = () => {
     }
 
     return (
-        <div className='h-screen'>
-            <Link to='/home' className='fixed right-2 top-2 z-10 h-10 w-10 bg-zinc-900 border border-zinc-700 text-white flex items-center justify-center rounded-full shadow'>
+        <div className='flex min-h-dvh flex-col'>
+            <Link to='/home' className='fixed right-2 top-2 z-10 h-10 w-10 bg-theme-bg/90 border border-theme text-theme-primary flex items-center justify-center rounded-full shadow'>
                 <i className="text-lg font-medium ri-home-5-line"></i>
             </Link>
-            <div className='h-1/2 relative'>
+            <div className='relative h-[38dvh] min-h-[240px] shrink-0'>
                 {showRideMap ? (
                     <RideMap
                         pickupCoords={pickupCoords}
@@ -356,14 +420,14 @@ const Riding = () => {
                     <button
                         type="button"
                         onClick={openInGoogleMaps}
-                        className="absolute bottom-3 left-3 right-3 z-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
+                        className="absolute bottom-3 left-3 right-3 z-10 bg-brand-yellow hover:bg-brand-light text-brand-dark font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
                     >
                         <i className="ri-navigation-line" />
                         {t('open_google_maps')}
                     </button>
                 )}
             </div>
-            <div className='h-1/2 p-4 bg-zinc-950 border-t border-zinc-800 text-zinc-100 overflow-y-auto rounded-t-3xl'>
+            <div className='min-h-0 flex-1 overflow-y-auto scrollbar-hide rounded-t-3xl border-t border-theme bg-theme-bg p-4 text-theme-primary'>
                 {rideFetchError ? (
                     <div role="alert" className="mb-3 rounded-lg border border-red-800/80 bg-red-950/50 px-3 py-2 text-sm text-red-200">
                         {rideFetchError}
@@ -373,37 +437,37 @@ const Riding = () => {
                     <RideStatusStepper status={ride?.status || 'accepted'} />
                 </div>
                 <div className='flex items-center justify-between gap-3'>
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-900/60 text-lg font-semibold text-emerald-200 ring-1 ring-emerald-700/50" aria-hidden>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-semibold text-brand-yellow ring-1 ring-brand-yellow/40" aria-hidden>
                         {(ride?.captain?.name || ride?.captain?.fullname?.firstname || 'D').toString().charAt(0)}
                     </div>
                     <div className='text-right min-w-0'>
-                        <h2 className='text-lg font-medium capitalize text-white'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
-                        <h4 className='text-xl font-semibold -mt-1 -mb-1 text-zinc-100'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
-                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
+                        <h2 className='text-lg font-medium capitalize text-theme-primary'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
+                        <h4 className='text-xl font-semibold -mt-1 -mb-1 text-theme-primary'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
+                        <p className='text-sm text-theme-secondary capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
                     </div>
                 </div>
 
                 <div className='flex gap-2 justify-between flex-col items-center'>
-                    <div className='w-full mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden'>
-                        <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
-                            <i className="text-lg ri-map-pin-user-fill text-emerald-400" aria-hidden />
+                    <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card overflow-hidden'>
+                        <div className='flex items-center gap-5 p-3 border-b border-theme'>
+                            <i className="text-lg ri-map-pin-user-fill text-brand-yellow" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>{t('pickup')}</h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{ride?.pickupLocation || '—'}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('pickup')}</h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{ride?.pickupLocation || '—'}</p>
                             </div>
                         </div>
-                        <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
+                        <div className='flex items-center gap-5 p-3 border-b border-theme'>
                             <i className="text-lg ri-map-pin-2-fill text-rose-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>{t('drop')}</h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{ride?.dropLocation || ride?.destination}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('drop')}</h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{ride?.dropLocation || ride?.destination}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3'>
-                            <i className="ri-currency-line text-emerald-400"></i>
+                            <i className="ri-currency-line text-brand-yellow"></i>
                             <div>
-                                <h3 className='text-lg font-medium text-white'>₹{ride?.price ?? ride?.fare} </h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{paymentLabel}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>₹{ride?.price ?? ride?.fare} </h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{paymentLabel}</p>
                             </div>
                         </div>
                     </div>
@@ -411,22 +475,22 @@ const Riding = () => {
                 
                 {/* Emergency Contact Section */}
                 {ride?.status === 'started' && (
-                    <div className='w-full mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40'>
+                    <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card'>
                         <div className='flex items-center gap-4 p-4'>
                             <div className='flex-1'>
-                                <h3 className='text-lg font-medium text-white'>{t('emergency_contact')}</h3>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('emergency_contact')}</h3>
                                 {ecLoading ? (
-                                    <p className='text-sm text-zinc-400'>{t('loading')}</p>
+                                    <p className='text-sm text-theme-secondary'>{t('loading')}</p>
                                 ) : ecError ? (
                                     <p className='text-sm text-red-500'>{ecError}</p>
                                 ) : emergencyContact ? (
                                     <>
-                                        <p className='text-sm font-semibold text-white mb-1'>{emergencyContact.name}</p>
-                                        <p className='text-sm text-zinc-300'>{emergencyContact.phone}</p>
-                                        <p className='text-xs text-zinc-400'>{emergencyContact.relationship}</p>
+                                        <p className='text-sm font-semibold text-theme-primary mb-1'>{emergencyContact.name}</p>
+                                        <p className='text-sm text-theme-primary'>{emergencyContact.phone}</p>
+                                        <p className='text-xs text-theme-secondary'>{emergencyContact.relationship}</p>
                                     </>
                                 ) : (
-                                    <p className='text-sm text-zinc-400'>{t('emergency_contact_sub')}</p>
+                                    <p className='text-sm text-theme-secondary'>{t('emergency_contact_sub')}</p>
                                 )}
                             </div>
                             <div className='flex space-x-3'>
@@ -479,9 +543,6 @@ const Riding = () => {
                     </div>
                 )}
                 
-                <button className='w-full mt-5 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-400 font-semibold p-3' disabled>
-                    {t('payment_receipt_when_ends')}
-                </button>
             </div>
         </div>
     )
