@@ -30,7 +30,7 @@ import darkBg from '../../assets/black.png'
 const AuthScreen = ({ skipTokenRedirect = false }) => {
   const { t } = useLanguage()
   const { isDark } = useTheme()
-  const { setSession, authLoading, token } = useContext(UserDataContext)
+  const { setSession, authLoading, isAuthenticated } = useContext(UserDataContext)
   const navigate = useNavigate()
   const location = useLocation()
   const [ searchParams ] = useSearchParams()
@@ -74,12 +74,12 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
 
   useEffect(() => {
     if (authLoading) return
-    if (token && !skipTokenRedirect) {
+    if (isAuthenticated && !skipTokenRedirect) {
       // Session already active → land on the /location home screen, where the
       // existing LocationScreen geolocation / Location Accuracy flow lives.
       navigate('/location', { replace: true })
     }
-  }, [ authLoading, token, navigate, skipTokenRedirect ])
+  }, [ authLoading, isAuthenticated, navigate, skipTokenRedirect ])
 
   // Registration panel: slides up from the bottom, slides down to close.
   useGSAP(() => {

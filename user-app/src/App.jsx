@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useContext, useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
 import MoreOptionsModal from './components/MoreOptionsModal'
@@ -47,7 +47,7 @@ const AuthShellLoader = () => {
 //  - no token + onboarding done     → /login
 //  - token (session restored)       → /location (the ride home screen)
 const UserAppRoot = () => {
-  const { authLoading, token } = useContext(UserDataContext)
+  const { authLoading, isAuthenticated } = useContext(UserDataContext)
   const [ serverSynced, setServerSynced ] = useState(false)
 
   // Restore this device's server-side onboarding state (if the local flag
@@ -66,7 +66,7 @@ const UserAppRoot = () => {
     return <AuthShellLoader />
   }
 
-  if (!token) {
+  if (!isAuthenticated) {
     // First launch → Welcome (swipe to Login). Returning users go straight
     // to the Login page.
     if (!hasCompletedOnboarding()) {
@@ -81,13 +81,11 @@ const UserAppRoot = () => {
 const App = () => {
   const { t } = useLanguage()
   const [moreOpen, setMoreOpen] = useState(false)
-  const location = useLocation()
-  const hideScrollbar = ['/help', '/safety', '/faq'].includes(location.pathname) || location.pathname.startsWith('/invoice/')
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-theme-bg text-theme-primary">
       <NativeAndroidFlavorRedirect />
-      <div className={`relative min-h-0 flex-1 overflow-y-auto ${hideScrollbar ? 'scrollbar-hide' : ''}`}>
+      <div className="relative min-h-0 flex-1 overflow-y-auto scrollbar-hide">
         <Suspense fallback={<div className="h-full flex items-center justify-center text-theme-muted text-sm bg-theme-bg">{t('loading_rideeasy')}</div>}>
           <Routes>
             <Route path="/" element={<UserAppRoot />} />

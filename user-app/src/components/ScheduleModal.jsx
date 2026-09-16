@@ -156,7 +156,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     if (!open) return null
 
     return (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
+        <div className="fixed inset-0 z-[1200] flex items-end justify-center sm:items-center">
             <div
                 className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
                 onClick={onClose}
@@ -164,7 +164,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
             />
             <div
                 ref={sheetRef}
-                className="relative flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-2.5 pb-4 sm:rounded-2xl sm:border"
+                className="relative z-[1201] flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-2.5 pb-4 sm:rounded-2xl sm:border"
             >
                 <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
                 <div className="mb-3 flex items-center justify-between">

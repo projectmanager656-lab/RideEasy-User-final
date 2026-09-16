@@ -75,6 +75,7 @@ const LocationSelector = ({
     suggestions = [],
     onSelectSuggestion,
     onForMeOpen,
+    rideFor = '',
     onFindTrip,
     canFindTrip = false,
     findingTrip = false,
@@ -95,7 +96,7 @@ const LocationSelector = ({
                     className="flex items-center gap-1.5 rounded-full border border-theme bg-theme-card-muted px-2.5 py-1 text-xs font-medium text-theme-primary transition active:scale-95"
                 >
                     <i className="ri-user-3-line text-brand-yellow" aria-hidden />
-                    {t('for_me')}
+                    {rideFor === 'Me' ? t('for_me') : rideFor}
                     <i className="ri-arrow-down-s-line text-theme-secondary" aria-hidden />
                 </button>
             </div>

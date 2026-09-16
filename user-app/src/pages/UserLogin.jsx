@@ -10,11 +10,11 @@ import { hasCompletedOnboarding } from '../utils/onboarding'
  * Welcome page first, so the welcome screen always appears before login.
  */
 const UserLogin = () => {
-  const { token } = useUserData()
+  const { isAuthenticated } = useUserData()
   const location = useLocation()
   const fromWelcome = location.state?.fromWelcome === true
 
-if (!token && !hasCompletedOnboarding() && !fromWelcome) {
+if (!isAuthenticated && !hasCompletedOnboarding() && !fromWelcome) {
     return <Navigate to="/welcome" replace />
   }
 

@@ -72,6 +72,7 @@ const ChooseRide = () => {
     ))
     const pickup = state.pickup || ''
     const destination = state.drop || state.destination || ''
+    const rideFor = state.rideFor || 'Me'
 
     const [ fare, setFare ] = useState(state.fare || null)
     const [ fareLoading, setFareLoading ] = useState(!state.fare)
@@ -279,6 +280,7 @@ const ChooseRide = () => {
                     dropCoords,
                     pickup,
                     destination,
+                    rideFor,
                     vehicleType,
                     tierId: tier.id,
                     paymentMethod,
@@ -343,11 +345,11 @@ const ChooseRide = () => {
                             style={{ background: 'rgba(10,10,10,0.92)', borderColor: '#2A2A2A' }}
                         >
                             <i className="ri-roadster-line text-brand-yellow" aria-hidden />
-                            <span className="text-sm font-bold">
+                            <span className="text-sm font-bold text-theme-primary">
                                 {formatDuration(routeStats.durationSeconds)}
                             </span>
                             <span className="text-xs text-theme-muted" aria-hidden>•</span>
-                            <span className="text-sm font-semibold">
+                            <span className="text-sm font-semibold text-theme-primary">
                                 {formatDistance(routeStats.distanceMeters)}
                             </span>
                         </div>
@@ -382,7 +384,6 @@ const ChooseRide = () => {
                 {/* Scrollable ride content */}
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     <h2 className="mb-3 mt-3 text-lg font-bold text-theme-primary">{t('choose_a_ride')}</h2>
-
                     {/* Fare loading / error */}
                     {fareLoading && (
                         <p className="flex items-center gap-2 py-2 text-xs text-theme-secondary">

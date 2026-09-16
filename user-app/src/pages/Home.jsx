@@ -1143,6 +1143,7 @@ const Home = () => {
                                 suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
                                 onSelectSuggestion={handleSelectSuggestion}
                                 onForMeOpen={() => setForMeOpen(true)}
+                                rideFor={forMeActive}
                                 onFindTrip={() => findTrip()}
                                 canFindTrip={hasRouteSelections}
                                 findingTrip={findingTrip}
@@ -1206,7 +1207,7 @@ const Home = () => {
                             </div>
                         )}
 
-                        <div className="mt-auto shrink-0 pb-2">
+                        <div className="mt-4 shrink-0 pb-2">
                             <SafetyPromoCard />
                         </div>
                     </>
