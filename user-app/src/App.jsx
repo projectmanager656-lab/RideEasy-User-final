@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useContext, useEffect, useState } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import React, { Suspense, lazy, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
 import MoreOptionsModal from './components/MoreOptionsModal'
@@ -42,6 +42,16 @@ const AuthShellLoader = () => {
   )
 }
 
+const RouteScrollReset = ({ scrollRef }) => {
+  const location = useLocation()
+
+  useLayoutEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [ location.key, location.pathname, scrollRef ])
+
+  return null
+}
+
 // Redirect rules (see UserAppRoot above):
 //  - no token + onboarding not done → /welcome
 //  - no token + onboarding done     → /login
@@ -81,11 +91,13 @@ const UserAppRoot = () => {
 const App = () => {
   const { t } = useLanguage()
   const [moreOpen, setMoreOpen] = useState(false)
+  const scrollRef = useRef(null)
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-theme-bg text-theme-primary">
       <NativeAndroidFlavorRedirect />
-      <div className="relative min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+      <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto scrollbar-hide">
+        <RouteScrollReset scrollRef={scrollRef} />
         <Suspense fallback={<div className="h-full flex items-center justify-center text-theme-muted text-sm bg-theme-bg">{t('loading_rideeasy')}</div>}>
           <Routes>
             <Route path="/" element={<UserAppRoot />} />
