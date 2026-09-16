@@ -6,6 +6,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "seed:captain": "node src/scripts/seed-test-captain.js",
+    "seed:user": "node src/scripts/seed-test-user.js",
     "migrate:vehicle-types": "node src/scripts/migrate-legacy-vehicle-types.js",
     "migrate:services": "node src/scripts/ensure-services-doc.js",
     "migrate:user-city-bank-details": "node src/scripts/remove-user-city-bank-details.js",
