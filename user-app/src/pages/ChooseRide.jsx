@@ -192,7 +192,7 @@ const ChooseRide = () => {
         return priced.reduce((a, b) => (Number(a.price) <= Number(b.price) ? a : b))
     }, [ tiers ])
 
-    const selected = selectedTier || null
+    const selected = tiers.find((tier) => tier.id === selectedTier?.id) || tiers[0] || null
 
     useEffect(() => {
         let cancelled = false

@@ -39,6 +39,7 @@ function normalizePaymentMethod(method) {
     const m = String(method || '').trim();
     if (m === 'UPI') return 'UPI';
     if (m === 'Online') return 'Online';
+    if (m === 'Wallet') return 'Wallet';
     return 'Cash';
 }
 module.exports.normalizePaymentMethod = normalizePaymentMethod;
