@@ -378,7 +378,7 @@ const ChooseRide = () => {
             </div>
 
             {/* Bottom sheet */}
-            <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
                 <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted" />
 
                 {/* Scrollable ride content */}

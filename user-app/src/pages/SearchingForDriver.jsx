@@ -619,10 +619,10 @@ const SearchingForDriver = () => {
 
       {/* Dark rounded bottom sheet */}
       <div className={isSearching ? 'absolute inset-x-0 bottom-0 z-40' : 'relative z-40 min-h-0 flex-1'}>
-        <div className={`mx-auto max-w-[430px] border-t border-theme bg-theme-card pb-[max(env(safe-area-inset-bottom,0px),12px)] shadow-[0_-8px_40px_rgba(0,0,0,0.45)] ${isSearching ? 'rounded-t-[28px]' : 'h-full overflow-hidden'}`}>
-          <div className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-theme-muted" aria-hidden />
+        <div className={`mx-auto max-w-[430px] border-t border-theme bg-theme-card pb-[max(env(safe-area-inset-bottom,0px),12px)] shadow-[0_-8px_40px_rgba(0,0,0,0.45)] ${isSearching ? 'rounded-t-[28px]' : 'flex h-full flex-col rounded-t-[28px]'}`}>
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-muted" aria-hidden />
 
-          <div className={`${isSearching ? 'max-h-[46dvh]' : 'h-full'} overflow-y-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
+          <div className={`${isSearching ? 'max-h-[55dvh]' : 'min-h-0 flex-1'} overflow-y-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
             {/* Status header */}
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
@@ -755,6 +755,30 @@ const SearchingForDriver = () => {
                     </button>
                   </div>
                 )}
+
+                {/* Open separate Driver Details page */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/driver-details', {
+                    state: {
+                      ride,
+                      pickupCoords,
+                      dropCoords,
+                      pickup,
+                      destination,
+                      passengerOtp,
+                      confirmation: rideConfirmation,
+                      vehicleType,
+                      tierId: rideTierId,
+                      price,
+                    },
+                  })}
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card-muted py-2 text-xs font-bold text-theme-primary transition hover:bg-theme-card active:scale-[0.98]"
+                >
+                  <i className="ri-user-star-line text-sm text-brand-yellow" aria-hidden />
+                  <span>{t('view_driver_details') || 'View Full Driver Details'}</span>
+                  <i className="ri-arrow-right-s-line text-sm text-theme-muted" aria-hidden />
+                </button>
               </div>
             )}
 
@@ -769,6 +793,30 @@ const SearchingForDriver = () => {
                   {passengerOtp}
                 </p>
                 <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
+
+                {/* Open separate User OTP page */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/user-otp', {
+                    state: {
+                      ride,
+                      pickupCoords,
+                      dropCoords,
+                      pickup,
+                      destination,
+                      passengerOtp,
+                      confirmation: rideConfirmation,
+                      vehicleType,
+                      tierId: rideTierId,
+                      price,
+                    },
+                  })}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-brand-yellow/50 bg-brand-yellow/20 px-3.5 py-1 text-xs font-bold text-theme-primary transition active:scale-95"
+                >
+                  <i className="ri-shield-keyhole-fill text-brand-yellow" aria-hidden />
+                  <span>{t('open_otp_page') || 'Open Separate OTP Screen'}</span>
+                  <i className="ri-arrow-right-line text-xs" aria-hidden />
+                </button>
               </div>
             )}
 

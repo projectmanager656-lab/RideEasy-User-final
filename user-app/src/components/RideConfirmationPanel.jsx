@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../i18n'
 import RideStatusStepper from './RideStatusStepper'
 import RideMap from './RideMap'
@@ -16,6 +17,7 @@ export default function RideConfirmationPanel ({
   onCloseWaiting,
 }) {
   const { t } = useLanguage()
+  const navigate = useNavigate()
   const c = confirmation || {}
   const captain = ride?.captain
   const name = c.driverName || captain?.name || t('your_driver')
@@ -34,6 +36,18 @@ export default function RideConfirmationPanel ({
 
   const live = c.liveLocation
     || (driverCoords?.lat != null ? { lat: driverCoords.lat, lng: driverCoords.lng } : null)
+
+  const navState = {
+    ride,
+    pickupCoords,
+    dropCoords,
+    passengerOtp: otp,
+    confirmation: c,
+    vehicleType: vType,
+    price: fare,
+    pickup: ride?.pickupLocation || ride?.pickup,
+    destination: ride?.dropLocation || ride?.destination,
+  }
 
   return (
     <div className="min-w-0 text-theme-primary">
@@ -104,6 +118,16 @@ export default function RideConfirmationPanel ({
             ) : null}
           </div>
         )}
+
+        <button
+          type="button"
+          onClick={() => navigate('/driver-details', { state: navState })}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card py-2 text-xs font-bold text-theme-primary transition hover:bg-theme-card-muted active:scale-[0.98]"
+        >
+          <i className="ri-user-star-line text-sm text-brand-yellow" aria-hidden />
+          <span>{t('view_driver_details') || 'View Full Driver Details'}</span>
+          <i className="ri-arrow-right-s-line text-sm text-theme-muted" aria-hidden />
+        </button>
       </div>
 
       <div className="mb-4 rounded-xl border-2 border-theme-strong bg-theme-card-muted px-4 py-3 text-center shadow-md">
@@ -114,6 +138,17 @@ export default function RideConfirmationPanel ({
         >
           {otp || t('loading_otp')}
         </p>
+        {otp ? (
+          <button
+            type="button"
+            onClick={() => navigate('/user-otp', { state: navState })}
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-brand-yellow/50 bg-brand-yellow/20 px-3.5 py-1 text-xs font-bold text-theme-primary transition active:scale-95"
+          >
+            <i className="ri-shield-keyhole-fill text-brand-yellow" aria-hidden />
+            <span>{t('open_otp_page') || 'Open Separate OTP Screen'}</span>
+            <i className="ri-arrow-right-line text-xs" aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2">

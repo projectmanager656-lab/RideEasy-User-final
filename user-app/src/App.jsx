@@ -28,6 +28,8 @@ const RideHistory = lazy(() => import('./pages/RideHistory'))
 const Invoice = lazy(() => import('./pages/Invoice'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
 const EmergencyContact = lazy(() => import('./pages/EmergencyContact'))
+const DriverDetails = lazy(() => import('./pages/DriverDetails'))
+const UserOtp = lazy(() => import('./pages/UserOtp'))
 
 const AuthShellLoader = () => {
   const { t } = useLanguage()
@@ -126,6 +128,8 @@ const App = () => {
             <Route path="/invoice/:id" element={<UserProtectWrapper><Invoice /></UserProtectWrapper>} />
             <Route path="/profile" element={<UserProtectWrapper><UserProfile /></UserProtectWrapper>} />
             <Route path="/emergency-contact" element={<UserProtectWrapper><EmergencyContact /></UserProtectWrapper>} />
+            <Route path="/driver-details" element={<UserProtectWrapper><DriverDetails /></UserProtectWrapper>} />
+            <Route path="/user-otp" element={<UserProtectWrapper><UserOtp /></UserProtectWrapper>} />
             <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
           </Routes>
         </Suspense>

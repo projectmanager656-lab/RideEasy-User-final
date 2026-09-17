@@ -4,14 +4,9 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
-import VehiclePanel from '../components/VehiclePanel';
-import ConfirmRide from '../components/ConfirmRide';
-import LookingForDriver from '../components/LookingForDriver';
-import WaitingForDriver from '../components/WaitingForDriver';
 import { useSocket } from '../hooks/useSocket';
 import { UserDataContext } from '../context/UserContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import RideMap from '../components/RideMap';
 import RideEasyHeader from '../components/RideEasyHeader';
 import LocationSelector from '../components/LocationSelector';
 import ForMeSheet from '../components/ForMeSheet';
@@ -1086,132 +1081,148 @@ const Home = () => {
         navigate(location.pathname, { replace: true })
     }, [ chooseRideResult, location.pathname, navigate ])
 
-    return (
-        <div className="relative h-full w-full overflow-hidden">
-            {/* Full-screen map layer — ONLY behind active booking sheets, never a home background */}
-            {!showSearchPanel && (pickupCoords || dropCoords) && (
-                <div className="absolute inset-0 z-0">
-                    <RideMap
-                        pickupCoords={pickupCoords}
-                        dropCoords={dropCoords}
-                        driverCoords={driverCoords}
-                        passengerLiveCoords={passengerCoords}
-                        showRoute={!!(pickupCoords && dropCoords)}
-                        trackingFrom={trackingDriverToPickup ? driverCoords : null}
-                        trackingTo={trackingDriverToPickup ? pickupCoords : null}
-                    />
-                </div>
-            )}
+    const activeRideStatus = normalizeRideStatus(ride?.status)
+    const hasActiveRide = activeRideStatus === 'searching' || activeRideStatus === 'accepted' || activeRideStatus === 'arrived'
 
-            {/* Foreground: fixed app viewport (no page scroll) — location suggestions render inline in the flow (no overlay) */}
-            <div className="relative z-20 mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden">
+    return (
+        <div className="relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary">
+            <div className="relative z-20 mx-auto flex min-h-full w-full max-w-[430px] flex-col pb-8">
                 <RideEasyHeader
                     onBack={() => navigate('/location', { replace: true })}
                     onNotifications={() => setNotificationsOpen(true)}
                     onSchedule={() => setScheduleOpen(true)}
                 />
 
-                {showSearchPanel && (
-                    <>
-                        <div className="relative shrink-0">
-                            <LocationSelector
-                                pickup={pickup}
-                                destination={destination}
-                                onPickupChange={handlePickupChange}
-                                onPickupFocus={() => {
-                                    setActiveField('pickup')
-                                    if (pickup.trim()) runLocationSearch('pickup', pickup)
-                                    else {
-                                        setSearchStatus('idle')
-                                        setDestinationSuggestions([])
-                                    }
-                                }}
-                                onDestinationChange={handleDestinationChange}
-                                onDestinationFocus={() => {
-                                    setActiveField('destination')
-                                    if (destination.trim()) runLocationSearch('destination', destination)
-                                    else {
-                                        setSearchStatus('idle')
-                                        setPickupSuggestions([])
-                                    }
-                                }}
-                                bookingError={bookingError}
-                                recents={recentSearches}
-                                onSelectRecent={handleSelectRecent}
-                                searching={!!activeField}
-                                searchStatus={searchStatus}
-                                suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
-                                onSelectSuggestion={handleSelectSuggestion}
-                                onForMeOpen={() => setForMeOpen(true)}
-                                rideFor={forMeActive}
-                                onFindTrip={() => findTrip()}
-                                canFindTrip={hasRouteSelections}
-                                findingTrip={findingTrip}
-                            />
-                        </div>
-
-                        {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {currentUser.savedAddresses?.home ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.home
-                                            setPickup(a)
-                                            fetchPickupCoords(a)
-                                        }}
-                                    >
-                                        {t('home_to_pickup')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.work ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.work
-                                            setDestination(a)
-                                            fetchDropCoords(a)
-                                        }}
-                                    >
-                                        {t('work_to_drop')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.home ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.home
-                                            setDestination(a)
-                                            fetchDropCoords(a)
-                                        }}
-                                    >
-                                        {t('home_to_drop')}
-                                    </button>
-                                ) : null}
-                                {currentUser.savedAddresses?.work ? (
-                                    <button
-                                        type="button"
-                                        className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted"
-                                        onClick={() => {
-                                            const a = currentUser.savedAddresses.work
-                                            setPickup(a)
-                                            fetchPickupCoords(a)
-                                        }}
-                                    >
-                                        {t('work_to_pickup')}
-                                    </button>
-                                ) : null}
+                {/* Active Ride Banner if user has an active ride in progress */}
+                {hasActiveRide && (
+                    <div className="mx-4 mb-3 flex items-center justify-between rounded-2xl border border-brand-yellow/50 bg-brand-yellow/10 p-3 shadow-sm">
+                        <div className="flex items-center gap-2.5">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-yellow text-black font-bold shadow">
+                                <i className={activeRideStatus === 'searching' ? 'ri-search-line animate-spin' : 'ri-roadster-fill'} />
+                            </span>
+                            <div>
+                                <p className="text-xs font-bold text-theme-primary">
+                                    {activeRideStatus === 'searching' ? t('looking_for_driver') : (activeRideStatus === 'arrived' ? t('driver_has_arrived') : t('driver_assigned_track'))}
+                                </p>
+                                <p className="text-[11px] text-theme-secondary">
+                                    {activeRideStatus === 'searching' ? t('connecting_with_nearby_driver') : (ride?.captain?.name ? `${ride.captain.name} • ${ride.captain.vehicleNumber || ''}` : (t('tap_to_view_details') || 'Tap to view details'))}
+                                </p>
                             </div>
-                        )}
-
-                        <div className="mt-4 shrink-0 pb-2">
-                            <SafetyPromoCard />
                         </div>
-                    </>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (activeRideStatus === 'searching') {
+                                    navigate('/searching-for-driver', { state: { ride, pickupCoords, dropCoords, pickup, destination } })
+                                } else {
+                                    navigate('/driver-details', { state: { ride, pickupCoords, dropCoords, pickup, destination, passengerOtp, confirmation: rideConfirmation } })
+                                }
+                            }}
+                            className="flex items-center gap-1 rounded-xl bg-brand-yellow px-3 py-1.5 text-xs font-bold text-black transition active:scale-95 shadow"
+                        >
+                            <span>{activeRideStatus === 'searching' ? (t('tracking') || 'Track') : (t('details') || 'Details')}</span>
+                            <i className="ri-arrow-right-line text-xs" />
+                        </button>
+                    </div>
                 )}
+
+                <div className="relative shrink-0">
+                    <LocationSelector
+                        pickup={pickup}
+                        destination={destination}
+                        onPickupChange={handlePickupChange}
+                        onPickupFocus={() => {
+                            setActiveField('pickup')
+                            if (pickup.trim()) runLocationSearch('pickup', pickup)
+                            else {
+                                setSearchStatus('idle')
+                                setDestinationSuggestions([])
+                            }
+                        }}
+                        onDestinationChange={handleDestinationChange}
+                        onDestinationFocus={() => {
+                            setActiveField('destination')
+                            if (destination.trim()) runLocationSearch('destination', destination)
+                            else {
+                                setSearchStatus('idle')
+                                setPickupSuggestions([])
+                            }
+                        }}
+                        bookingError={bookingError}
+                        recents={recentSearches}
+                        onSelectRecent={handleSelectRecent}
+                        searching={!!activeField}
+                        searchStatus={searchStatus}
+                        suggestions={activeField === 'pickup' ? pickupSuggestions : destinationSuggestions}
+                        onSelectSuggestion={handleSelectSuggestion}
+                        onForMeOpen={() => setForMeOpen(true)}
+                        rideFor={forMeActive}
+                        onFindTrip={() => findTrip()}
+                        canFindTrip={hasRouteSelections}
+                        findingTrip={findingTrip}
+                    />
+                </div>
+
+                {(currentUser?.savedAddresses?.home || currentUser?.savedAddresses?.work) && (
+                    <div className="mt-3 flex flex-wrap gap-2 px-4">
+                        {currentUser.savedAddresses?.home ? (
+                            <button
+                                type="button"
+                                className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted transition"
+                                onClick={() => {
+                                    const a = currentUser.savedAddresses.home
+                                    setPickup(a)
+                                    fetchPickupCoords(a)
+                                }}
+                            >
+                                {t('home_to_pickup')}
+                            </button>
+                        ) : null}
+                        {currentUser.savedAddresses?.work ? (
+                            <button
+                                type="button"
+                                className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted transition"
+                                onClick={() => {
+                                    const a = currentUser.savedAddresses.work
+                                    setDestination(a)
+                                    fetchDropCoords(a)
+                                }}
+                            >
+                                {t('work_to_drop')}
+                            </button>
+                        ) : null}
+                        {currentUser.savedAddresses?.home ? (
+                            <button
+                                type="button"
+                                className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted transition"
+                                onClick={() => {
+                                    const a = currentUser.savedAddresses.home
+                                    setDestination(a)
+                                    fetchDropCoords(a)
+                                }}
+                            >
+                                {t('home_to_drop')}
+                            </button>
+                        ) : null}
+                        {currentUser.savedAddresses?.work ? (
+                            <button
+                                type="button"
+                                className="rounded-full border border-theme bg-theme-card px-3 py-1 text-xs font-medium text-theme-primary hover:bg-theme-card-muted transition"
+                                onClick={() => {
+                                    const a = currentUser.savedAddresses.work
+                                    setPickup(a)
+                                    fetchPickupCoords(a)
+                                }}
+                            >
+                                {t('work_to_pickup')}
+                            </button>
+                        ) : null}
+                    </div>
+                )}
+
+                <div className="mt-4 shrink-0 pb-2">
+                    <SafetyPromoCard />
+                </div>
             </div>
 
             <ForMeSheet
@@ -1238,7 +1249,7 @@ const Home = () => {
             />
 
             {notificationsOpen && (
-                <div className="absolute inset-0 z-[60] flex flex-col justify-end">
+                <div className="fixed inset-0 z-[60] flex flex-col justify-end">
                     <div
                         className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
                         onClick={() => setNotificationsOpen(false)}
@@ -1262,55 +1273,6 @@ const Home = () => {
                     </div>
                 </div>
             )}
-
-            <div ref={vehiclePanelRef} className={`absolute inset-x-0 w-full z-40 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 pt-10 pb-20 rounded-t-3xl max-h-[90dvh] flex flex-col overflow-hidden shadow-[0_-8px_40px_rgba(0,0,0,0.45)] transition-transform duration-300 ease-in-out ${(vehiclePanel && !confirmRidePanel) ? 'translate-y-0' : 'translate-y-full'}`}>
-                <div className="flex min-h-0 flex-1 flex-col">
-                    <VehiclePanel
-                        selectedVehicle={vehicleType}
-                        onSelectVehicle={handleVehicleTap}
-                        onContinue={continueFromVehiclePanel}
-                        city={String(serviceCity || 'Kolhapur').toLowerCase()}
-                        fare={fare} setConfirmRidePanel={setConfirmRidePanel} setVehiclePanel={setVehiclePanel} />
-                </div>
-            </div>
-            <div ref={confirmRidePanelRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 py-6 pt-12 pb-24 rounded-t-3xl max-h-[92dvh] overflow-y-auto shadow-[0_-8px_40px_rgba(0,0,0,0.5)] transition-transform duration-300 ease-in-out ${confirmRidePanel ? 'translate-y-0' : 'translate-y-full'}`}>
-                <ConfirmRide
-                    createRide={createRide}
-                    pickup={pickup}
-                    destination={destination}
-                    fare={fare}
-                    vehicleType={vehicleType}
-                    scheduledAt={scheduledAt}
-
-                    setConfirmRidePanel={setConfirmRidePanel} setVehicleFound={setVehicleFound} />
-            </div>
-            <div ref={vehicleFoundRef} className={`absolute inset-x-0 w-full z-50 bottom-0 bg-theme-card border-t border-theme text-theme-primary px-3 py-6 pt-12 pb-24 rounded-t-3xl transition-transform duration-300 ease-in-out ${vehicleFound ? 'translate-y-0' : 'translate-y-full'}`}>
-                <LookingForDriver
-                    createRide={createRide}
-                    pickup={pickup}
-                    destination={destination}
-                    fare={fare}
-                    vehicleType={vehicleType}
-                    ride={ride}
-                    passengerOtp={passengerOtp}
-                    assignmentError={assignmentError}
-                    setVehicleFound={setVehicleFound}
-                    onEditLocations={() => {
-                        setVehicleFound(false)
-                    }} />
-            </div>
-            <div ref={waitingForDriverRef} className={`absolute inset-x-0 bottom-0 z-50 flex max-h-[92dvh] w-full flex-col overflow-y-auto rounded-t-3xl border-t border-theme bg-theme-card px-3 pb-24 pt-12 text-theme-primary transition-transform duration-300 ease-in-out [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${waitingForDriver ? 'translate-y-0' : 'translate-y-full'}`}>
-                <WaitingForDriver
-                    ride={ride}
-                    confirmation={rideConfirmation}
-                    passengerOtp={passengerOtp}
-                    driverCoords={driverCoords}
-                    pickupCoords={pickupCoords}
-                    dropCoords={dropCoords}
-                    setVehicleFound={setVehicleFound}
-                    setWaitingForDriver={closeWaitingPanel}
-                    waitingForDriver={waitingForDriver} />
-            </div>
         </div>
     )
 }
