@@ -273,7 +273,7 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
   // pixels and keep the panel offset even after yPercent animates to 0.
   const paneBase = 'absolute inset-0 z-0 h-full max-h-full overflow-hidden'
   const paneScroller =
-    'absolute inset-0 h-full max-h-full min-h-0 overflow-y-scroll overscroll-contain touch-pan-y pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch]'
+    'absolute inset-0 h-full max-h-full min-h-0 overflow-y-scroll scrollbar-hide overscroll-contain touch-pan-y pb-[max(2.5rem,env(safe-area-inset-bottom,0px))] [-webkit-overflow-scrolling:touch]'
   const hiddenPaneBase = `${paneBase} invisible`
   const themeBg = isDark ? darkBg : lightBg
   const paneBackdrop = (

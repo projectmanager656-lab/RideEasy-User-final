@@ -9,6 +9,8 @@ const { toPublicDoc } = require('../utils/publicDoc');
 const { ok, fail } = require('../utils/apiResponse');
 const { logLoginRequestBody } = require('../utils/loginDebug');
 const axios = require('axios');
+const WalletTransaction = require('../models/walletTransaction.model');
+const { listAvailableCoupons, validateCoupon } = require('../services/coupon.service');
 
 async function generateUniqueReferralCode(seed = '') {
     const base = String(seed || 'RIDE').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5) || 'RIDE';
@@ -98,6 +100,39 @@ module.exports.getProfile = async (req, res) => {
         return fail(res, req, 401, 'Unauthorized');
     }
     return ok(res, req, 200, 'Profile fetched', { user: toPublicDoc(req.user) });
+};
+
+module.exports.getWallet = async (req, res) => {
+    const userId = toUserObjectId(req.user?._id || req.userId);
+    if (!userId) return fail(res, req, 401, 'Unauthorized');
+    const [user, transactions] = await Promise.all([
+        userModel.findById(userId).select('walletBalance').lean(),
+        WalletTransaction.find({ userId }).sort({ createdAt: -1 }).limit(100).lean(),
+    ]);
+    return ok(res, req, 200, 'Wallet fetched', {
+        wallet: { balance: Number(user?.walletBalance || 0), transactions },
+    });
+};
+
+module.exports.getCoupons = async (req, res) => {
+    const userId = toUserObjectId(req.user?._id || req.userId);
+    if (!userId) return fail(res, req, 401, 'Unauthorized');
+    return ok(res, req, 200, 'Coupons fetched', { coupons: await listAvailableCoupons(userId) });
+};
+
+module.exports.validateCoupon = async (req, res) => {
+    const userId = toUserObjectId(req.user?._id || req.userId);
+    if (!userId) return fail(res, req, 401, 'Unauthorized');
+    try {
+        const result = await validateCoupon({ code: req.body?.code, userId, fare: req.body?.fare });
+        return ok(res, req, 200, 'Coupon validated', {
+            coupon: result.coupon,
+            discountAmount: result.discountAmount,
+            finalFare: result.finalFare,
+        });
+    } catch (err) {
+        return fail(res, req, err.statusCode || 400, err.message);
+    }
 };
 
 function toUserObjectId (raw) {

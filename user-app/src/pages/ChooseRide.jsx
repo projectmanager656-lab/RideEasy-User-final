@@ -85,6 +85,12 @@ const ChooseRide = () => {
     const [ selectedTier, setSelectedTier ] = useState(() => RIDE_OPTIONS[0]?.tier || RIDE_TIERS[0] || null)
     const [ paymentOpen, setPaymentOpen ] = useState(false)
     const [ paymentMethod, setPaymentMethod ] = useState('Cash')
+    const [ couponCode, setCouponCode ] = useState('')
+    const [ couponState, setCouponState ] = useState(null)
+    const [ couponLoading, setCouponLoading ] = useState(false)
+    const [ offers, setOffers ] = useState([])
+    const [ offersOpen, setOffersOpen ] = useState(false)
+    const [ offersLoading, setOffersLoading ] = useState(false)
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
     const [ booking, setBooking ] = useState(false)
@@ -188,6 +194,24 @@ const ChooseRide = () => {
 
     const selected = selectedTier || null
 
+    useEffect(() => {
+        let cancelled = false
+        setOffersLoading(true)
+        apiClient.get('/users/coupons', withAuth())
+            .then((res) => {
+                if (cancelled) return
+                const body = stripApiEnvelope(res.data)
+                setOffers(Array.isArray(body?.coupons) ? body.coupons.filter((coupon) => !coupon.used) : [])
+            })
+            .catch(() => {
+                if (!cancelled) setOffers([])
+            })
+            .finally(() => {
+                if (!cancelled) setOffersLoading(false)
+            })
+        return () => { cancelled = true }
+    }, [])
+
     const handleGoBack = () => {
         if (window.history.length > 1) navigate(-1)
         else navigate('/home')
@@ -260,6 +284,7 @@ const ChooseRide = () => {
                     : {}),
                 vehicleType,
                 paymentMethod: paymentMethod || 'Cash',
+                ...(couponState?.coupon?.code ? { couponCode: couponState.coupon.code } : {}),
                 price,
                 distanceKm: fare?.distanceKm != null ? fare.distanceKm : (routeStats?.distanceMeters != null ? routeStats.distanceMeters / 1000 : undefined),
                 ...(scheduledAt ? { scheduledAt } : {}),
@@ -294,6 +319,30 @@ const ChooseRide = () => {
             setBooking(false)
         }
     }
+
+    const applyCoupon = async (requestedCode = couponCode) => {
+        const code = requestedCode.trim().toUpperCase()
+        if (!code || !selected?.price) return false
+        setCouponLoading(true)
+        setBookingError('')
+        try {
+            const res = await apiClient.post('/users/coupons/validate', { code, fare: Number(selected.price) }, withAuth())
+            const body = stripApiEnvelope(res.data)
+            setCouponState(body)
+            setCouponCode(code)
+            return true
+        } catch (err) {
+            setCouponState(null)
+            setBookingError(formatApiError(err))
+            return false
+        } finally {
+            setCouponLoading(false)
+        }
+    }
+
+    const selectedOriginalFare = Number(selected?.price || 0)
+    const selectedDiscount = Number(couponState?.discountAmount || 0)
+    const selectedFinalFare = couponState?.finalFare != null ? Number(couponState.finalFare) : selectedOriginalFare
 
     if (!hasRoute) {
         return (
@@ -497,6 +546,15 @@ const ChooseRide = () => {
                         </button>
                         <button
                             type="button"
+                            onClick={() => setOffersOpen(true)}
+                            aria-label="Offer"
+                            className="flex h-[52px] w-[76px] shrink-0 items-center justify-center gap-1 rounded-2xl border border-brand-yellow bg-theme-card px-2 text-brand-yellow transition active:scale-95"
+                        >
+                            <span className="text-xs font-bold">Offer</span>
+                            <i className="ri-arrow-right-s-line text-base" aria-hidden />
+                        </button>
+                        <button
+                            type="button"
                             onClick={() => setScheduleOpen(true)}
                             aria-label={t('schedule_ride')}
                             className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border border-theme bg-theme-card text-brand-yellow transition active:scale-95"
@@ -515,7 +573,7 @@ const ChooseRide = () => {
                         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
                         <h3 className="mb-3 text-base font-bold text-theme-primary">{t('payment_method')}</h3>
                         <div className="space-y-2">
-                            {PAYMENT_METHODS.map((m) => (
+                            {[ ...PAYMENT_METHODS, 'Wallet' ].map((m) => (
                                 <button
                                     key={m}
                                     type="button"
@@ -535,6 +593,58 @@ const ChooseRide = () => {
                                     {paymentMethod === m && <i className="ri-check-line text-brand-yellow" aria-hidden />}
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {offersOpen && (
+                <div className="absolute inset-0 z-[70] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/65 backdrop-blur-[1px]" onClick={() => setOffersOpen(false)} aria-hidden />
+                    <div className="relative max-h-[82%] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card px-4 pb-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-theme-primary">Offers</h3>
+                            <button type="button" onClick={() => setOffersOpen(false)} aria-label="Close offers" className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-bg text-theme-secondary">
+                                <i className="ri-close-line text-lg" aria-hidden />
+                            </button>
+                        </div>
+
+                        {offersLoading ? <p className="py-6 text-center text-sm text-theme-muted">Loading offers…</p> : offers.length === 0 ? <p className="rounded-xl border border-dashed border-theme px-4 py-6 text-center text-sm text-theme-muted">No offers available right now.</p> : (
+                            <div className="space-y-2.5">
+                                {offers.map((offer) => (
+                                    <div key={offer._id} className="rounded-xl border border-theme bg-theme-bg p-3.5">
+                                        <div className="flex items-start gap-3">
+                                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-yellow/15 text-brand-yellow">
+                                                <i className="ri-price-tag-3-line text-lg" aria-hidden />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-bold text-theme-primary">{offer.title}</p>
+                                                <p className="mt-1 text-xs leading-5 text-theme-secondary">{offer.description || `${offer.discountType === 'percentage' ? `${offer.discountValue}% off` : `₹${offer.discountValue} off`}`}</p>
+                                                <p className="mt-1 text-[11px] text-theme-muted">{offer.code}{offer.expiresAt ? ` · Valid until ${new Date(offer.expiresAt).toLocaleDateString()}` : ''}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    const applied = await applyCoupon(offer.code)
+                                                    if (applied) setOffersOpen(false)
+                                                }}
+                                                className="shrink-0 rounded-lg bg-brand-yellow px-3 py-2 text-xs font-bold text-black active:scale-95"
+                                            >
+                                                Apply
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="mt-4 border-t border-theme pt-4">
+                            <div className="flex gap-2">
+                                <input value={couponCode} onChange={(e) => { setCouponCode(e.target.value); setCouponState(null) }} placeholder="Enter coupon code" className="min-w-0 flex-1 rounded-lg border border-theme bg-theme-bg px-3 py-2.5 text-sm text-theme-primary outline-none" />
+                                <button type="button" onClick={applyCoupon} disabled={couponLoading || !couponCode.trim()} className="rounded-lg border border-brand-yellow px-3 py-2 text-xs font-bold text-brand-yellow disabled:opacity-50">{couponLoading ? 'Checking…' : 'Apply'}</button>
+                            </div>
+                            {couponState?.coupon && <div className="mt-3 space-y-1 text-xs"><p className="text-emerald-400">{couponState.coupon.title} applied</p><p className="flex justify-between text-theme-muted"><span>Original fare</span><span>{formatPrice(selectedOriginalFare)}</span></p><p className="flex justify-between text-emerald-400"><span>Discount</span><span>−{formatPrice(selectedDiscount)}</span></p><p className="flex justify-between font-bold text-theme-primary"><span>Final fare</span><span>{formatPrice(selectedFinalFare)}</span></p></div>}
                         </div>
                     </div>
                 </div>

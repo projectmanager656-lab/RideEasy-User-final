@@ -202,8 +202,8 @@ export default function RideCompletionFlow ({
                         {payError ? (
                             <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{payError}</p>
                         ) : null}
-                        <div className="grid grid-cols-3 gap-2">
-                            {['Cash', 'UPI', 'Online'].map((m) => (
+                        <div className="grid grid-cols-4 gap-2">
+                            {['Cash', 'UPI', 'Online', 'Wallet'].map((m) => (
                                 <button
                                     key={m}
                                     type="button"

@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const rideService = require("../services/rideCore.service");
 const paymentService = require("../services/payment.service");
+const { payRideFromWallet } = require("../services/wallet.service");
+const { validateCoupon } = require("../services/coupon.service");
+const CouponUsage = require("../models/couponUsage.model");
 const PaymentRecord = require("../models/paymentRecord.model");
 const { getCaptainPricing } = require("../services/pricing.service");
 const { validationResult } = require("express-validator");
@@ -423,6 +426,7 @@ module.exports.createRide = async (req, res) => {
     paymentMethod,
     customerName,
     customerPhone,
+    couponCode,
   } = req.body;
 
   try {
@@ -512,6 +516,8 @@ module.exports.createRide = async (req, res) => {
       return fail(res, req, 400, "Distance must be greater than 0");
     }
 
+    const couponResult = await validateCoupon({ code: couponCode, userId: req.user._id, fare: computedPrice });
+
     const { ride } = await rideService.createRide({
       user: req.user._id,
       pickupLocation,
@@ -520,12 +526,24 @@ module.exports.createRide = async (req, res) => {
       vehicleType: vehicleTypeNorm,
       paymentMethod,
       price: computedPrice,
+      discountAmount: couponResult.discountAmount,
+      discountReason: couponResult.coupon?.code || '',
+      couponCode: couponResult.coupon?.code || '',
       distanceKm: computedDistanceKm,
       customerName: customerName || req.user.name,
       customerPhone: customerPhone || req.user.phone,
       pickupCoordinates,
       dropCoordinates,
     });
+
+    if (couponResult.coupon) {
+      await CouponUsage.create({
+        couponId: couponResult.coupon._id,
+        userId: req.user._id,
+        rideId: ride._id,
+        discountAmount: couponResult.discountAmount,
+      });
+    }
 
     const uid = userIdOf(req.user);
     emitToUser(uid, "ride:status-update", {
@@ -1844,6 +1862,26 @@ module.exports.payMock = async (req, res) => {
   } catch (err) {
     console.error("[pay-mock]", err?.message || err);
     return res.status(500).json({ message: err?.message || "Payment failed" });
+  }
+};
+
+module.exports.payWallet = async (req, res) => {
+  const { rideId, part } = req.body || {};
+  try {
+    const result = await payRideFromWallet({
+      rideId,
+      userId: req.user?._id,
+      part,
+    });
+    const updated = await rideModel.findById(rideId).populate("user", "name phone email").populate("captain");
+    const payload = { rideId: updated._id, status: updated.status, ride: publicRide(updated), paymentStatus: updated.paymentStatus };
+    const uid = userIdOf(updated.user);
+    const cid = captainIdOf(updated.captain);
+    if (uid) emitToUser(uid, "ride:status-update", payload);
+    if (cid) emitToCaptain(cid, "ride:status-update", payload);
+    return res.status(200).json({ ...publicRide(updated), ride: publicRide(updated), transaction: result.transaction, alreadyPaid: result.alreadyPaid, ok: true, message: "Wallet payment recorded" });
+  } catch (err) {
+    return res.status(err.statusCode || 400).json({ message: err.message || "Wallet payment failed" });
   }
 };
 

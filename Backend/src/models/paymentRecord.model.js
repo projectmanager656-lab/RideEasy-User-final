@@ -29,7 +29,8 @@ const paymentRecordSchema = new mongoose.Schema(
     },
     amount: { type: Number, required: true },
     /** Ride settlements and captain subscription-plan records. */
-    paymentMode: { type: String, enum: ["Cash", "UPI", "Online", "PLAN"], required: true },
+    paymentMode: { type: String, enum: ["Cash", "UPI", "Online", "Wallet", "PLAN"], required: true },
+    paymentPart: { type: String, enum: ["advance", "remaining", "full"], default: "full" },
     paymentStatus: {
       type: String,
       enum: ["pending", "success", "failed"],
@@ -38,7 +39,7 @@ const paymentRecordSchema = new mongoose.Schema(
     /** ride_fare | driver_subscription | platform_commission (future) */
     paymentType: {
       type: String,
-      enum: ["ride_fare", "driver_subscription", "referral", "other"],
+      enum: ["ride_fare", "ride_fare_advance", "ride_fare_remaining", "driver_subscription", "referral", "other"],
       default: "ride_fare",
     },
     externalRef: { type: String, maxlength: 120 },
@@ -49,7 +50,7 @@ const paymentRecordSchema = new mongoose.Schema(
 paymentRecordSchema.index({ createdAt: -1 });
 
 paymentRecordSchema.index(
-  { rideId: 1, paymentType: 1 },
+  { rideId: 1, paymentType: 1, paymentPart: 1 },
   {
     unique: true,
     partialFilterExpression: {

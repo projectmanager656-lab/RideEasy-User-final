@@ -529,6 +529,13 @@ const UserProfile = () => {
             onClick={openPersonal}
           />
           <AccountMenuItem
+            icon="ri-wallet-3-line"
+            title="Wallet"
+            subtitle="View your wallet balance and transactions"
+            accent="purple"
+            onClick={() => navigate('/wallet')}
+          />
+          <AccountMenuItem
             icon="ri-map-pin-2-line"
             title={t('saved_places')}
             subtitle={t('saved_places_sub')}

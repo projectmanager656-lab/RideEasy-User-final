@@ -26,6 +26,9 @@ router.post('/phone/verify-otp',
 router.post('/google', userController.googleLogin);
 
 router.get('/profile', auth.authUser, userController.getProfile);
+router.get('/wallet', auth.authUser, userController.getWallet);
+router.get('/coupons', auth.authUser, userController.getCoupons);
+router.post('/coupons/validate', auth.authUser, body('code').isString().isLength({ min: 1, max: 40 }), body('fare').isNumeric(), userController.validateCoupon);
 router.get('/ride-history', auth.authUser, rideController.userRideHistory);
 router.get('/emergency-contact', auth.authUser, userController.getEmergencyContact);
 router.post('/emergency-contact', auth.authUser, userController.saveEmergencyContact);

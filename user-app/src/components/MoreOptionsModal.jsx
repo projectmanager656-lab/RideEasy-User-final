@@ -66,6 +66,13 @@ const NAV_OPTIONS = [
         to: '/faq',
         icon: 'ri-question-answer-line',
     },
+    {
+        id: 'wallet',
+        labelKey: 'wallet_offers',
+        detailKey: 'wallet_offers_sub',
+        to: '/wallet',
+        icon: 'ri-wallet-3-line',
+    },
 ]
 
 const MoreOptionsModal = ({ open, onClose }) => {

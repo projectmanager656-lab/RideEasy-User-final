@@ -460,7 +460,7 @@ const SearchingForDriver = () => {
   const driverCardVehicleLabel = vehicleLabelText(vehicleDetailLabel(rideTierId, vehicleTypeText))
   const fareCardVehicleLabel = vehicleLabelText(vehicleShortLabel(rideTierId, vehicleTypeText))
   /** 25% advance (UPI) payment split — computed from the actual ride total. */
-  const totalFareNum = Number(price)
+  const totalFareNum = Math.max(0, Number(price) - Number(ride?.discountAmount || 0))
   const advanceAmount = Number(ride?.advanceAmount) > 0
     ? Number(ride.advanceAmount)
     : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 0.25) : 0)
@@ -483,13 +483,14 @@ const SearchingForDriver = () => {
     window.location.href = `tel:${digits}`
   }, [])
 
-  /** Pay the 25% advance via the existing mock payment endpoint (same as completion). */
+  /** Pay the server-derived 25% advance using the selected payment rail. */
   const payAdvance = useCallback(async () => {
     if (!rideId || payingAdvance || advancePaid) return
     setPayingAdvance(true)
     setAdvancePayError('')
     try {
-      const res = await apiClient.post('/rides/pay-mock', { rideId, method: 'UPI', part: 'advance' }, withAuth())
+      const endpoint = ride?.paymentMethod === 'Wallet' ? '/rides/pay-wallet' : '/rides/pay-mock'
+      const res = await apiClient.post(endpoint, { rideId, method: ride?.paymentMethod || 'UPI', part: 'advance' }, withAuth())
       const o = stripApiEnvelope(res.data)
       if (o?.ride) {
         setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
@@ -499,7 +500,7 @@ const SearchingForDriver = () => {
     } finally {
       setPayingAdvance(false)
     }
-  }, [rideId, payingAdvance, advancePaid])
+  }, [rideId, payingAdvance, advancePaid, ride?.paymentMethod])
 
   /** Nearby vehicle markers only while still searching — cosmetic map markers, cleared on assignment. */
   const [nearbyVehicles, setNearbyVehicles] = useState([])

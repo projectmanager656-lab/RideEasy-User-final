@@ -12,6 +12,7 @@ router.post('/create',
     body('vehicleType').isString().isIn([ 'BIKE', 'AUTO', 'CAR' ]),
     body('paymentMethod').optional().isString().isIn([ 'Cash', 'UPI', 'Online' ]),
     body('price').isNumeric(),
+    body('couponCode').optional({ checkFalsy: true }).isString().isLength({ max: 40 }),
     body('distanceKm').optional().isNumeric(),
     body('pickupLat').optional().isFloat({ min: -90, max: 90 }),
     body('pickupLng').optional().isFloat({ min: -180, max: 180 }),
@@ -76,6 +77,7 @@ router.post('/:id/retry-assign', auth.authUser, rideController.retryAssign);
 
 /** Passenger records a real ride payment (advance/remaining) — persists a ledger row. */
 router.post('/pay-mock', auth.authUser, rideController.payMock);
+router.post('/pay-wallet', auth.authUser, rideController.payWallet);
 /** Passenger verifies a UPI payment intent (real, idempotent ledger write). */
 router.post('/upi/verify', auth.authUser, rideController.verifyUpiPayment);
 /** Passenger invoice built from the actual ride + payment ledger. */

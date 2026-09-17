@@ -118,6 +118,8 @@ const en = {
    rides: 'rides',
    edit: 'Edit',
    wallet_balance: 'Wallet Balance',
+  wallet_offers: 'Wallet & Offers',
+  wallet_offers_sub: 'Balance, transactions, and coupons',
    personal_information: 'Personal Information',
    personal_information_sub: 'Name, phone, email',
    account_details: 'Account Details',
