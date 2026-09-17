@@ -64,13 +64,13 @@ const ChooseRide = () => {
     const { t } = useLanguage()
     const state = location.state || {}
 
-    const [ pickupCoords ] = useState(() => (
+    const [ pickupCoords, setPickupCoords ] = useState(() => (
         normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
     ))
     const [ dropCoords ] = useState(() => (
         normalizeCoordinates(state.dropCoords || state.dropCoordinate || state.dropSelection)
     ))
-    const pickup = state.pickup || ''
+    const [ pickup, setPickup ] = useState(state.pickup || '')
     const destination = state.drop || state.destination || ''
     const rideFor = state.rideFor || 'Me'
 
@@ -95,6 +95,9 @@ const ChooseRide = () => {
     const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
     const [ booking, setBooking ] = useState(false)
     const [ bookingError, setBookingError ] = useState('')
+    const [ pickupLocationLoading, setPickupLocationLoading ] = useState(false)
+    const [ pickupLocationError, setPickupLocationError ] = useState('')
+    const [ pickupEditSequence, setPickupEditSequence ] = useState(0)
 
     const hasRoute = !!(
         pickupCoords?.lat != null && pickupCoords?.lng != null
@@ -103,7 +106,7 @@ const ChooseRide = () => {
 
     /** Load fare from backend unless Home already passed it through. */
     useEffect(() => {
-        if (fare && Object.keys(fare).length > 0) return
+        if (pickupEditSequence === 0 && fare && Object.keys(fare).length > 0) return
         if (!hasRoute || !pickup || !destination) {
             setFareLoading(false)
             return
@@ -137,7 +140,7 @@ const ChooseRide = () => {
             cancelled = true
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ hasRoute, pickup, destination ])
+    }, [ hasRoute, pickup, destination, pickupCoords?.lat, pickupCoords?.lng, pickupEditSequence ])
 
     /** Fetch route distance + duration for the summary chip. */
     useEffect(() => {
@@ -257,6 +260,28 @@ const ChooseRide = () => {
             .finally(() => setFareLoading(false))
     }
 
+    const handlePickupChange = async (coords) => {
+        setPickupCoords(coords)
+        setPickupEditSequence((sequence) => sequence + 1)
+        setFare(null)
+        setFareError('')
+        setFareLoading(true)
+        setPickupLocationLoading(true)
+        setPickupLocationError('')
+        try {
+            const response = await apiClient.get('/maps/get-address', withAuth({
+                params: { lat: coords.lat, lng: coords.lng },
+            }))
+            const address = response.data?.address
+            if (!address) throw new Error('Address unavailable')
+            setPickup(address)
+        } catch (error) {
+            setPickupLocationError(formatApiError(error))
+        } finally {
+            setPickupLocationLoading(false)
+        }
+    }
+
     const handleConfirm = async () => {
         if (!selected) return
         if (!hasRoute) {
@@ -368,6 +393,8 @@ const ChooseRide = () => {
                 <RideMap
                     pickupCoords={pickupCoords}
                     dropCoords={dropCoords}
+                    draggablePickup
+                    onPickupChange={handlePickupChange}
                     showRoute
                     showRouteStatsChip={false}
                     zoomControlPosition="topright"
@@ -451,6 +478,12 @@ const ChooseRide = () => {
                                 {t('retry')}
                             </button>
                         </div>
+                    )}
+                    {pickupLocationLoading && (
+                        <p className="py-2 text-xs text-theme-secondary">Updating pickup location...</p>
+                    )}
+                    {!pickupLocationLoading && pickupLocationError && (
+                        <p className="py-2 text-xs text-red-400">Pickup address could not be updated. The new map position will still be used.</p>
                     )}
 
                     {/* Ride options */}
