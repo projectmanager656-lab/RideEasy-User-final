@@ -132,6 +132,28 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
     return null
 }
 
+function MapCenterTracker ({ onMove, onMoveEnd }) {
+    const map = useMap()
+
+    useEffect(() => {
+        const handleMove = () => {
+            const center = map.getCenter()
+            onMove?.({ lat: center.lat, lng: center.lng })
+        }
+        const handleMoveEnd = () => {
+            const center = map.getCenter()
+            onMoveEnd?.({ lat: center.lat, lng: center.lng })
+        }
+        map.on('move', handleMove)
+        map.on('moveend', handleMoveEnd)
+        return () => {
+            map.off('move', handleMove)
+            map.off('moveend', handleMoveEnd)
+        }
+    }, [map, onMove, onMoveEnd])
+
+    return null
+}
 const RideMap = ({
     pickupCoords = null,
     dropCoords = null,
@@ -155,6 +177,10 @@ const RideMap = ({
     /** Allow the pickup marker to be adjusted by the passenger. */
     draggablePickup = false,
     onPickupChange,
+    /** Use a fixed screen overlay and report the map center for pickup selection. */
+    fixedPickupPin = false,
+    onMapCenterChange,
+    onMapCenterSettled,
 }) => {
     const [routeLine, setRouteLine] = useState([])
     const [routeStats, setRouteStats] = useState(null)
@@ -301,19 +327,24 @@ const RideMap = ({
                 </div>
             )}
             <MapContainer center={[center.lat, center.lng]} zoom={zoom} style={containerStyle} zoomControl={false}>
-                <MapBoundsSync
-                    pickupCoords={pickupCoords}
-                    dropCoords={dropCoords}
-                    driverCoords={driverCoords}
-                    passengerLiveCoords={passengerLiveCoords}
-                />
+                {!fixedPickupPin && (
+                    <MapBoundsSync
+                        pickupCoords={pickupCoords}
+                        dropCoords={dropCoords}
+                        driverCoords={driverCoords}
+                        passengerLiveCoords={passengerLiveCoords}
+                    />
+                )}
+                {fixedPickupPin && (
+                    <MapCenterTracker onMove={onMapCenterChange} onMoveEnd={onMapCenterSettled} />
+                )}
                 <ZoomControl position={zoomControlPosition} />
                 <TileLayer
                     attribution='&copy; OpenStreetMap contributors'
                     url={getMapTileUrlTemplate()}
                 />
 
-                {pickupCoords?.lat != null && pickupCoords?.lng != null && (
+                {!fixedPickupPin && pickupCoords?.lat != null && pickupCoords?.lng != null && (
                     <Marker
                         position={[pickupCoords.lat, pickupCoords.lng]}
                         icon={pickupDivIcon}
@@ -326,7 +357,7 @@ const RideMap = ({
                         } : undefined}
                     />
                 )}
-                {dropCoords?.lat != null && dropCoords?.lng != null && (
+                {!fixedPickupPin && dropCoords?.lat != null && dropCoords?.lng != null && (
                     <Marker position={[dropCoords.lat, dropCoords.lng]} icon={dropDivIcon} />
                 )}
                 {driverCoords?.lat != null && driverCoords?.lng != null && (
@@ -336,7 +367,7 @@ const RideMap = ({
                     <Marker position={[passengerLiveCoords.lat, passengerLiveCoords.lng]} icon={passengerDivIcon} />
                 )}
 
-                {Array.isArray(nearbyVehicles) && nearbyVehicles.map((v) => {
+                {!fixedPickupPin && Array.isArray(nearbyVehicles) && nearbyVehicles.map((v) => {
                     const lat = Number(v?.lat)
                     const lng = Number(v?.lng)
                     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
@@ -357,6 +388,17 @@ const RideMap = ({
                     <Polyline positions={trackingLine} pathOptions={{ color: '#2563eb', weight: 5 }} />
                 )}
             </MapContainer>
+            {fixedPickupPin && (
+                <div
+                    className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-full"
+                    aria-label="Pickup location"
+                >
+                    <div className="flex flex-col items-center">
+                        <span className="h-7 w-7 -rotate-45 rounded-[55%_55%_55%_0] border-2 border-white bg-blue-600 shadow-[0_2px_5px_rgba(0,0,0,0.45)]" />
+                        <span className="absolute top-[9px] h-2.5 w-2.5 rounded-full bg-white" />
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
