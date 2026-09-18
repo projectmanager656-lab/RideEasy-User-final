@@ -29,7 +29,7 @@ const rideSchema = new mongoose.Schema({
     },
 
     /** Passenger-selected payment rail; settlement is still confirmed after completion. */
-    paymentMethod: { type: String, enum: [ 'Cash', 'UPI', 'Online' ], required: true, default: 'Cash' },
+    paymentMethod: { type: String, enum: [ 'Cash', 'UPI', 'Online', 'Wallet' ], required: true, default: 'Cash' },
     paymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
     duration: { type: Number }, // seconds
     cancellationFee: { type: Number, default: 0 },

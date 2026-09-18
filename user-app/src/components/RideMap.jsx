@@ -152,6 +152,9 @@ const RideMap = ({
     showRouteStatsChip = true,
     /** Where the Leaflet zoom (+/−) control sits. */
     zoomControlPosition = 'topleft',
+    /** Allow the pickup marker to be adjusted by the passenger. */
+    draggablePickup = false,
+    onPickupChange,
 }) => {
     const [routeLine, setRouteLine] = useState([])
     const [routeStats, setRouteStats] = useState(null)
@@ -311,7 +314,17 @@ const RideMap = ({
                 />
 
                 {pickupCoords?.lat != null && pickupCoords?.lng != null && (
-                    <Marker position={[pickupCoords.lat, pickupCoords.lng]} icon={pickupDivIcon} />
+                    <Marker
+                        position={[pickupCoords.lat, pickupCoords.lng]}
+                        icon={pickupDivIcon}
+                        draggable={draggablePickup}
+                        eventHandlers={draggablePickup ? {
+                            dragend: (event) => {
+                                const point = event.target.getLatLng()
+                                onPickupChange?.({ lat: point.lat, lng: point.lng })
+                            },
+                        } : undefined}
+                    />
                 )}
                 {dropCoords?.lat != null && dropCoords?.lng != null && (
                     <Marker position={[dropCoords.lat, dropCoords.lng]} icon={dropDivIcon} />

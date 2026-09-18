@@ -114,6 +114,30 @@ module.exports.getAddressCoordinate = async (address) => {
     return fallback;
 };
 
+module.exports.getAddressFromCoordinates = async (lat, lng) => {
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('Invalid coordinates');
+    }
+
+    const response = await axios.get(`${PHOTON_API_URL}/reverse`, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'RideEasy/1.0' },
+        params: { lat: latitude, lon: longitude, lang: 'en' },
+    });
+    const feature = response.data?.features?.[0];
+    const properties = feature?.properties || {};
+    const address = properties.label || [
+        properties.name,
+        properties.street,
+        properties.city || properties.county,
+        properties.state,
+    ].filter(Boolean).join(', ');
+    if (!address) throw new Error('Unable to fetch address');
+    return address;
+};
+
 module.exports.getDistanceTime = async (origin, destination) => {
     const o = await module.exports.getAddressCoordinate(origin);
     const d = await module.exports.getAddressCoordinate(destination);
