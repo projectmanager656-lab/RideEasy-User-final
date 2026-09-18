@@ -98,7 +98,7 @@ const LocationScreen = () => {
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary">
-      <RideEasyHeader />
+      <RideEasyHeader showNotifications={false} />
       {/* Map — upper portion */}
       <div className="relative h-80 min-h-[280px] w-full shrink-0 overflow-hidden">
         <MapContainer
