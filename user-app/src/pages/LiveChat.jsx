@@ -258,7 +258,7 @@ const LiveChat = () => {
             rows={1}
             maxLength={MAX_INPUT_CHARS}
             autoComplete="off"
-            className="min-w-0 flex-1 resize-none rounded-2xl border border-theme bg-theme-input px-4 py-3 text-sm leading-snug text-theme-primary placeholder:text-theme-muted outline-none focus:border-brand-yellow"
+            className="min-w-0 flex-1 resize-none rounded-2xl border border-theme bg-theme-input px-4 py-3 text-sm leading-snug text-theme-primary placeholder:text-theme-muted outline-none focus:border-brand-yellow scrollbar-hide"
           />
 
           <button

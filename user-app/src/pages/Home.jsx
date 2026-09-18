@@ -1085,7 +1085,7 @@ const Home = () => {
     const hasActiveRide = activeRideStatus === 'searching' || activeRideStatus === 'accepted' || activeRideStatus === 'arrived'
 
     return (
-        <div className="relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary">
+        <div className={`relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary${notificationsOpen ? ' overflow-hidden' : ''}`}>
             <div className="relative z-20 mx-auto flex min-h-full w-full max-w-[430px] flex-col pb-8">
                 <RideEasyHeader
                     onBack={() => navigate('/location', { replace: true })}
