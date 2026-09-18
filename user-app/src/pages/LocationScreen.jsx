@@ -194,7 +194,7 @@ const LocationScreen = () => {
                 <button
                   key={`${item.name}-${idx}`}
                   type="button"
-                  onClick={() => navigate('/home', { replace: true })}
+                  onClick={() => navigate('/home', { replace: true, state: { recentLocation: item } })}
                   className="flex w-full items-center gap-3 border-b border-theme px-3.5 py-3 text-left transition last:border-b-0 hover:bg-theme-card-muted active:bg-theme-card-muted"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">

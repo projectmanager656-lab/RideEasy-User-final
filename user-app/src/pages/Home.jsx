@@ -703,31 +703,49 @@ const Home = () => {
         return null
     }
 
-    const handleSelectRecent = async (item) => {
-        const from = String(item.pickup || '').trim()
-        const to = String(item.destination || item.name || '').trim()
-        if (!to) return
+    /**
+     * Recent search → booking fields. Fills the first empty field (pickup, then drop)
+     * with the item's stored location; when both are already chosen the existing
+     * selection is preserved rather than blindly overwritten.
+     */
+    const applyRecentLocation = async (item) => {
+        const from = String(item?.pickup || '').trim()
+        const to = String(item?.destination || item?.name || '').trim()
+        const place = to || from
+        if (!place) return
+
+        const pickupEmpty = !String(pickup || '').trim()
+        const dropEmpty = !String(destination || '').trim()
+        if (!pickupEmpty && !dropEmpty) return
+
         chooseRideSentRef.current = false
         setBookingError('')
-        setPickup(from)
-        setDestination(to)
-        if (from) addRecentSearch({ pickup: from, destination: to })
-        else addRecentSearch({ name: to })
+
+        if (pickupEmpty) {
+            setPickup(place)
+            const pc = await fetchPickupCoords(place)
+            if (pc) setPickupSelection({ name: place, latitude: pc.lat, longitude: pc.lng })
+            else {
+                setPickupCoords(null)
+                setPickupSelection(null)
+                setBookingError(t('could_not_resolve_locations'))
+            }
+        } else {
+            setDestination(place)
+            const dc = await fetchDropCoords(place)
+            if (dc) setDropSelection({ name: place, latitude: dc.lat, longitude: dc.lng })
+            else {
+                setDropCoords(null)
+                setDropSelection(null)
+                setBookingError(t('could_not_resolve_locations'))
+            }
+        }
+
+        addRecentSearch({ pickup: from, destination: to })
         setRecentSearches(getRecentSearches())
-        const pc = from ? await fetchPickupCoords(from) : null
-        const dc = await fetchDropCoords(to)
-        if (pc) {
-            setPickupCoords(pc)
-            setPickupSelection({ name: from, latitude: pc.lat, longitude: pc.lng })
-        }
-        if (dc) {
-            setDropCoords(dc)
-            setDropSelection({ name: to, latitude: dc.lat, longitude: dc.lng })
-        }
-        if (!pc || !dc) {
-            setBookingError(t('could_not_resolve_locations'))
-        }
     }
+
+    const handleSelectRecent = (item) => { void applyRecentLocation(item) }
 
     /** Select a pickup suggestion from the search panel. */
     const handleSelectPickup = async (suggestion) => {
@@ -1080,6 +1098,22 @@ const Home = () => {
         } catch { /* ignore */ }
         navigate(location.pathname, { replace: true })
     }, [ chooseRideResult, location.pathname, navigate ])
+
+    /** Latest applyRecentLocation — lets the handoff effect below keep stable deps. */
+    const applyRecentLocationRef = useRef(applyRecentLocation)
+    useEffect(() => {
+        applyRecentLocationRef.current = applyRecentLocation
+    })
+
+    /** Handoff from the Location screen: the tapped recent search fills the first empty field. */
+    const recentFromLocationRef = useRef(false)
+    useEffect(() => {
+        const incoming = location.state?.recentLocation
+        if (!incoming || recentFromLocationRef.current) return
+        recentFromLocationRef.current = true
+        navigate(location.pathname, { replace: true })
+        void applyRecentLocationRef.current(incoming)
+    }, [ location.state, location.pathname, navigate ])
 
     const activeRideStatus = normalizeRideStatus(ride?.status)
     const hasActiveRide = activeRideStatus === 'searching' || activeRideStatus === 'accepted' || activeRideStatus === 'arrived'
