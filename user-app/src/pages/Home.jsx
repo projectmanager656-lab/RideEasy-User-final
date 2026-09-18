@@ -1249,13 +1249,13 @@ const Home = () => {
             />
 
             {notificationsOpen && (
-                <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+                <div className="absolute inset-0 z-[60] flex flex-col justify-end">
                     <div
                         className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
                         onClick={() => setNotificationsOpen(false)}
                         aria-hidden
                     />
-                    <div className="relative max-h-[60vh] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
+                    <div className="relative mx-auto max-h-[60dvh] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
                         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="text-base font-bold text-theme-primary">{t('notifications')}</h2>
