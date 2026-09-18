@@ -357,11 +357,11 @@ const ChooseRide = () => {
                             style={{ background: 'rgba(10,10,10,0.92)', borderColor: '#2A2A2A' }}
                         >
                             <i className="ri-roadster-line text-brand-yellow" aria-hidden />
-                            <span className="text-sm font-bold text-theme-primary">
+                            <span className="text-sm font-bold text-white">
                                 {formatDuration(routeStats.durationSeconds)}
                             </span>
                             <span className="text-xs text-theme-muted" aria-hidden>•</span>
-                            <span className="text-sm font-semibold text-theme-primary">
+                            <span className="text-sm font-semibold text-white">
                                 {formatDistance(routeStats.distanceMeters)}
                             </span>
                         </div>
