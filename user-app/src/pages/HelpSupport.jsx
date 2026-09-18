@@ -294,7 +294,7 @@ const HelpSupport = () => {
             </button>
             <button
               type="button"
-              onClick={() => setReportOpen(true)}
+              onClick={() => navigate('/support/chat')}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-primary active:scale-[0.98]"
             >
               <i className="ri-chat-3-line text-brand-yellow" aria-hidden /> {t('live_chat')}

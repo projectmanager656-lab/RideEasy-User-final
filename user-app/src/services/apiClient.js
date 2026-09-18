@@ -62,6 +62,7 @@ const PASSENGER_ALLOWED = [
   /^\/maps(\/|$)/i,
   /^\/health(\/|$)/i,
   /^\/support-tickets(\/|$)/i,
+  /^\/chat(\/|$)/i,
 ]
 
 apiClient.interceptors.request.use((config) => {
