@@ -14,8 +14,6 @@ import logoCar from '../assets/logo-car.png'
 import logoPremium from '../assets/premium.png'
 import logoBike from '../assets/logo-bike.png'
 
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
-
 function formatDistance (meters) {
     if (!Number.isFinite(meters) || meters < 0) return ''
     if (meters < 1000) return `${Math.max(1, Math.round(meters))} m`
@@ -65,13 +63,11 @@ const ChooseRide = () => {
     const { t } = useLanguage()
     const state = location.state || {}
 
-    const [ pickupCoords, setPickupCoords ] = useState(() => (
-        normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
-    ))
+    const pickupCoords = normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
     const [ dropCoords ] = useState(() => (
         normalizeCoordinates(state.dropCoords || state.dropCoordinate || state.dropSelection)
     ))
-    const [ pickup, setPickup ] = useState(state.pickup || '')
+    const pickup = state.pickup || ''
     const destination = state.drop || state.destination || ''
     const rideFor = state.rideFor || 'Me'
 
@@ -94,11 +90,7 @@ const ChooseRide = () => {
     const [ offersLoading, setOffersLoading ] = useState(false)
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
-    const [ booking, setBooking ] = useState(false)
     const [ bookingError, setBookingError ] = useState('')
-    const [ pickupLocationLoading, setPickupLocationLoading ] = useState(false)
-    const [ pickupLocationError, setPickupLocationError ] = useState('')
-    const [ pickupEditSequence, setPickupEditSequence ] = useState(0)
 
     const hasRoute = !!(
         pickupCoords?.lat != null && pickupCoords?.lng != null
@@ -107,7 +99,7 @@ const ChooseRide = () => {
 
     /** Load fare from backend unless Home already passed it through. */
     useEffect(() => {
-        if (pickupEditSequence === 0 && fare && Object.keys(fare).length > 0) return
+        if (fare && Object.keys(fare).length > 0) return
         if (!hasRoute || !pickup || !destination) {
             setFareLoading(false)
             return
@@ -141,7 +133,7 @@ const ChooseRide = () => {
             cancelled = true
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ hasRoute, pickup, destination, pickupCoords?.lat, pickupCoords?.lng, pickupEditSequence ])
+    }, [ hasRoute, pickup, destination ])
 
     /** Fetch route distance + duration for the summary chip. */
     useEffect(() => {
@@ -261,28 +253,6 @@ const ChooseRide = () => {
             .finally(() => setFareLoading(false))
     }
 
-    const handlePickupChange = async (coords) => {
-        setPickupCoords(coords)
-        setPickupEditSequence((sequence) => sequence + 1)
-        setFare(null)
-        setFareError('')
-        setFareLoading(true)
-        setPickupLocationLoading(true)
-        setPickupLocationError('')
-        try {
-            const response = await apiClient.get('/maps/get-address', withAuth({
-                params: { lat: coords.lat, lng: coords.lng },
-            }))
-            const address = response.data?.address
-            if (!address) throw new Error('Address unavailable')
-            setPickup(address)
-        } catch (error) {
-            setPickupLocationError(formatApiError(error))
-        } finally {
-            setPickupLocationLoading(false)
-        }
-    }
-
     const handleConfirm = async () => {
         if (!selected) return
         if (!hasRoute) {
@@ -297,53 +267,23 @@ const ChooseRide = () => {
             return
         }
         setBookingError('')
-        setBooking(true)
-        try {
-            const res = await apiClient.post('/rides/create', {
-                pickupLocation: pickup,
-                dropLocation: destination,
-                ...(pickupCoords?.lat != null && pickupCoords?.lng != null
-                    ? { pickupLat: pickupCoords.lat, pickupLng: pickupCoords.lng }
-                    : {}),
-                ...(dropCoords?.lat != null && dropCoords?.lng != null
-                    ? { dropLat: dropCoords.lat, dropLng: dropCoords.lng }
-                    : {}),
+        navigate('/confirm-pickup', {
+            state: {
+                pickupCoords,
+                dropCoords,
+                pickup,
+                destination,
+                rideFor,
                 vehicleType,
-                paymentMethod: paymentMethod || 'Cash',
-                ...(couponState?.coupon?.code ? { couponCode: couponState.coupon.code } : {}),
+                tierId: tier.id,
+                paymentMethod,
                 price,
+                fare,
+                couponCode: couponState?.coupon?.code || '',
                 distanceKm: fare?.distanceKm != null ? fare.distanceKm : (routeStats?.distanceMeters != null ? routeStats.distanceMeters / 1000 : undefined),
-                ...(scheduledAt ? { scheduledAt } : {}),
-            }, withAuth())
-            const raw = stripApiEnvelope(res.data)
-            const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
-            delete ridePayload.otp
-            if (ridePayload?._id) {
-                try {
-                    sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
-                } catch { /* ignore */ }
-            }
-            navigate('/searching-for-driver', {
-                replace: true,
-                state: {
-                    ride: ridePayload,
-                    pickupCoords,
-                    dropCoords,
-                    pickup,
-                    destination,
-                    rideFor,
-                    vehicleType,
-                    tierId: tier.id,
-                    paymentMethod,
-                    price,
-                    scheduledAt,
-                },
-            })
-        } catch (err) {
-            setBookingError(formatApiError(err))
-        } finally {
-            setBooking(false)
-        }
+                scheduledAt,
+            },
+        })
     }
 
     const applyCoupon = async (requestedCode = couponCode) => {
@@ -394,15 +334,10 @@ const ChooseRide = () => {
                 <RideMap
                     pickupCoords={pickupCoords}
                     dropCoords={dropCoords}
-                    draggablePickup
-                    onPickupChange={handlePickupChange}
                     showRoute
                     showRouteStatsChip={false}
                     zoomControlPosition="topright"
                 />
-
-                {/* Slight map fade to draw focus to the ride card */}
-                <div className="pointer-events-none absolute inset-0 z-[900] bg-gradient-to-b from-black/10 via-black/20 to-black/40" aria-hidden />
 
                 {/* Back button */}
                 <button
@@ -480,13 +415,6 @@ const ChooseRide = () => {
                             </button>
                         </div>
                     )}
-                    {pickupLocationLoading && (
-                        <p className="py-2 text-xs text-theme-secondary">Updating pickup location...</p>
-                    )}
-                    {!pickupLocationLoading && pickupLocationError && (
-                        <p className="py-2 text-xs text-red-400">Pickup address could not be updated. The new map position will still be used.</p>
-                    )}
-
                     {/* Ride options */}
                     <div className="space-y-2.5">
                         {tiers.map((tier) => {
@@ -566,17 +494,10 @@ const ChooseRide = () => {
                         <button
                             type="button"
                             onClick={handleConfirm}
-                            disabled={!selected || booking}
+                            disabled={!selected}
                             className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
                         >
-                            {booking ? (
-                                <>
-                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
-                                    {t('booking_ride_dots')}
-                                </>
-                            ) : (
-                                <>{t('choose_ride')}</>
-                            )}
+                            <>{t('choose_ride')}</>
                         </button>
                         <button
                             type="button"
