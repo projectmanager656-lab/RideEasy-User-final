@@ -1,7 +1,7 @@
 import React from 'react'
 import { useLanguage } from '../i18n'
 
-const RideEasyHeader = ({ onNotifications, onSchedule, onBack }) => {
+const RideEasyHeader = ({ onNotifications, onSchedule, onBack, showNotifications = true }) => {
     const { t } = useLanguage()
     return (
         <header className="flex shrink-0 items-center justify-between px-4 pt-4 pb-3">
@@ -34,14 +34,16 @@ const RideEasyHeader = ({ onNotifications, onSchedule, onBack }) => {
                         <i className="ri-calendar-line text-base" />
                     </button>
                 )}
-                <button
-                    type="button"
-                    aria-label={t('notifications')}
-                    onClick={onNotifications}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-card text-brand-yellow transition active:scale-95"
-                >
-                    <i className="ri-notification-3-line text-base" />
-                </button>
+                {showNotifications && (
+                    <button
+                        type="button"
+                        aria-label={t('notifications')}
+                        onClick={onNotifications}
+                        className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-card text-brand-yellow transition active:scale-95"
+                    >
+                        <i className="ri-notification-3-line text-base" />
+                    </button>
+                )}
             </div>
         </header>
     )
