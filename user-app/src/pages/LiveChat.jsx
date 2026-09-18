@@ -81,14 +81,6 @@ const LiveChat = () => {
     else navigate('/help')
   }
 
-  const startNewChat = () => {
-    setMessages([ { id: WELCOME_ID, role: 'assistant', content: t('chat_greeting'), at: Date.now() } ])
-    setInput('')
-    setError('')
-    setOptionsOpen(true)
-    failedMessageRef.current = ''
-  }
-
   const send = useCallback(async (raw) => {
     const content = String(raw || '').trim()
     if (!content || sending) return
@@ -169,14 +161,6 @@ const LiveChat = () => {
           <h1 className="truncate text-lg font-extrabold tracking-tight">{t('chat_title')}</h1>
           <p className="truncate text-[11px] text-theme-muted">{t('chat_subtitle')}</p>
         </div>
-        <button
-          type="button"
-          onClick={startNewChat}
-          aria-label={t('chat_new')}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand-yellow active:scale-95"
-        >
-          <i className="ri-add-line text-xl" aria-hidden />
-        </button>
       </header>
 
       {/* Only this area scrolls — header and composer stay fixed. */}
@@ -276,17 +260,6 @@ const LiveChat = () => {
             autoComplete="off"
             className="min-w-0 flex-1 resize-none rounded-2xl border border-theme bg-theme-input px-4 py-3 text-sm leading-snug text-theme-primary placeholder:text-theme-muted outline-none focus:border-brand-yellow"
           />
-
-          {/* No voice infrastructure exists yet — disabled rather than a fake control. */}
-          <button
-            type="button"
-            disabled
-            aria-label={t('chat_voice_unavailable')}
-            title={t('chat_voice_unavailable')}
-            className="flex h-11 w-11 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-theme bg-theme-card text-theme-muted opacity-40"
-          >
-            <i className="ri-mic-line text-lg" aria-hidden />
-          </button>
 
           <button
             type="submit"

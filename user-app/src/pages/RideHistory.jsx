@@ -242,18 +242,29 @@ const RideDetailModal = ({ ride, t, onClose }) => {
 
         {dt ? <p className="mt-3 text-xs text-theme-muted">{dt}</p> : null}
 
-        <div className="mt-3 flex items-start gap-2.5">
-          <div className="flex flex-col items-center">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
-            <i className="ri-arrow-down-line text-xs text-theme-muted" />
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-          </div>
-          <div className="flex flex-col gap-4">
-            <div>
+        {/* Route indicator: every row carries the same fixed 12px marker slot, so the
+            green dot, arrow and red dot share one X. Each dot is centred on its own
+            text row, and the text column stays independent (unchanged position). */}
+        <div className="mt-3 flex flex-col">
+          <div className="flex items-center gap-2.5">
+            <span className="flex w-3 shrink-0 justify-center">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+            </span>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-theme-muted">{t('pickup')}</p>
               <p className="break-words text-sm text-theme-primary">{ride.pickup}</p>
             </div>
-            <div>
+          </div>
+
+          <span className="flex h-4 w-3 shrink-0 items-center justify-center">
+            <i className="ri-arrow-down-line text-sm text-theme-muted" />
+          </span>
+
+          <div className="flex items-center gap-2.5">
+            <span className="flex w-3 shrink-0 justify-center">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+            <div className="min-w-0 flex-1">
               <p className="text-xs text-theme-muted">{t('drop')}</p>
               <p className="break-words text-sm text-theme-primary">{ride.destination}</p>
             </div>
