@@ -2,8 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   html {
+    height: 100%;
     -webkit-text-size-adjust: 100%;
   }
 
@@ -41,13 +52,16 @@
   }
 
   body {
-    @apply overflow-x-hidden antialiased;
+    height: 100%;
+    overflow: hidden;
+    @apply antialiased;
     background-color: rgb(var(--bg));
     color: rgb(var(--text-primary));
   }
 
   #root {
-    @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full shadow-2xl overflow-x-hidden;
+    height: 100%;
+    @apply min-h-dvh min-h-screen relative mx-auto w-full max-w-[480px] shadow-2xl overflow-x-hidden;
     background-color: rgb(var(--bg));
   }
 
@@ -76,4 +90,65 @@
   .border-brand\/30 { border-color: rgba(var(--brand), 0.3); }
   .border-brand\/40 { border-color: rgba(var(--brand), 0.4); }
   .border-brand\/50 { border-color: rgba(var(--brand), 0.5); }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Bottom Sheet / Half-Screen Panel animations
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.sheet-slide-up   { animation: sheet-slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+.sheet-slide-down { animation: sheet-slide-down 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+.sheet-backdrop-in  { animation: backdrop-in  0.25s ease forwards; }
+.sheet-backdrop-out { animation: backdrop-out 0.22s ease forwards; }
+
+/*
+ * Print output — the invoice page is a clean white printable document.
+ * Applies only when printing (no effect on the on-screen UI).
+ */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #ffffff !important;
+    max-width: none !important;
+  }
+  /* The app shell scroller must not clip multi-page or long invoices in print. */
+  body * {
+    overflow: visible !important;
+  }
+  /* Hide app chrome and unrelated elements from the printed document. */
+  .print\:hidden,
+  header,
+  nav,
+  button,
+  iframe,
+  video {
+    display: none !important;
+  }
+  .leaflet-container,
+  .leaflet-pane {
+    display: none !important;
+  }
 }

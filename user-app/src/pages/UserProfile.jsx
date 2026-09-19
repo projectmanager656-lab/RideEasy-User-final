@@ -251,7 +251,7 @@ const UserProfile = () => {
   if (view === 'personal') {
     const username = user?.username
     return (
-      <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+      <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
         {/* header */}
         <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -394,7 +394,7 @@ const UserProfile = () => {
 
   // ---- Overview (account menu) ----
   return (
-    <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+    <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
       {/* header */}
       <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -527,6 +527,13 @@ const UserProfile = () => {
             subtitle={t('personal_information_sub')}
             accent="yellow"
             onClick={openPersonal}
+          />
+          <AccountMenuItem
+            icon="ri-wallet-3-line"
+            title="Wallet"
+            subtitle="View your wallet balance and transactions"
+            accent="purple"
+            onClick={() => navigate('/wallet')}
           />
           <AccountMenuItem
             icon="ri-map-pin-2-line"

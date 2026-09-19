@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { useLanguage } from '../i18n'
 
 const InstallPWAButton = () => {
+  const { t } = useLanguage()
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [visible, setVisible] = useState(false)
 
@@ -32,10 +34,9 @@ const InstallPWAButton = () => {
       onClick={handleInstall}
       className="fixed bottom-24 right-4 z-30 px-4 py-2 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/40"
     >
-      Install RideEasy
+      {t('install_rideeasy')}
     </button>
   )
 }
 
 export default InstallPWAButton
-

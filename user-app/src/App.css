@@ -33,6 +33,26 @@
   }
 }
 
+/* Nearby vehicle markers shown on the Searching for Driver map */
+@keyframes rideeasy-nearby-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.nearby-vehicle-marker {
+  pointer-events: none;
+}
+
+/* Animate the inner wrapper only — Leaflet owns the marker root's transform. */
+.nearby-vehicle-marker > div {
+  animation: rideeasy-nearby-float 3.2s ease-in-out infinite;
+}
+
 .card {
   padding: 2em;
 }

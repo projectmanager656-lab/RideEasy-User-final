@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, CircleMarker } from 'react-leaflet'
 import { getMapTileUrlTemplate } from '../config/externalEndpoints'
 
 const containerStyle = { width: '100%', height: '100%' }
-const defaultCenter = { lat: 18.5204, lng: 73.8567 } // Pune
+const defaultCenter = { lat: 16.705, lng: 74.243 } // Kolhapur (primary service area)
 
 const LiveTracking = ({ onPositionChange }) => {
     const [currentPosition, setCurrentPosition] = useState(defaultCenter)

@@ -28,7 +28,8 @@ const rideSchema = new mongoose.Schema({
         default: 'searching',
     },
 
-    paymentMethod: { type: String, enum: [ 'UPI', 'QR', 'Cash', 'WALLET' ], required: true },
+    /** Passenger-selected payment rail; settlement is still confirmed after completion. */
+    paymentMethod: { type: String, enum: [ 'Cash', 'UPI', 'Online', 'Wallet' ], required: true, default: 'Cash' },
     paymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
     duration: { type: Number }, // seconds
     cancellationFee: { type: Number, default: 0 },
@@ -55,6 +56,10 @@ const rideSchema = new mongoose.Schema({
     discountAmount: { type: Number, default: 0 },
     discountReason: { type: String, default: '' },
     chargedAmount: { type: Number },
+    advanceAmount: { type: Number, default: 0 },
+    remainingAmount: { type: Number, default: 0 },
+    advancePaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
+    couponCode: { type: String, default: '' },
     customerName: { type: String },
     customerPhone: { type: String },
 }, { timestamps: true });

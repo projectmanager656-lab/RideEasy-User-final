@@ -4,7 +4,7 @@ import { Capacitor } from '@capacitor/core'
  * Default API origin for local web dev when `VITE_BASE_URL` / `VITE_API_BASE_URL` are unset.
  * Prefer `VITE_BASE_URL`, then alias `VITE_API_BASE_URL` (same value, no trailing slash).
  */
-export const DEFAULT_LOCAL_API_URL = 'http://localhost:5001'
+export const DEFAULT_LOCAL_API_URL = 'http://127.0.0.1:5001'
 
 function isLocalApiHost (hostish) {
   const s = String(hostish).toLowerCase()

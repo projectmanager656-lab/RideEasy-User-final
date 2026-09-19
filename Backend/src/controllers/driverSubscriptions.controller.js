@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator')
 const captainModel = require('../models/captain.model')
+const CaptainOnboarding = require('../models/captainOnboarding.model')
 const SubscriptionRecord = require('../models/subscriptionRecord.model')
 const PaymentRecord = require('../models/paymentRecord.model')
 const { expiresAfterPlan, syncSubscriptionState, buildExpiryReminders } = require('../services/subscriptionDriver.service')
@@ -73,7 +74,8 @@ module.exports.createSubscription = async (req, res) => {
     })
   }
   const plans = await pricingService.getDriverPlansMerged()
-  const tier = normalizeVehicleTier(captain.vehicleType)
+  const onboarding = await CaptainOnboarding.findOne({ captainId: req.captain._id })
+  const tier = normalizeVehicleTier(onboarding?.vehicleInformation?.vehicleType)
   const tierPlans = plans?.[tier]
   if (!tierPlans) {
     return res.status(400).json({

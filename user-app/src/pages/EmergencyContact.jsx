@@ -29,10 +29,6 @@ const EmergencyContact = () => {
     { value: 'other', label: t('other') },
   ]
 
-  useEffect(() => {
-    loadEmergencyContact()
-  }, [])
-
   const loadEmergencyContact = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -61,6 +57,10 @@ const EmergencyContact = () => {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadEmergencyContact()
+  }, [loadEmergencyContact])
 
   const saveEmergencyContact = useCallback(async (e) => {
     e.preventDefault()
@@ -103,7 +103,7 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [name, phone, relationship])
+  }, [name, phone, relationship, t])
 
   const deleteEmergencyContact = useCallback(async () => {
     if (!window.confirm(t('delete_contact'))) {
@@ -127,17 +127,17 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [t])
 
   const handleEditClick = () => {
     setEditing(true)
   }
 
   return (
-    <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+    <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-28">
       {/* header */}
       <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-lg items-center gap-3">
+        <div className="mx-auto flex max-w-md items-start gap-3">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -153,7 +153,7 @@ const EmergencyContact = () => {
         </div>
       </header>
 
-      <div className="mx-auto max-w-lg space-y-5 px-4 pt-4">
+      <div className="mx-auto w-full max-w-md space-y-4 px-4 pt-5">
         {/* emergency contact info card */}
         <section className="rounded-2xl border border-theme bg-theme-card p-4">
           {loading ? (
@@ -162,7 +162,7 @@ const EmergencyContact = () => {
             </div>
           ) : contact ? (
             <>
-              <div className="flex items-start gap-3">
+              <div className="flex flex-wrap items-start gap-3">
                 <div className="relative">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-theme-card-muted text-theme-muted">
                     <i className="ri-phone-line text-3xl" />
@@ -181,7 +181,7 @@ const EmergencyContact = () => {
                     </span>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="ml-auto flex w-full items-center justify-end gap-1.5">
                   <button
                     type="button"
                     onClick={handleEditClick}

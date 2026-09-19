@@ -4,6 +4,8 @@ const { SERVICE_AREAS } = require('../config/serviceAreas');
 
 const OSRM_BASE_URL = (process.env.OSRM_URL || 'https://router.project-osrm.org').replace(/\/$/, '');
 const PHOTON_API_URL = (process.env.PHOTON_API_URL || 'https://photon.komoot.io/api').replace(/\/$/, '');
+/** Photon reverse geocoding is served from the host root, NOT under the forward-search `/api` path. */
+const PHOTON_REVERSE_URL = `${PHOTON_API_URL.replace(/\/api$/, '')}/reverse`;
 /** Western Maharashtra — Kolhapur / Ichalkaranji / Sangli corridor */
 const PHOTON_BBOX = process.env.PHOTON_BBOX || '73.2,16.25,76.3,17.15';
 const PHOTON_BIAS_LAT = Number(process.env.PHOTON_BIAS_LAT || 16.77);
@@ -112,6 +114,30 @@ module.exports.getAddressCoordinate = async (address) => {
     const fallback = coordsFromFeature(f);
     if (!fallback) throw new Error('Unable to fetch coordinates');
     return fallback;
+};
+
+module.exports.getAddressFromCoordinates = async (lat, lng) => {
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('Invalid coordinates');
+    }
+
+    const response = await axios.get(PHOTON_REVERSE_URL, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'RideEasy/1.0' },
+        params: { lat: latitude, lon: longitude, lang: 'en' },
+    });
+    const feature = response.data?.features?.[0];
+    const properties = feature?.properties || {};
+    const address = properties.label || [
+        properties.name,
+        properties.street,
+        properties.city || properties.county,
+        properties.state,
+    ].filter(Boolean).join(', ');
+    if (!address) throw new Error('Unable to fetch address');
+    return address;
 };
 
 module.exports.getDistanceTime = async (origin, destination) => {

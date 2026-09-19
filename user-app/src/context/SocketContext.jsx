@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useMemo } from 'react'
 import { io } from 'socket.io-client'
 import { getSocketBaseUrl } from '../config/apiBaseUrl'
+import { getPassengerToken } from '../utils/authTokens'
 
 /** Default `undefined` when no Provider (must not destructure directly from useContext). */
 export const SocketContext = createContext(undefined)
@@ -54,7 +55,12 @@ const SocketProvider = ({ children }) => {
     let cancelled = false
     const liveUrl = `${socketUrl}/health/live`
 
-    ;(async () => {
+    const syncConnection = async () => {
+      const token = getPassengerToken()
+      if (!token) {
+        if (socket.connected) socket.disconnect()
+        return
+      }
       for (let i = 0; i < 24 && !cancelled; i++) {
         try {
           const res = await fetch(liveUrl, { cache: 'no-store' })
@@ -64,11 +70,18 @@ const SocketProvider = ({ children }) => {
         }
         await new Promise((r) => setTimeout(r, 400))
       }
-      if (!cancelled) socket.connect()
-    })()
+      if (cancelled) return
+      socket.auth = { token }
+      if (!socket.connected) socket.connect()
+    }
+
+    const onSessionChanged = () => { void syncConnection() }
+    window.addEventListener('rideeasy:session-changed', onSessionChanged)
+    void syncConnection()
 
     return () => {
       cancelled = true
+      window.removeEventListener('rideeasy:session-changed', onSessionChanged)
     }
   }, [])
 

@@ -13,6 +13,10 @@ import { getPassengerToken } from '../utils/authTokens'
 /** Same key as Home.jsx — in-progress booking hint (never used to open /riding). */
 const PASSENGER_BOOKING_SESSION_KEY = 'rideeasy_user_ride'
 
+function notifySessionChanged () {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('rideeasy:session-changed'))
+}
+
 function clearPassengerBookingSessionHint () {
   try {
     sessionStorage.removeItem(PASSENGER_BOOKING_SESSION_KEY)
@@ -56,6 +60,7 @@ const UserContext = ({ children }) => {
     setToken(null)
     setUser(null)
     setProfileError('')
+    notifySessionChanged()
   }, [])
 
   const setSession = useCallback((nextToken, nextUser) => {
@@ -75,6 +80,7 @@ const UserContext = ({ children }) => {
     setToken(nextToken)
     setUser(nextUser ?? null)
     setProfileError('')
+    notifySessionChanged()
   }, [])
 
   const refreshUser = useCallback(async () => {

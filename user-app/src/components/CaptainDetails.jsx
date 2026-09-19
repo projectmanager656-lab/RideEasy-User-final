@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback } from 'react'
+import { useLanguage } from '../i18n'
 import { CaptainDataContext } from '../context/CaptainContext'
 import axios from 'axios'
 import { API_BASE_URL } from '../config/apiBaseUrl'
@@ -34,6 +35,7 @@ function formatRemaining (ms) {
 }
 
 const CaptainDetails = () => {
+    const { t } = useLanguage()
     const { captain, setCaptain } = useContext(CaptainDataContext)
     const [earnings, setEarnings] = useState(null)
     const [subscription, setSubscription] = useState(null)
@@ -111,7 +113,7 @@ const CaptainDetails = () => {
                 setIsOnline(st === 'active')
                 if (setCaptain) setCaptain((prev) => ({ ...(prev || {}), status: st }))
             })
-            .catch((e) => alert(e.response?.data?.message || 'Could not update status'))
+            .catch((e) => alert(e.response?.data?.message || t('status_update_failed')))
             .finally(() => setTogglingStatus(false))
     }
 
@@ -132,7 +134,7 @@ const CaptainDetails = () => {
             .then(() => {
                 refreshSubscription()
             })
-            .catch((e) => alert(e.response?.data?.message || 'Subscribe failed'))
+            .catch((e) => alert(e.response?.data?.message || t('subscribe_failed')))
             .finally(() => setSubscribing(false))
     }
 
@@ -149,23 +151,23 @@ const CaptainDetails = () => {
                         {displayName.charAt(0)}
                     </div>
                     <div>
-                        <h4 className="font-medium">{displayName}</h4>
-                        <p className="text-sm text-slate-500">{captain?.vehicleType} • {captain?.vehicleNumber}</p>
+                        <h4 className="font-medium text-theme-primary">{displayName}</h4>
+                        <p className="text-sm text-theme-muted">{captain?.vehicleType} • {captain?.vehicleNumber}</p>
                     </div>
                 </div>
                 <div className="text-right">
-                    <h4 className="text-xl font-semibold">₹{earnings?.totalEarnings ?? 0}</h4>
-                    <p className="text-sm text-slate-600">Wallet ₹{earnings?.walletBalance ?? 0}</p>
-                    <p className="text-sm text-slate-600">Total ({earnings?.count ?? earnings?.completedRides ?? 0} rides)</p>
-                    <p className="text-xs text-slate-500">Today: ₹{earnings?.todayEarnings ?? 0} ({earnings?.todayRides ?? 0} rides)</p>
+                    <h4 className="text-xl font-semibold text-theme-primary">₹{earnings?.totalEarnings ?? 0}</h4>
+                    <p className="text-sm text-theme-muted">{t('wallet')} ₹{earnings?.walletBalance ?? 0}</p>
+                    <p className="text-sm text-theme-muted">{t('total_rides_label', { rides: earnings?.count ?? earnings?.completedRides ?? 0 })}</p>
+                    <p className="text-xs text-theme-muted">{t('today_rides_label', { amount: earnings?.todayEarnings ?? 0, rides: earnings?.todayRides ?? 0 })}</p>
                     {earnings?.last7Days && Object.keys(earnings.last7Days).length > 0 && (
                         <details className="mt-1 text-left">
-                            <summary className="cursor-pointer text-xs text-slate-500">Last 7 days (by date)</summary>
-                            <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto text-[11px] text-slate-600">
+                            <summary className="cursor-pointer text-xs text-theme-muted">{t('last_7_days')}</summary>
+                            <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto text-[11px] text-theme-muted">
                                 {Object.entries(earnings.last7Days).sort((a, b) => b[0].localeCompare(a[0])).map(([ day, amt ]) => (
-                                    <li key={day} className="flex justify-between gap-2 border-b border-slate-100 pb-0.5">
+                                    <li key={day} className="flex justify-between gap-2 border-b border-theme pb-0.5">
                                         <span>{day}</span>
-                                        <span className="font-medium text-slate-800">₹{Math.round(amt)}</span>
+                                        <span className="font-medium text-theme-primary">₹{Math.round(amt)}</span>
                                     </li>
                                 ))}
                             </ul>
@@ -176,73 +178,73 @@ const CaptainDetails = () => {
 
             {captain?.approved === false && (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    Waiting for admin approval — you cannot go online until approved.
+                    {t('waiting_admin_approval')}
                 </p>
             )}
 
-            <div className="flex items-center justify-between p-3 bg-slate-100 rounded-xl">
-                <span className="text-sm font-medium text-slate-700">Go online to receive rides</span>
+            <div className="flex items-center justify-between p-3 bg-theme-card-muted rounded-xl">
+                <span className="text-sm font-medium text-theme-secondary">{t('go_online_receive_rides')}</span>
                 <button
                     type="button"
                     onClick={handleToggleOnline}
                     disabled={togglingStatus || (!isOnline && !canGoOnline)}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition ${isOnline ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-700'} disabled:opacity-50`}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition ${isOnline ? 'bg-emerald-600 text-white' : 'bg-theme-card-muted text-theme-secondary'} disabled:opacity-50`}
                 >
-                    {togglingStatus ? '…' : isOnline ? 'Online' : 'Offline'}
+                    {togglingStatus ? '…' : isOnline ? t('online') : t('offline')}
                 </button>
             </div>
 
-            <div className="p-3 bg-slate-100 rounded-xl space-y-2">
-                <p className="text-sm font-medium text-slate-600">Subscription</p>
+            <div className="p-3 bg-theme-card-muted rounded-xl space-y-2">
+                <p className="text-sm font-medium text-theme-secondary">{t('subscription')}</p>
                 <p className={subscription?.active ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
-                    {subscription?.active ? 'Active' : 'Inactive — Subscribe to accept rides'}
+                    {subscription?.active ? t('active') : t('inactive_subscribe')}
                 </p>
                 {subscription?.subscription?.expiresAt && (
-                    <div className="text-xs text-slate-600 space-y-1">
-                        <p>Ends: <span className="font-medium">{new Date(subscription.subscription.expiresAt).toLocaleString()}</span></p>
+                    <div className="text-xs text-theme-muted space-y-1">
+                        <p>{t('subscription_ends')} <span className="font-medium text-theme-secondary">{new Date(subscription.subscription.expiresAt).toLocaleString()}</span></p>
                         {subscription?.active && (
-                            <p>Time left: <span className="font-mono font-semibold text-emerald-700">{formatRemaining(subExpiresMs)}</span></p>
+                            <p>{t('subscription_time_left')} <span className="font-mono font-semibold text-emerald-700">{formatRemaining(subExpiresMs)}</span></p>
                         )}
                         {subscription?.subscription?.plan && (
-                            <p>Plan: <span className="capitalize">{subscription.subscription.plan}</span></p>
+                            <p>{t('subscription_plan')} <span className="capitalize text-theme-secondary">{subscription.subscription.plan}</span></p>
                         )}
                     </div>
                 )}
                 {plansError && (
-                    <p className="text-xs text-red-600">Could not load subscription prices. Check your connection and try again.</p>
+                    <p className="text-xs text-red-600">{t('plan_prices_error')}</p>
                 )}
                 {!subscription?.active && planPrices && (
                     <div className="mt-3 space-y-2">
-                        <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                            <option value="weekly">Weekly — ₹{planPrices.weekly}</option>
-                            <option value="monthly">Monthly (Recommended) — ₹{planPrices.monthly}</option>
-                            <option value="yearly">Yearly — ₹{planPrices.yearly}</option>
+                        <select value={selectedPlan} onChange={(e) => setSelectedPlan(e.target.value)} className="w-full rounded-lg border border-theme-strong px-3 py-2 text-sm bg-theme-input text-theme-primary">
+                            <option value="weekly">{t('plan_weekly', { price: planPrices.weekly })}</option>
+                            <option value="monthly">{t('plan_monthly', { price: planPrices.monthly })}</option>
+                            <option value="yearly">{t('plan_yearly', { price: planPrices.yearly })}</option>
                         </select>
                         <button type="button" onClick={handleSubscribe} disabled={subscribing} className="w-full bg-emerald-600 text-white text-sm font-medium py-2 rounded-lg disabled:opacity-50">
-                            {subscribing ? 'Activating...' : `Subscribe (₹${price}) — Cash`}
+                            {subscribing ? t('activating') : t('subscribe_with_price', { price })}
                         </button>
                     </div>
                 )}
             </div>
 
             {rideHistory.length > 0 && (
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <p className="text-sm font-medium text-slate-700 bg-slate-50 px-3 py-2">Recent rides</p>
-                    <ul className="max-h-56 overflow-y-auto divide-y divide-slate-100 text-xs">
+                <div className="border border-theme rounded-xl overflow-hidden">
+                    <p className="text-sm font-medium text-theme-secondary bg-theme-card-muted px-3 py-2">{t('recent_rides')}</p>
+                    <ul className="max-h-56 overflow-y-auto divide-y divide-theme-border text-xs">
                         {rideHistory.slice(0, 8).map((r) => (
                             <li key={r._id} className="px-3 py-2 space-y-1">
-                                <p className="text-slate-700 truncate">
+                                <p className="text-theme-secondary truncate">
                                     {normalizeLocationText(r.pickupLocation)} {'->'} {normalizeLocationText(r.dropLocation)}
                                 </p>
-                                <div className="flex items-center justify-between gap-2 text-slate-500">
+                                <div className="flex items-center justify-between gap-2 text-theme-muted">
                                     <span className="truncate">{r.vehicleType || '—'} · {r.paymentMethod || '—'}</span>
-                                    <span className="shrink-0 font-medium text-slate-700">
+                                    <span className="shrink-0 font-medium text-theme-secondary">
                                         ₹{r.captainNetEarning != null ? Number(r.captainNetEarning) : Number(r.price || 0)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
-                                    <span className="capitalize text-[11px] rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{r.status || '—'}</span>
-                                    <span className="text-[11px] text-slate-500">{formatDateTime(r.completedAt || r.createdAt) || '—'}</span>
+                                    <span className="capitalize text-[11px] rounded-full bg-theme-card-muted px-2 py-0.5 text-theme-muted">{r.status || '—'}</span>
+                                    <span className="text-[11px] text-theme-muted">{formatDateTime(r.completedAt || r.createdAt) || '—'}</span>
                                 </div>
                             </li>
                         ))}
@@ -251,8 +253,8 @@ const CaptainDetails = () => {
             )}
 
             {rideHistory.length === 0 && (
-                <div className="border border-dashed border-slate-300 rounded-xl px-3 py-4 text-xs text-slate-500">
-                    Booking history not available yet. Completed rides will appear here.
+                <div className="border border-dashed border-theme-strong rounded-xl px-3 py-4 text-xs text-theme-muted">
+                    {t('no_booking_history')}
                 </div>
             )}
         </div>

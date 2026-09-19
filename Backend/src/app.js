@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const { validateEnv, warnDevelopmentEnv } = require('./config/env');
 validateEnv();
 warnDevelopmentEnv();
@@ -15,12 +15,15 @@ const { errorHandler } = require('./middlewares/errorHandler.middleware');
 
 const userRoutes = require('./routes/user.routes');
 const captainRoutes = require('./routes/captain.routes');
+const captainOnboardingRoutes = require('./routes/captainOnboarding.routes');
+const registrationPaymentRoutes = require('./routes/registrationPayment.routes');
 const mapsRoutes = require('./routes/maps.routes');
 const rideRoutes = require('./routes/ride.routes');
 const adminRoutes = require('./routes/admin.routes');
 const driverSubscriptionRoutes = require('./routes/driverSubscriptions.routes');
 const healthRoutes = require('./routes/health.routes');
 const configRoutes = require('./routes/config.routes');
+const chatRoutes = require('./routes/chat.routes');
 const webhooksController = require('./controllers/webhooks.controller');
 
 const app = express();
@@ -146,13 +149,17 @@ app.use('/api/config', configRoutes);
 
 app.use('/users', userRoutes);
 app.use('/captains', captainRoutes);
+app.use('/captains', captainOnboardingRoutes);
+app.use('/captains', registrationPaymentRoutes);
 app.use('/maps', mapsRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/rides', rideRoutes);
+app.use('/chat', chatRoutes);
 /** Optional `/api/*` aliases (same handlers) for clients expecting an `/api` prefix. */
 app.use('/api/users', userRoutes);
 app.use('/api/captains', captainRoutes);
 app.use('/api/rides', rideRoutes);
+app.use('/api/chat', chatRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/driver-subscriptions', driverSubscriptionRoutes);
@@ -173,3 +180,4 @@ if (Sentry?.Handlers?.errorHandler) {
 app.use(errorHandler);
 
 module.exports = app;
+
