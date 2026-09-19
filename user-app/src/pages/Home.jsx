@@ -12,6 +12,7 @@ import LocationSelector from '../components/LocationSelector';
 import ForMeSheet from '../components/ForMeSheet';
 import SafetyPromoCard from '../components/SafetyPromoCard';
 import ScheduleModal from '../components/ScheduleModal';
+import NotificationSheet from '../components/NotificationSheet';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
@@ -704,45 +705,115 @@ const Home = () => {
     }
 
     /**
-     * Recent search → booking fields. Fills the first empty field (pickup, then drop)
-     * with the item's stored location; when both are already chosen the existing
-     * selection is preserved rather than blindly overwritten.
+     * Recent search → booking fields. Restores BOTH pickup and drop locations
+     * from the recent search record, populating the input fields and resolving coordinates.
      */
     const applyRecentLocation = async (item) => {
-        const from = String(item?.pickup || '').trim()
-        const to = String(item?.destination || item?.name || '').trim()
-        const place = to || from
-        if (!place) return
+        if (!item) return
 
-        const pickupEmpty = !String(pickup || '').trim()
-        const dropEmpty = !String(destination || '').trim()
-        if (!pickupEmpty && !dropEmpty) return
+        const from = String(
+            (typeof item.pickup === 'object' && item.pickup !== null ? item.pickup.name || item.pickup.address : item.pickup) || ''
+        ).trim()
+        const to = String(
+            (typeof item.destination === 'object' && item.destination !== null ? item.destination.name || item.destination.address : '')
+            || (typeof item.drop === 'object' && item.drop !== null ? item.drop.name || item.drop.address : '')
+            || item.destination
+            || item.drop
+            || item.name
+            || ''
+        ).trim()
+
+        if (!from && !to) return
 
         chooseRideSentRef.current = false
         setBookingError('')
+        clearTimeout(searchTimerRef.current)
+        setActiveField(null)
+        setPickupSuggestions([])
+        setDestinationSuggestions([])
+        setSearchStatus('idle')
 
+        // When both pickup and drop exist in the recent search record, restore both together
+        if (from && to) {
+            setPickup(from)
+            setDestination(to)
+
+            let pCoords = item.pickupCoords || (item.pickup?.latitude != null && item.pickup?.longitude != null ? { lat: item.pickup.latitude, lng: item.pickup.longitude } : null)
+            let pSelection = item.pickupSelection || (typeof item.pickup === 'object' && item.pickup !== null ? item.pickup : null)
+
+            let dCoords = item.dropCoords || (item.drop?.latitude != null && item.drop?.longitude != null ? { lat: item.drop.latitude, lng: item.drop.longitude } : null)
+            let dSelection = item.dropSelection || (typeof item.destination === 'object' && item.destination !== null ? item.destination : (typeof item.drop === 'object' && item.drop !== null ? item.drop : null))
+
+            const [ fetchedPick, fetchedDrop ] = await Promise.all([
+                (!pCoords || !pSelection) ? fetchPickupCoords(from) : Promise.resolve(null),
+                (!dCoords || !dSelection) ? fetchDropCoords(to) : Promise.resolve(null),
+            ])
+
+            if (fetchedPick) {
+                pCoords = fetchedPick
+                pSelection = { name: from, latitude: fetchedPick.lat, longitude: fetchedPick.lng }
+            }
+            if (fetchedDrop) {
+                dCoords = fetchedDrop
+                dSelection = { name: to, latitude: fetchedDrop.lat, longitude: fetchedDrop.lng }
+            }
+
+            if (pCoords && pSelection) {
+                setPickupCoords(pCoords)
+                setPickupSelection(pSelection)
+            } else {
+                setPickupCoords(null)
+                setPickupSelection(null)
+                setBookingError(t('could_not_resolve_pickup'))
+            }
+
+            if (dCoords && dSelection) {
+                setDropCoords(dCoords)
+                setDropSelection(dSelection)
+            } else {
+                setDropCoords(null)
+                setDropSelection(null)
+                setBookingError(t('could_not_resolve_drop'))
+            }
+
+            addRecentSearch({
+                pickup: from,
+                destination: to,
+                pickupCoords: pCoords,
+                dropCoords: dCoords,
+                pickupSelection: pSelection,
+                dropSelection: dSelection,
+            })
+            setRecentSearches(getRecentSearches())
+            return
+        }
+
+        // Single location fallback (if a legacy item has only destination or only pickup)
+        const singlePlace = to || from
+        const pickupEmpty = !String(pickup || '').trim()
         if (pickupEmpty) {
-            setPickup(place)
-            const pc = await fetchPickupCoords(place)
-            if (pc) setPickupSelection({ name: place, latitude: pc.lat, longitude: pc.lng })
-            else {
+            setPickup(singlePlace)
+            const pc = await fetchPickupCoords(singlePlace)
+            if (pc) {
+                setPickupCoords(pc)
+                setPickupSelection({ name: singlePlace, latitude: pc.lat, longitude: pc.lng })
+            } else {
                 setPickupCoords(null)
                 setPickupSelection(null)
                 setBookingError(t('could_not_resolve_locations'))
             }
         } else {
-            setDestination(place)
-            const dc = await fetchDropCoords(place)
-            if (dc) setDropSelection({ name: place, latitude: dc.lat, longitude: dc.lng })
-            else {
+            setDestination(singlePlace)
+            const dc = await fetchDropCoords(singlePlace)
+            if (dc) {
+                setDropCoords(dc)
+                setDropSelection({ name: singlePlace, latitude: dc.lat, longitude: dc.lng })
+            } else {
                 setDropCoords(null)
                 setDropSelection(null)
                 setBookingError(t('could_not_resolve_locations'))
             }
         }
-
-        addRecentSearch({ pickup: from, destination: to })
-        setRecentSearches(getRecentSearches())
     }
 
     const handleSelectRecent = (item) => { void applyRecentLocation(item) }
@@ -796,8 +867,19 @@ const Home = () => {
             coords = await fetchDropCoords(name)
         }
         if (coords?.lat != null && coords?.lng != null) {
+            const sel = { name, latitude: coords.lat, longitude: coords.lng }
             setDropCoords(coords)
-            setDropSelection({ name, latitude: coords.lat, longitude: coords.lng })
+            setDropSelection(sel)
+            addRecentSearch({
+                pickup: pickup?.trim() || '',
+                destination: name,
+                detail: typeof suggestion === 'object' && suggestion?.description ? suggestion.description : '',
+                pickupCoords,
+                dropCoords: coords,
+                pickupSelection,
+                dropSelection: sel,
+            })
+            setRecentSearches(getRecentSearches())
         } else {
             setDropCoords(null)
             setDropSelection(null)
@@ -996,7 +1078,14 @@ const Home = () => {
             setPassengerOtp('')
             setDriverCoords(null)
             if (pickup?.trim() || destination?.trim()) {
-                addRecentSearch({ pickup, destination })
+                addRecentSearch({
+                    pickup,
+                    destination,
+                    pickupCoords,
+                    dropCoords,
+                    pickupSelection,
+                    dropSelection,
+                })
                 setRecentSearches(getRecentSearches())
             }
             if (ridePayload?._id) {
@@ -1282,31 +1371,10 @@ const Home = () => {
                 findingTrip={findingTrip}
             />
 
-            {notificationsOpen && (
-                <div className="absolute inset-0 z-[60] flex flex-col justify-end">
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
-                        onClick={() => setNotificationsOpen(false)}
-                        aria-hidden
-                    />
-                    <div className="relative mx-auto max-h-[60dvh] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
-                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
-                        <div className="mb-4 flex items-center justify-between">
-                            <h2 className="text-base font-bold text-theme-primary">{t('notifications')}</h2>
-                            <button
-                                type="button"
-                                onClick={() => setNotificationsOpen(false)}
-                                className="rounded-full border border-theme bg-theme-card px-2.5 py-1 text-xs text-theme-secondary active:scale-95"
-                            >
-                                {t('close')}
-                            </button>
-                        </div>
-                        <div className="rounded-xl border border-theme bg-theme-card p-4 text-center text-sm text-theme-secondary">
-                            {t('no_new_notifications')}
-                        </div>
-                    </div>
-                </div>
-            )}
+            <NotificationSheet
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+            />
         </div>
     )
 }
