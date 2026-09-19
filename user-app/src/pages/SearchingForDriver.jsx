@@ -15,6 +15,7 @@ import carImg from '../assets/Car-img-ride.png'
 import luxuryImg from '../assets/luxury-img-ride.png'
 
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+const LOOKING_TIMEOUT_SECONDS = 120
 
 /** Meters per degree latitude — used to spread nearby-vehicle markers around pickup. */
 const M_PER_DEG_LAT = 111320
@@ -191,6 +192,10 @@ const SearchingForDriver = () => {
   const [advancePayError, setAdvancePayError] = useState('')
   /** Passenger OTP — backend only returns it once status is accepted/arrived. */
   const [passengerOtp, setPassengerOtp] = useState('')
+  /** 2 minute overall driver search timeout */
+  const [searchTimeLeft, setSearchTimeLeft] = useState(LOOKING_TIMEOUT_SECONDS)
+  const [searchAgainModalOpen, setSearchAgainModalOpen] = useState(false)
+  const searchTimeoutHandledRef = useRef(false)
   /** Guard so a single "started" event can't fire duplicate /riding navigations. */
   const startedHandledRef = useRef(null)
   const missingRideHandledRef = useRef(false)
@@ -339,7 +344,7 @@ const SearchingForDriver = () => {
    * server confirms `started`.
    */
   useEffect(() => {
-    if (!rideId) return
+    if (!rideId || searchAgainModalOpen) return
     const st = normalizeStatus(ride?.status)
     if (st === 'completed') return
     if (st === 'cancelled') {
@@ -388,7 +393,7 @@ const SearchingForDriver = () => {
       cancelled = true
       clearInterval(id)
     }
-  }, [rideId, ride?.status])
+  }, [rideId, ride?.status, searchAgainModalOpen])
 
   /** Open the cancellation sheet (never navigates away by itself). */
   const openCancelSheet = useCallback(() => {
@@ -431,6 +436,56 @@ const SearchingForDriver = () => {
   const isSearching = !status || status === 'searching'
   const isAssigned = status === 'accepted'
   const isArrived = status === 'arrived'
+
+  // Sync remaining search seconds if ride has createdAt
+  useEffect(() => {
+    if (ride?.createdAt && isSearching) {
+      const elapsed = Math.floor((Date.now() - new Date(ride.createdAt).getTime()) / 1000)
+      setSearchTimeLeft(Math.max(0, LOOKING_TIMEOUT_SECONDS - Math.max(0, elapsed)))
+    }
+  }, [ride?.createdAt, isSearching])
+
+  // Count down 2 minutes overall search time
+  useEffect(() => {
+    if (!isSearching || !rideId || searchAgainModalOpen) return
+
+    const timer = setInterval(() => {
+      setSearchTimeLeft((prev) => Math.max(0, prev - 1))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isSearching, rideId, searchAgainModalOpen])
+
+  // Close looking for driver page after 2 minutes (120s) and open popup to search ride again
+  useEffect(() => {
+    if (searchTimeLeft === 0 && isSearching && rideId && !searchTimeoutHandledRef.current) {
+      searchTimeoutHandledRef.current = true
+      apiClient.patch(`/rides/${rideId}/cancel`, { reason: 'No driver found within 2 minutes' }, withAuth()).catch(() => {})
+      try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      setCancelSheetOpen(false)
+      setSearchAgainModalOpen(true)
+    }
+  }, [searchTimeLeft, isSearching, rideId])
+
+  const handleSearchAgain = useCallback(() => {
+    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    navigate('/choose-ride', {
+      replace: true,
+      state: {
+        pickup,
+        destination,
+        pickupCoords,
+        dropCoords,
+        vehicleType,
+        tierId: rideTierId,
+      },
+    })
+  }, [navigate, pickup, destination, pickupCoords, dropCoords, vehicleType, rideTierId])
+
+  const handleCloseSearchAgainModal = useCallback(() => {
+    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    navigate('/home', { replace: true })
+  }, [navigate])
 
   const price = fare ?? tierFare(vehicleType)
   const confirmation = rideConfirmation
@@ -655,8 +710,11 @@ const SearchingForDriver = () => {
 
             {/* Subtle progress indicator */}
             {isSearching && (
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-theme-card-muted">
-                <div className="h-full w-1/2 animate-pulse rounded-full bg-brand-yellow" />
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-theme-card-muted">
+                <div
+                  className="h-full rounded-full bg-brand-yellow transition-all duration-1000 ease-linear"
+                  style={{ width: `${Math.max(0, Math.min(100, (searchTimeLeft / LOOKING_TIMEOUT_SECONDS) * 100))}%` }}
+                />
               </div>
             )}
 
@@ -1006,6 +1064,47 @@ const SearchingForDriver = () => {
               >
                 {t('keep_my_trip')}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-Minute Timeout Popup Modal: Search ride again */}
+      {searchAgainModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={handleCloseSearchAgainModal}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-theme bg-theme-card p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                <i className="ri-car-line text-3xl" aria-hidden />
+              </div>
+              <h3 className="mt-4 text-lg font-bold text-theme-primary">
+                No Driver Found
+              </h3>
+              <p className="mt-2 text-sm text-theme-secondary">
+                All drivers nearby are currently busy. Would you like to search for a ride again?
+              </p>
+              <div className="mt-6 flex w-full flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleSearchAgain}
+                  className="w-full rounded-2xl bg-brand-yellow py-3.5 text-sm font-bold text-black shadow transition active:scale-[0.98]"
+                >
+                  <i className="ri-refresh-line mr-1.5 align-[-1px]" aria-hidden />
+                  Search ride again
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseSearchAgainModal}
+                  className="w-full rounded-2xl border border-theme bg-theme-bg py-3 text-sm font-semibold text-theme-primary transition active:scale-[0.98]"
+                >
+                  Back to Home
+                </button>
+              </div>
             </div>
           </div>
         </div>
