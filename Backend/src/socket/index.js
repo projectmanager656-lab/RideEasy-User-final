@@ -77,6 +77,26 @@ function cityRoomFromKey(city) {
 }
 
 /**
+ * Every connected captain socket joins this room, so a ride that matched nobody
+ * can still be offered to whoever is actually connected (local/dev setups where
+ * the eligibility filters — city, wallet, subscription, vehicle — exclude everyone).
+ */
+const ONLINE_DRIVERS_ROOM = "online-drivers";
+
+/** Broadcast to every connected driver socket. Returns how many sockets received it. */
+function emitToOnlineDrivers(event, data) {
+  if (!io) return 0;
+  const room = io.sockets.adapter.rooms.get(ONLINE_DRIVERS_ROOM);
+  const socketCount = room ? room.size : 0;
+  if (socketCount === 0) {
+    console.warn("[socket] %s — no connected driver sockets to notify", event);
+    return 0;
+  }
+  io.to(ONLINE_DRIVERS_ROOM).emit(event, data);
+  return socketCount;
+}
+
+/**
  * Join Socket.IO rooms so ride broadcasts reach this connection.
  * Leaves previous city room when the driver switches city.
  */
@@ -90,13 +110,14 @@ function joinDriverSocketRooms(socket, driverMongoId, cityKey) {
     slog("city room leave", prevCity);
   }
   socket.join(driverRoomHyphen(did));
+  socket.join(ONLINE_DRIVERS_ROOM);
   if (cityRoom) {
     socket.join(cityRoom);
     socket.data.rideeasyCityRoom = cityRoom;
   }
   slog("driver rooms joined", {
     driverId: did,
-    rooms: [driverRoomHyphen(did), cityRoom].filter(Boolean),
+    rooms: [driverRoomHyphen(did), ONLINE_DRIVERS_ROOM, cityRoom].filter(Boolean),
   });
 }
 
@@ -406,10 +427,12 @@ module.exports = {
   sendMessageToSocketId,
   emitToUser,
   emitToCaptain,
+  emitToOnlineDrivers,
   emitToAdmin,
   emitStandardRidePhase,
   STANDARD_PHASE_EVENTS,
   getIo,
   driverRoomHyphen,
   cityRoomFromKey,
+  ONLINE_DRIVERS_ROOM,
 };

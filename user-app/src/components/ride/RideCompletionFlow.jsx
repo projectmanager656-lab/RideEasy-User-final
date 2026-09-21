@@ -50,6 +50,32 @@ function paymentMethodLabel (m) {
 }
 
 /**
+ * Native UPI deep link — `upi://pay?…` for any UPI app, or an app-specific scheme.
+ * Builds the `pa`/`pn`/`am`/`cu`/`tn` query the UPI apps expect.
+ */
+function upiDeepLink (scheme, { pa, pn, am, tn }) {
+    const params = new URLSearchParams()
+    params.set('pa', pa)
+    if (pn) params.set('pn', pn)
+    if (am) params.set('am', am)
+    params.set('cu', 'INR')
+    if (tn) params.set('tn', tn)
+    return `${scheme}?${params.toString()}`
+}
+
+/** Loose VPA shape check — `name@bank`. */
+function isValidVpa (value) {
+    return /^[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}$/.test(String(value || '').trim())
+}
+
+/**
+ * One shared style for every button in the "Pay by any UPI App" grid, so PhonePe,
+ * Google Pay, View All and Enter UPI ID stay pixel-identical (`disabled:` only ever
+ * applies to the two app buttons, which need a live payee).
+ */
+const UPI_APP_BUTTON_CLASS = 'rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-primary transition hover:bg-theme-card active:scale-[0.98] disabled:opacity-50'
+
+/**
  * Passenger trip-complete UX: summary, pay (if needed), rating, receipt, book again + auto home.
  */
 export default function RideCompletionFlow ({
@@ -70,6 +96,11 @@ export default function RideCompletionFlow ({
     const [ feedback, setFeedback ] = useState('')
     const [ skippedRating, setSkippedRating ] = useState(false)
     const [ secLeft, setSecLeft ] = useState(autoRedirectSec)
+    /** UPI sub-flow: the app grid, the "View all" drawer, and the typed-VPA form. */
+    const [ showAllUpiApps, setShowAllUpiApps ] = useState(false)
+    const [ upiIdOpen, setUpiIdOpen ] = useState(false)
+    const [ upiIdDraft, setUpiIdDraft ] = useState('')
+    const [ upiIdError, setUpiIdError ] = useState('')
     const navigate = useNavigate()
 
     const paid = ride?.paymentStatus === 'success'
@@ -117,6 +148,33 @@ export default function RideCompletionFlow ({
 
     const captain = ride?.captain
     const initial = (captain?.name || 'D').toString().charAt(0).toUpperCase()
+
+    /** Payee VPA — the driver's own UPI ID wins; the configured payee counts only when it is a VPA. */
+    const payeeVpa = (captain?.upiId && String(captain.upiId).trim())
+        || (String(UPI_PAYEE || '').includes('@') ? String(UPI_PAYEE).trim() : '')
+
+    /** Launch an installed UPI app with this payment prefilled. */
+    const openUpiApp = (scheme, vpa = payeeVpa) => {
+        if (!vpa) return
+        window.location.href = upiDeepLink(scheme, {
+            pa: vpa,
+            pn: captain?.name || 'RideEasy',
+            am: remainingDue > 0 ? Number(remainingDue).toFixed(2) : undefined,
+            tn: `RideEasy ride ${ride?._id || ''}`.trim(),
+        })
+    }
+
+    /** Pay a VPA the rider typed in (e.g. the driver reads theirs out). */
+    const payWithEnteredUpiId = (event) => {
+        event.preventDefault()
+        const vpa = upiIdDraft.trim()
+        if (!isValidVpa(vpa)) {
+            setUpiIdError('Enter a UPI ID like name@bank')
+            return
+        }
+        setUpiIdError('')
+        openUpiApp('upi://pay', vpa)
+    }
 
     const handleRateSubmit = async (e) => {
         e.preventDefault()
@@ -213,8 +271,8 @@ export default function RideCompletionFlow ({
                         {payError ? (
                             <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{payError}</p>
                         ) : null}
-                        <div className="grid grid-cols-3 gap-2">
-                            {['Cash', 'UPI', 'Online'].map((m) => (
+                        <div className="grid grid-cols-2 gap-2">
+                            {['Cash', 'UPI'].map((m) => (
                                 <button
                                     key={m}
                                     type="button"
@@ -226,26 +284,122 @@ export default function RideCompletionFlow ({
                                             : 'bg-theme-card-muted text-theme-secondary ring-1 ring-theme hover:bg-theme-card'
                                     }`}
                                 >
-                                    {m === 'Online' ? 'Online' : m}
+                                    {m}
                                 </button>
                             ))}
                         </div>
-                        {(selectedPaymentMethod === 'UPI' || selectedPaymentMethod === 'Online') && (
-                            <div className="mt-3 space-y-1 text-xs text-theme-secondary">
-                                <p>
-                                    Pay driver directly — UPI:{' '}
-                                    <span className="font-semibold text-theme-primary">
-                                        {(captain?.upiId && String(captain.upiId).trim()) || UPI_PAYEE || 'Ask your driver'}
-                                    </span>
-                                </p>
-                                {captain?.paymentQrUrl ? (
-                                        <p className="text-[11px] break-all text-theme-muted">
-                                        Driver QR:{' '}
-                                            <a href={captain.paymentQrUrl} className="text-brand-yellow underline" target="_blank" rel="noreferrer">
-                                            Open payment QR
-                                        </a>
+                        {selectedPaymentMethod === 'UPI' && (
+                            <div className="mt-3 space-y-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-theme-secondary">Pay by any UPI App</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={paying || !payeeVpa}
+                                        onClick={() => openUpiApp('phonepe://pay')}
+                                        className={UPI_APP_BUTTON_CLASS}
+                                    >
+                                        PhonePe
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={paying || !payeeVpa}
+                                        onClick={() => openUpiApp('upi://pay')}
+                                        className={UPI_APP_BUTTON_CLASS}
+                                    >
+                                        Google Pay
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAllUpiApps((open) => !open)}
+                                        className={UPI_APP_BUTTON_CLASS}
+                                    >
+                                        {showAllUpiApps ? 'Hide other apps' : 'View All'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setUpiIdOpen((open) => !open)
+                                            setUpiIdError('')
+                                        }}
+                                        className={UPI_APP_BUTTON_CLASS}
+                                    >
+                                        {upiIdOpen ? 'Hide UPI ID' : 'Enter UPI ID'}
+                                    </button>
+                                </div>
+
+                                {showAllUpiApps && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={paying || !payeeVpa}
+                                            onClick={() => openUpiApp('paytmmp://pay')}
+                                            className="rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            Paytm
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={paying || !payeeVpa}
+                                            onClick={() => openUpiApp('bhim://pay')}
+                                            className="rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            BHIM
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={paying || !payeeVpa}
+                                            onClick={() => openUpiApp('upi://pay')}
+                                            className="col-span-2 rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            Other UPI app
+                                        </button>
+                                    </div>
+                                )}
+
+                                {upiIdOpen && (
+                                    <form onSubmit={payWithEnteredUpiId} className="space-y-2 rounded-xl border border-theme bg-theme-card p-3">
+                                        <label htmlFor="upi-id-input" className="text-xs font-semibold text-theme-primary">UPI ID</label>
+                                        <input
+                                            id="upi-id-input"
+                                            type="text"
+                                            inputMode="email"
+                                            autoComplete="off"
+                                            spellCheck={false}
+                                            value={upiIdDraft}
+                                            onChange={(e) => { setUpiIdDraft(e.target.value); setUpiIdError('') }}
+                                            placeholder="username@upi"
+                                            className="w-full rounded-xl border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted focus:border-brand-yellow/50 focus:outline-none focus:ring-1 focus:ring-brand-yellow/40"
+                                        />
+                                        {upiIdError ? <p className="text-xs text-red-400">{upiIdError}</p> : null}
+                                        <button
+                                            type="submit"
+                                            disabled={paying || !upiIdDraft.trim()}
+                                            className="w-full rounded-xl bg-brand-yellow py-2.5 text-sm font-semibold text-brand-dark transition active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            Verify &amp; pay {formatINR(remainingDue)}
+                                        </button>
+                                    </form>
+                                )}
+
+                                <div className="space-y-1 text-xs text-theme-secondary">
+                                    <p>
+                                        Pay driver directly — UPI:{' '}
+                                        <span className="font-semibold text-theme-primary">{payeeVpa || 'Ask your driver'}</span>
                                     </p>
-                                ) : null}
+                                    {!payeeVpa ? (
+                                        <p className="text-[11px] text-theme-muted">
+                                            Your driver has not shared a UPI ID — enter one above, or pay from their QR.
+                                        </p>
+                                    ) : null}
+                                    {captain?.paymentQrUrl ? (
+                                            <p className="text-[11px] break-all text-theme-muted">
+                                            Driver QR:{' '}
+                                                <a href={captain.paymentQrUrl} className="text-brand-yellow underline" target="_blank" rel="noreferrer">
+                                                Open payment QR
+                                            </a>
+                                        </p>
+                                    ) : null}
+                                </div>
                             </div>
                         )}
                         {advancePaid > 0 && (
