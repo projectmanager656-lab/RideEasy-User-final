@@ -346,6 +346,68 @@ function publicEmergencyContact (doc) {
     return { name: doc.name, phone: doc.phone || '', relationship: doc.relationship || '' };
 }
 
+const SAFETY_PREF_KEYS = ['shareTripAutomatically', 'shareLiveLocation', 'safetyNotifications'];
+const DEFAULT_SAFETY_PREFS = {
+    shareTripAutomatically: false,
+    shareLiveLocation: true,
+    safetyNotifications: true,
+};
+
+/** Always returns all three toggles, falling back to the defaults for unset values. */
+function publicSafetyPrefs (user) {
+    const stored = user?.safetyPrefs || {};
+    const out = {};
+    for (const key of SAFETY_PREF_KEYS) {
+        out[key] = stored[key] == null ? DEFAULT_SAFETY_PREFS[key] : Boolean(stored[key]);
+    }
+    return out;
+}
+
+module.exports.getSafetyPrefs = async (req, res) => {
+    const user = await userModel.findById(req.user?._id).select('safetyPrefs').lean();
+    if (!user) return fail(res, req, 404, 'User not found');
+    return ok(res, req, 200, 'Safety preferences fetched', { safetyPrefs: publicSafetyPrefs(user) });
+};
+
+module.exports.updateSafetyPrefs = async (req, res) => {
+    const body = req.body || {};
+    const patch = {};
+    for (const key of SAFETY_PREF_KEYS) {
+        if (body[key] === undefined) continue;
+        if (typeof body[key] !== 'boolean') {
+            return fail(res, req, 400, `${key} must be a boolean`);
+        }
+        patch[`safetyPrefs.${key}`] = body[key];
+    }
+    if (Object.keys(patch).length === 0) {
+        return fail(res, req, 400, 'No safety preference provided');
+    }
+    const user = await userModel
+        .findByIdAndUpdate(req.user?._id, { $set: patch }, { new: true })
+        .select('safetyPrefs')
+        .lean();
+    if (!user) return fail(res, req, 404, 'User not found');
+    return ok(res, req, 200, 'Safety preferences updated', { safetyPrefs: publicSafetyPrefs(user) });
+};
+
+/** Change the signed-in passenger's password. Requires the current password. */
+module.exports.changePassword = async (req, res) => {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    if (!currentPassword) return fail(res, req, 400, 'Current password is required');
+    if (newPassword.length < 6) return fail(res, req, 400, 'New password must be at least 6 characters');
+
+    const user = await userModel.findById(req.user?._id).select('+password');
+    if (!user) return fail(res, req, 404, 'User not found');
+
+    const valid = await user.comparePassword(currentPassword);
+    if (!valid) return fail(res, req, 401, 'Current password is incorrect');
+
+    user.password = await userModel.hashPassword(newPassword);
+    await user.save();
+    return ok(res, req, 200, 'Password changed successfully');
+};
+
 module.exports.getEmergencyContact = async (req, res) => {
     const userId = req.user?._id;
     let contact = await EmergencyContact.findOne({ userId, isActive: true }).sort({ updatedAt: -1 }).lean();

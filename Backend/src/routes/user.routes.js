@@ -66,6 +66,16 @@ router.patch('/profile',
     body('savedAddresses').optional(),
     userController.updateProfile
 );
+router.post('/change-password',
+    auth.authUser,
+    body('currentPassword').isString().isLength({ min: 1, max: 128 }),
+    body('newPassword').isString().isLength({ min: 6, max: 128 }),
+    userController.changePassword
+);
+
+// Safety screen toggles
+router.get('/safety-prefs', auth.authUser, userController.getSafetyPrefs);
+router.patch('/safety-prefs', auth.authUser, userController.updateSafetyPrefs);
 router.get('/logout', auth.attachBearerToken, userController.logoutUser);
 
 module.exports = router;

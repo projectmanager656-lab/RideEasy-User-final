@@ -431,6 +431,7 @@ const AdminDashboard = () => {
   const logout = () => {
     dataLoadedRef.current.clear()
     localStorage.removeItem('adminToken')
+    window.dispatchEvent(new Event('rideeasy:session-changed'))
     navigate('/admin')
   }
 

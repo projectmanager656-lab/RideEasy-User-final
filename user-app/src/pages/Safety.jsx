@@ -7,7 +7,8 @@ import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import {
   getSafetyPrefs,
-  setSafetyPref,
+  fetchSafetyPrefs,
+  updateSafetyPref,
 } from '../utils/safetyData'
 
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
@@ -96,8 +97,8 @@ const RideSafetyGuidelines = () => {
   )
 }
 
-const ToggleRow = ({ label, detail, checked, onToggle }) => (
-  <label className="flex cursor-pointer items-center justify-between gap-3 py-2.5">
+const ToggleRow = ({ label, detail, checked, onToggle, disabled = false }) => (
+  <label className={`flex items-center justify-between gap-3 py-2.5 ${disabled ? 'opacity-60' : 'cursor-pointer'}`}>
     <span className="min-w-0">
       <span className="block text-sm font-medium text-theme-primary">{label}</span>
       <span className="block text-xs text-theme-secondary">{detail}</span>
@@ -106,6 +107,7 @@ const ToggleRow = ({ label, detail, checked, onToggle }) => (
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={onToggle}
       className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? 'bg-brand-yellow' : 'bg-theme-muted'}`}
     >
@@ -413,18 +415,43 @@ const DriverVerificationSection = ({ ride, loading, error }) => {
 
 const SafetyPreferencesSection = () => {
   const { t } = useLanguage()
+  // localStorage is only the instant cache; the backend is the source of truth.
   const [prefs, setPrefs] = useState(getSafetyPrefs)
-  const update = (key) => {
-    const next = setSafetyPref(key, !prefs[key])
+  const [savingKey, setSavingKey] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    fetchSafetyPrefs()
+      .then((saved) => { if (!cancelled) setPrefs(saved) })
+      .catch(() => { /* keep the cached values when offline */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const update = async (key) => {
+    const previous = prefs
+    const next = { ...prefs, [key]: !prefs[key] }
     setPrefs(next)
+    setSavingKey(key)
+    setError('')
+    try {
+      setPrefs(await updateSafetyPref(key, next[key]))
+    } catch (err) {
+      setPrefs(previous)
+      setError(formatApiError(err))
+    } finally {
+      setSavingKey('')
+    }
   }
+
   return (
     <Section title={t('safety_preferences')} icon="ri-lock-2-line">
       <div className="divide-y divide-theme">
-        <ToggleRow label={t('pref_share_trip_auto')} detail={t('pref_share_trip_auto_detail')} checked={prefs.shareTripAutomatically} onToggle={() => update('shareTripAutomatically')} />
-        <ToggleRow label={t('pref_share_location')} detail={t('pref_share_location_detail')} checked={prefs.shareLiveLocation} onToggle={() => update('shareLiveLocation')} />
-        <ToggleRow label={t('pref_safety_notifications')} detail={t('pref_safety_notifications_detail')} checked={prefs.safetyNotifications} onToggle={() => update('safetyNotifications')} />
+        <ToggleRow label={t('pref_share_trip_auto')} detail={t('pref_share_trip_auto_detail')} checked={prefs.shareTripAutomatically} disabled={savingKey === 'shareTripAutomatically'} onToggle={() => update('shareTripAutomatically')} />
+        <ToggleRow label={t('pref_share_location')} detail={t('pref_share_location_detail')} checked={prefs.shareLiveLocation} disabled={savingKey === 'shareLiveLocation'} onToggle={() => update('shareLiveLocation')} />
+        <ToggleRow label={t('pref_safety_notifications')} detail={t('pref_safety_notifications_detail')} checked={prefs.safetyNotifications} disabled={savingKey === 'safetyNotifications'} onToggle={() => update('safetyNotifications')} />
       </div>
+      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
     </Section>
   )
 }

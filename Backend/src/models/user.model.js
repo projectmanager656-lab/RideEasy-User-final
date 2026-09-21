@@ -16,6 +16,12 @@ const userSchema = new mongoose.Schema({
         phone: { type: String, default: '' },
         relationship: { type: String, default: '' },
     },
+    /** Safety screen toggles — same defaults as user-app `utils/safetyData.js`. */
+    safetyPrefs: {
+        shareTripAutomatically: { type: Boolean, default: false },
+        shareLiveLocation: { type: Boolean, default: true },
+        safetyNotifications: { type: Boolean, default: true },
+    },
     password: { type: String, required: true, select: false },
     socketId: { type: String },
     walletBalance: { type: Number, default: 0 },
