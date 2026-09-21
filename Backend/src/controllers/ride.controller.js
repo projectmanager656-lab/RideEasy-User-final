@@ -1490,6 +1490,14 @@ module.exports.endRide = async (req, res) => {
       captainId: cid,
       payload: completedPayload,
     });
+    // Persist the invoice snapshot as part of the ride lifecycle, so a completed ride
+    // always has a record in `invoices` even if nobody opens the invoice screen.
+    // Idempotent (returns the existing row) and never blocks ride completion.
+    try {
+      await invoiceService.getOrCreateInvoice(updated);
+    } catch (err) {
+      console.error("[endRide] invoice snapshot failed:", err?.message || err);
+    }
     return res.status(200).json({
       ...pr,
       confirmation,
