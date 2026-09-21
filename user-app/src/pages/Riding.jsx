@@ -32,6 +32,11 @@ function clearSessionRide () {
     } catch { /* ignore */ }
 }
 
+/** Digits (plus a leading +) a phone dialer understands; '' when there is nothing to dial. */
+function dialablePhone (phone) {
+    return String(phone || '').replace(/[^+\d]/g, '')
+}
+
 const Riding = () => {
     const { t } = useLanguage()
     const location = useLocation()
@@ -511,11 +516,15 @@ const Riding = () => {
                                 ) : ecError ? (
                                     <p className='text-sm text-red-500'>{ecError}</p>
                                 ) : emergencyContact ? (
-                                    <>
+                                    /* Tapping the saved contact opens the native dialer with their number. */
+                                    <a
+                                        href={dialablePhone(emergencyContact.phone) ? `tel:${dialablePhone(emergencyContact.phone)}` : undefined}
+                                        className='-m-1 block rounded-lg p-1 transition hover:bg-theme-card-muted active:scale-[0.99]'
+                                    >
                                         <p className='text-sm font-semibold text-theme-primary mb-1'>{emergencyContact.name}</p>
-                                        <p className='text-sm text-theme-primary'>{emergencyContact.phone}</p>
+                                        <p className='text-sm font-medium text-brand-yellow'>{emergencyContact.phone}</p>
                                         <p className='text-xs text-theme-secondary'>{emergencyContact.relationship}</p>
-                                    </>
+                                    </a>
                                 ) : (
                                     <p className='text-sm text-theme-secondary'>{t('emergency_contact_sub')}</p>
                                 )}

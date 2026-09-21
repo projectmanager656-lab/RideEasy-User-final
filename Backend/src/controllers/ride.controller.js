@@ -29,6 +29,7 @@ const {
 const {
   emitToUser,
   emitToCaptain,
+  emitToOnlineDrivers,
   emitStandardRidePhase,
 } = require("../socket");
 const {
@@ -38,7 +39,8 @@ const {
   RIDE_COMPLETED,
 } = require("../socket/rideSocket.events");
 
-const RIDE_SEARCH_RADIUS_M = 5000;
+/** Driver search radius in metres. Override with RIDE_SEARCH_RADIUS_M when testing locally. */
+const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
 
 /** Mongo match: subscription active and not past expiry (or no expiry set). */
 function subscriptionNotExpiredMatch() {
@@ -330,27 +332,37 @@ async function findNearbyDriverIds({
   pickupLat,
 }) {
   if (pickupLng == null || pickupLat == null) return [];
-  const drivers = await captainModel
-    .find({
-      /** `$and` keeps the subscription `$or` and the presence `$or` from clobbering each other. */
-      $and: [
-        { approved: true, blocked: { $ne: true } },
-        subscriptionNotExpiredMatch(),
-        driverPresenceMatch(),
-        await captainWalletMatch(),
-        { servingCity: rideCity },
-        { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
-      ],
-      location: {
-        $near: {
-          $geometry: { type: "Point", coordinates: [pickupLng, pickupLat] },
-          $maxDistance: RIDE_SEARCH_RADIUS_M,
+  try {
+    const drivers = await captainModel
+      .find({
+        /** `$and` keeps the subscription `$or` and the presence `$or` from clobbering each other. */
+        $and: [
+          { approved: true, blocked: { $ne: true } },
+          subscriptionNotExpiredMatch(),
+          driverPresenceMatch(),
+          await captainWalletMatch(),
+          { servingCity: rideCity },
+          { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
+        ],
+        location: {
+          $near: {
+            $geometry: { type: "Point", coordinates: [pickupLng, pickupLat] },
+            $maxDistance: RIDE_SEARCH_RADIUS_M,
+          },
         },
-      },
-    })
-    .limit(40)
-    .select("_id");
-  return drivers.map((d) => d._id.toString());
+      })
+      .limit(40)
+      .select("_id");
+    return drivers.map((d) => d._id.toString());
+  } catch (e) {
+    /* A missing 2dsphere index (fresh DB) must not fail ride creation — the city
+       fallbacks and the connected-driver broadcast still run after this. */
+    console.warn(
+      "[ride dispatch] $near driver query failed (%s) — falling back to city matching",
+      e?.message || e,
+    );
+    return [];
+  }
 }
 
 /** When no one is within 5km (GPS mismatch / dev), still notify online drivers in same city + vehicle type. */
@@ -671,7 +683,22 @@ module.exports.createRide = async (req, res) => {
         pickupLat: pickupCoordinates.lat,
       });
     }
-    const dispatch = broadcastRideNew(populated, driverIds);
+    let dispatch = broadcastRideNew(populated, driverIds);
+    if (driverIds.length === 0) {
+      /* Nobody survived the eligibility query (city, online, wallet, subscription,
+         vehicle). Rather than leave the rider on a silent "searching" screen, offer
+         the ride to every connected driver socket — the driver app still ignores it
+         when that driver is offline. */
+      const fallbackPayload = { ride: publicRide(populated), offeredAt: Date.now() };
+      const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
+      emitToOnlineDrivers("new-ride", fallbackPayload);
+      console.warn(
+        "[ride dispatch] ride %s matched 0 drivers — broadcast fallback reached %d connected driver socket(s)",
+        String(ride._id),
+        fallbackSockets,
+      );
+      dispatch = { ...dispatch, fallbackBroadcast: fallbackSockets };
+    }
     return ok(
       res,
       req,
