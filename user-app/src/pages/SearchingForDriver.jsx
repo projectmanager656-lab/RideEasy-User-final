@@ -735,9 +735,23 @@ const SearchingForDriver = () => {
               </div>
             )}
 
+            {/* Share PIN / OTP — shown once a driver accepts (ready to share with the driver); matched to the accepted-state sync and the LookingForDriver sheet */}
+            {!isSearching && passengerOtp && (
+              <div className="mt-4 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
+                  <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
+                  {t('share_pin')}
+                </p>
+                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title={t('otp_share_instruction')}>
+                  {passengerOtp}
+                </p>
+                <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
+              </div>
+            )}
+
             {/* Card 1 — Assigned / arrived: driver + vehicle details */}
             {!isSearching && (
-              <div className="mt-4 rounded-xl border border-theme bg-theme-card p-3">
+              <div className="mt-3 rounded-xl border border-theme bg-theme-card p-3">
                 {/* Top row — driver info on the left, vehicle image + plate on the right */}
                 <div className="flex items-center gap-3">
                   {driverPhoto ? (
@@ -814,68 +828,6 @@ const SearchingForDriver = () => {
                     </button>
                   </div>
                 )}
-
-                {/* Open separate Driver Details page */}
-                <button
-                  type="button"
-                  onClick={() => navigate('/driver-details', {
-                    state: {
-                      ride,
-                      pickupCoords,
-                      dropCoords,
-                      pickup,
-                      destination,
-                      passengerOtp,
-                      confirmation: rideConfirmation,
-                      vehicleType,
-                      tierId: rideTierId,
-                      price,
-                    },
-                  })}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card-muted py-2 text-xs font-bold text-theme-primary transition hover:bg-theme-card active:scale-[0.98]"
-                >
-                  <i className="ri-user-star-line text-sm text-brand-yellow" aria-hidden />
-                  <span>{t('view_driver_details') || 'View Full Driver Details'}</span>
-                  <i className="ri-arrow-right-s-line text-sm text-theme-muted" aria-hidden />
-                </button>
-              </div>
-            )}
-
-            {/* Share PIN / OTP — shown once a driver accepts (ready to share with the driver); matched to the accepted-state sync and the LookingForDriver sheet */}
-            {!isSearching && passengerOtp && (
-              <div className="mt-3 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
-                  <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
-                  {t('share_pin')}
-                </p>
-                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title={t('otp_share_instruction')}>
-                  {passengerOtp}
-                </p>
-                <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
-
-                {/* Open separate User OTP page */}
-                <button
-                  type="button"
-                  onClick={() => navigate('/user-otp', {
-                    state: {
-                      ride,
-                      pickupCoords,
-                      dropCoords,
-                      pickup,
-                      destination,
-                      passengerOtp,
-                      confirmation: rideConfirmation,
-                      vehicleType,
-                      tierId: rideTierId,
-                      price,
-                    },
-                  })}
-                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-brand-yellow/50 bg-brand-yellow/20 px-3.5 py-1 text-xs font-bold text-theme-primary transition active:scale-95"
-                >
-                  <i className="ri-shield-keyhole-fill text-brand-yellow" aria-hidden />
-                  <span>{t('open_otp_page') || 'Open Separate OTP Screen'}</span>
-                  <i className="ri-arrow-right-line text-xs" aria-hidden />
-                </button>
               </div>
             )}
 
@@ -988,14 +940,9 @@ const SearchingForDriver = () => {
                 <i className="ri-arrow-left-line text-lg" aria-hidden />
               </button>
               <h2 className="text-base font-bold text-theme-primary">{t('cancel_trip')}</h2>
-              <button
-                type="button"
-                onClick={() => performCancel()}
-                disabled={cancelling}
-                className="text-sm font-semibold text-brand-yellow active:scale-95 disabled:opacity-50"
-              >
-                {cancelling ? t('cancelling') : t('skip')}
-              </button>
+              {/* Spacer keeps "Cancel trip?" centred opposite the back button — the old
+                  "Skip" shortcut cancelled the ride with no reason and is gone. */}
+              <span className="w-10" aria-hidden />
             </div>
 
             {/* Scrollable content */}

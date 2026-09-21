@@ -16,33 +16,47 @@ function labelFor(status, t) {
     return key ? t(key) : status || '—'
 }
 
-const RideStatusStepper = ({ status }) => {
+/**
+ * @param status   Current ride status (searching | accepted | arrived | started | completed).
+ * @param progress Optional 0..1 trip progress. Only used while the ride is `started`:
+ *                 it drives the Live ride → Done connector and the percentage label.
+ */
+const RideStatusStepper = ({ status, progress = null }) => {
     const { t } = useLanguage()
     const currentIdx = Math.max(0, STATUSES.indexOf(status || 'searching'))
+    const pct = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress * 100)) : null
     return (
         <div className="w-full">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex items-start justify-between">
                 {STATUSES.map((s, idx) => {
                     const done = idx < currentIdx
                     const active = idx === currentIdx
+                    /** The live leg — its connector fills as the driver approaches the drop. */
+                    const liveFill = active && s === 'started' && pct != null
                     return (
-                        <div key={s} className="flex-1">
-                            <div className="flex items-center gap-2">
+                        <div key={s} className="relative min-w-0 flex-1">
+                            <div className="relative z-10 flex flex-col items-center gap-1 text-center">
                                 <div
                                     className={[
                                         'h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold',
-                                        done ? 'bg-emerald-600 text-white' : '',
-                                        active ? 'bg-sky-600 text-white' : '',
+                                        done ? 'bg-brand-yellow text-brand-dark' : '',
+                                        active ? 'bg-brand-yellow text-brand-dark ring-2 ring-brand-yellow/30' : '',
                                         !done && !active ? 'bg-theme-card-muted text-theme-muted' : '',
                                     ].join(' ')}
                                 >
                                     {idx + 1}
                                 </div>
-                                <div className="text-xs font-medium text-theme-primary truncate">{labelFor(s, t)}</div>
+                                <div className="max-w-full px-0.5 text-[10px] font-medium leading-tight text-theme-primary sm:text-xs">
+                                    {labelFor(s, t)}
+                                    {liveFill ? ` · ${Math.round(pct)}%` : ''}
+                                </div>
                             </div>
                             {idx < STATUSES.length - 1 && (
-                                <div className="mt-2 h-1 rounded-full bg-theme-card-muted overflow-hidden">
-                                    <div className={`h-full ${done ? 'bg-emerald-600 w-full' : active ? 'bg-sky-600 w-1/2' : 'bg-theme-card-muted w-0'}`} />
+                                <div className="absolute left-1/2 right-0 top-3.5 h-1 rounded-full bg-theme-card-muted">
+                                    <div
+                                        className="h-full rounded-full bg-brand-yellow transition-[width] duration-700 ease-linear"
+                                        style={{ width: done ? '100%' : liveFill ? `${pct}%` : active ? '50%' : '0%' }}
+                                    />
                                 </div>
                             )}
                         </div>

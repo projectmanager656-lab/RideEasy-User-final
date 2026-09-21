@@ -1,6 +1,21 @@
 const axios = require('axios');
-const { isWithinServiceArea } = require('../utils/serviceArea');
+const { isWithinServiceArea, haversineKm } = require('../utils/serviceArea');
 const { SERVICE_AREAS } = require('../config/serviceAreas');
+
+/** City-driving average used by the straight-line fallback when the router is unavailable (km/h). */
+const FALLBACK_AVG_SPEED_KMH = 24;
+/** Real roads run longer than the straight line between two points. */
+const FALLBACK_ROAD_FACTOR = 1.3;
+
+/**
+ * Error carrying an HTTP status, so controllers can answer 400 (bad input) vs
+ * 502 (upstream maps service down) instead of reporting every failure as a 500.
+ */
+function mapServiceError(message, statusCode = 500) {
+    const err = new Error(message);
+    err.statusCode = statusCode;
+    return err;
+}
 
 const OSRM_BASE_URL = (process.env.OSRM_URL || 'https://router.project-osrm.org').replace(/\/$/, '');
 const PHOTON_API_URL = (process.env.PHOTON_API_URL || 'https://photon.komoot.io/api').replace(/\/$/, '');
@@ -91,28 +106,40 @@ module.exports.getAutoCompleteSuggestions = async (input, options = {}) => {
         .filter((s) => s.name);
 };
 
+/** Photon lookup whose upstream failures surface as a 502, never a raw axios error. */
+async function photonLookup(q, limit, biasLatLon = null) {
+    try {
+        return await photonSearch(q, limit, biasLatLon);
+    } catch (e) {
+        console.warn('[maps] Photon lookup failed for "%s":', q, e?.message || e);
+        throw mapServiceError('Address lookup is temporarily unavailable. Please try again.', 502);
+    }
+}
+
 /**
  * Resolve free-text to coordinates. Prefer a Photon hit that lies inside a service circle
  * (same validation as rides) so "Rankala Lake" / "Bus Stop" map to local results, not the first global hit.
  */
 module.exports.getAddressCoordinate = async (address) => {
     const base = normalizeText(address);
-    if (!base) throw new Error('Input required');
+    if (!base) throw mapServiceError('Pickup and destination are required', 400);
 
-    let features = await photonSearch(base, 15);
+    let features = await photonLookup(base, 15);
     let pt = firstInServiceArea(features);
     if (pt) return pt;
 
     const enriched = enrichRegionalQuery(base);
     if (enriched !== base) {
-        features = await photonSearch(enriched, 15);
+        features = await photonLookup(enriched, 15);
         pt = firstInServiceArea(features);
         if (pt) return pt;
     }
 
-    const f = features[0] || (await photonSearch(base, 5))[0];
+    const f = features[0] || (await photonLookup(base, 5))[0];
     const fallback = coordsFromFeature(f);
-    if (!fallback) throw new Error('Unable to fetch coordinates');
+    if (!fallback) {
+        throw mapServiceError(`Could not locate "${base}" — try a more specific address`, 400);
+    }
     return fallback;
 };
 
@@ -147,6 +174,19 @@ module.exports.getDistanceTime = async (origin, destination) => {
     return module.exports.getDistanceTimeCoords(o, d);
 };
 
+/**
+ * Straight-line estimate used when the router cannot answer, so fare estimation
+ * degrades instead of failing. Marked `approximate` so callers can tell.
+ */
+function approximateLeg(lat1, lng1, lat2, lng2) {
+    const roadKm = haversineKm(lat1, lng1, lat2, lng2) * FALLBACK_ROAD_FACTOR;
+    return {
+        distance: { value: Math.round(roadKm * 1000) },
+        duration: { value: Math.round((roadKm / FALLBACK_AVG_SPEED_KMH) * 3600) },
+        approximate: true,
+    };
+}
+
 /** OSRM leg between two { lat, lng } points — same shape as getDistanceTime (meters / seconds). */
 module.exports.getDistanceTimeCoords = async (o, d) => {
     const lat1 = Number(o?.lat);
@@ -154,20 +194,36 @@ module.exports.getDistanceTimeCoords = async (o, d) => {
     const lat2 = Number(d?.lat);
     const lng2 = Number(d?.lng);
     if (![ lat1, lng1, lat2, lng2 ].every(Number.isFinite)) {
-        throw new Error('Invalid coordinates');
+        throw mapServiceError('Pickup and drop coordinates are invalid', 400);
     }
-    const osrmRes = await axios.get(
-        `${OSRM_BASE_URL}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}`,
-        { timeout: 10000, params: { overview: 'false' } }
-    );
 
-    const route = osrmRes.data?.routes?.[0];
-    if (!route) throw new Error('No routes found');
+    try {
+        const osrmRes = await axios.get(
+            `${OSRM_BASE_URL}/route/v1/driving/${lng1},${lat1};${lng2},${lat2}`,
+            { timeout: 10000, params: { overview: 'false' } }
+        );
 
-    return {
-        distance: { value: Math.round(route.distance) },
-        duration: { value: Math.round(route.duration) },
-    };
+        const route = osrmRes.data?.routes?.[0];
+        if (route) {
+            return {
+                distance: { value: Math.round(route.distance) },
+                duration: { value: Math.round(route.duration) },
+                approximate: false,
+            };
+        }
+        console.warn(
+            '[maps] OSRM returned no route for %s,%s → %s,%s — using straight-line estimate',
+            lat1, lng1, lat2, lng2
+        );
+    } catch (e) {
+        console.warn(
+            '[maps] OSRM request failed (%s) at %s — using straight-line estimate',
+            e?.message || e,
+            OSRM_BASE_URL
+        );
+    }
+
+    return approximateLeg(lat1, lng1, lat2, lng2);
 };
 
 /**

@@ -130,7 +130,18 @@ function emitToCaptain(captainId, event, data) {
     socketIds: room ? [...room] : [],
   });
 
+  if (socketCount === 0) {
+    console.warn(
+      "[socket emitToCaptain] room %s is empty — %s dropped for captain %s (driver socket not joined/authorized)",
+      roomName,
+      event,
+      id,
+    );
+  }
+
   io.to(roomName).emit(event, data);
+
+  return socketCount;
 }
 
 function emitToAdmin(event, data) {
@@ -248,6 +259,7 @@ function initializeSocket(server, app) {
           console.warn("[socket join user] db update:", e?.message || e);
         }
         socket.join(`user:${id}`);
+        slog("join passenger", { userId: id, socket: socket.id });
         void emitJoinCatchUp(socket);
       } else if (role === "captain") {
         try {

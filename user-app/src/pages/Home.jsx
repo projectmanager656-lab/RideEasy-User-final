@@ -19,6 +19,8 @@ import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
 import { addRecentSearch, getRecentSearches } from '../utils/recentSearches'
 import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+/** Same search window the tracking screen uses before it declares "No Driver Found". */
+const RIDE_SEARCH_TIMEOUT_SECONDS = 120
 const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
@@ -185,6 +187,7 @@ const Home = () => {
         if (!socket || !currentUser?._id) return;
         const uid = String(currentUser._id);
         const emitJoin = () => {
+            console.info('[socket] registering as passenger', { userId: uid });
             socket.emit('join', { userType: 'user', userId: uid });
         };
         emitJoin();
@@ -253,6 +256,18 @@ const Home = () => {
                     state: { ride: { ...data, status: st } },
                 })
                 return
+            }
+            /* A search that already ran past the window is dead. Resurrecting it makes
+               Home bounce the rider straight into the "No Driver Found" modal — e.g.
+               right after tapping "Where to go?" from the location screen. */
+            if (st === 'searching') {
+                const createdMs = data.createdAt ? new Date(data.createdAt).getTime() : NaN
+                const expiredSearch = Number.isFinite(createdMs)
+                    && (Date.now() - createdMs) / 1000 >= RIDE_SEARCH_TIMEOUT_SECONDS
+                if (expiredSearch) {
+                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    return
+                }
             }
             if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
                 try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
@@ -599,7 +614,31 @@ const Home = () => {
             cancelled = true
             stopTimers()
         }
-}, [ride?._id, ride?.status, ride?.captain, syncRideFromServer, t]);
+    }, [ride?._id, ride?.status, ride?.captain, syncRideFromServer, t]);
+
+    /**
+     * Search expiry on Home. The tracking screen owns the "No Driver Found" modal, but
+     * the rider can come back here while a search is still running — without this the
+     * ride stays `searching` forever, the top banner never clears and the search hangs.
+     * Hand off to the tracking screen, which cancels the ride and shows the modal.
+     */
+    useEffect(() => {
+        if (rideStatus !== 'searching' || !ride?._id) return
+        const openSearchOutcome = () => {
+            navigate('/searching-for-driver', { replace: true, state: { ride } })
+        }
+        const startedMs = ride?.createdAt ? new Date(ride.createdAt).getTime() : NaN
+        const elapsedSec = Number.isFinite(startedMs)
+            ? Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
+            : 0
+        const remainingMs = Math.max(0, (RIDE_SEARCH_TIMEOUT_SECONDS - elapsedSec) * 1000)
+        if (remainingMs === 0) {
+            openSearchOutcome()
+            return
+        }
+        const id = setTimeout(openSearchOutcome, remainingMs)
+        return () => clearTimeout(id)
+    }, [ride, rideStatus, navigate]);
 
 
     /** Debounced prefix search with stale-response protection and graceful 429 handling. */
@@ -1205,7 +1244,12 @@ const Home = () => {
     }, [ location.state, location.pathname, navigate ])
 
     const activeRideStatus = normalizeRideStatus(ride?.status)
-    const hasActiveRide = activeRideStatus === 'searching' || activeRideStatus === 'accepted' || activeRideStatus === 'arrived'
+    /** SEARCHING / ACCEPTED / ARRIVED / started (ongoing ride). Everything else — cancelled,
+     *  completed, or a failed search — leaves the banner hidden. */
+    const hasActiveRide = activeRideStatus === 'searching'
+        || activeRideStatus === 'accepted'
+        || activeRideStatus === 'arrived'
+        || activeRideStatus === 'started'
 
     return (
         <div className={`relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary${notificationsOpen ? ' overflow-hidden' : ''}`}>
@@ -1225,25 +1269,53 @@ const Home = () => {
                             </span>
                             <div>
                                 <p className="text-xs font-bold text-theme-primary">
-                                    {activeRideStatus === 'searching' ? t('looking_for_driver') : (activeRideStatus === 'arrived' ? t('driver_has_arrived') : t('driver_assigned_track'))}
+                                    {activeRideStatus === 'searching'
+                                        ? t('looking_for_driver')
+                                        : activeRideStatus === 'arrived'
+                                            ? t('driver_has_arrived')
+                                            : activeRideStatus === 'started'
+                                                ? (t('live_ride_in_progress') || 'Live Ride in Progress')
+                                                : t('driver_assigned_track')}
                                 </p>
                                 <p className="text-[11px] text-theme-secondary">
-                                    {activeRideStatus === 'searching' ? t('connecting_with_nearby_driver') : (ride?.captain?.name ? `${ride.captain.name} • ${ride.captain.vehicleNumber || ''}` : (t('tap_to_view_details') || 'Tap to view details'))}
+                                    {activeRideStatus === 'searching'
+                                        ? t('connecting_with_nearby_driver')
+                                        : activeRideStatus === 'started'
+                                            ? (ride?.captain?.name
+                                                ? t('driver_on_the_way', { driverName: ride.captain.name })
+                                                : (destination || t('driver_assigned_track')))
+                                            : (ride?.captain?.name ? `${ride.captain.name} • ${ride.captain.vehicleNumber || ''}` : (t('tap_to_view_details') || 'Tap to view details'))}
                                 </p>
                             </div>
                         </div>
                         <button
                             type="button"
                             onClick={() => {
-                                if (activeRideStatus === 'searching') {
-                                    navigate('/searching-for-driver', { state: { ride, pickupCoords, dropCoords, pickup, destination } })
-                                } else {
-                                    navigate('/driver-details', { state: { ride, pickupCoords, dropCoords, pickup, destination, passengerOtp, confirmation: rideConfirmation } })
+                                /* Ongoing ride → straight back to the live screen; anything
+                                   earlier → the tracking screen that owns it. */
+                                if (activeRideStatus === 'started') {
+                                    navigate('/riding', { state: { ride: { ...(ride || {}), status: 'started' } } })
+                                    return
                                 }
+                                navigate('/searching-for-driver', {
+                                    state: {
+                                        ride,
+                                        pickupCoords,
+                                        dropCoords,
+                                        pickup,
+                                        destination,
+                                        passengerOtp,
+                                        confirmation: rideConfirmation,
+                                        vehicleType: ride?.vehicleType,
+                                        tierId: ride?.tierId,
+                                        price: ride?.price,
+                                        paymentMethod: ride?.paymentMethod,
+                                    },
+                                })
                             }}
                             className="flex items-center gap-1 rounded-xl bg-brand-yellow px-3 py-1.5 text-xs font-bold text-black transition active:scale-95 shadow"
                         >
-                            <span>{activeRideStatus === 'searching' ? (t('tracking') || 'Track') : (t('details') || 'Details')}</span>
+                            <span>{t('tracking') || 'Track'}</span>
                             <i className="ri-arrow-right-line text-xs" />
                         </button>
                     </div>

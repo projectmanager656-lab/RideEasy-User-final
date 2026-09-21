@@ -1,2 +1,2 @@
-# Coding style & approach
-See [coding-style-&-approach/taste.md](coding-style-&-approach/taste.md)
+# Taste
+See [taste/taste.md](taste/taste.md)

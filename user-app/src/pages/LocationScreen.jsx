@@ -28,12 +28,15 @@ function CenterOnLocation({ coords }) {
 const currentLocationIcon = L.divIcon({
   className: 'rideeasy-current-location-marker',
   html: `
-    <div style="position:relative;width:26px;height:26px">
-      <span style="position:absolute;inset:0;border-radius:50%;background:rgba(255,200,0,0.28);transform:scale(1.6)"></span>
-      <span style="position:absolute;inset:5px;border-radius:50%;background:#FFC800;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45)"></span>
-    </div>`,
-  iconSize: [26, 26],
-  iconAnchor: [13, 13],
+    <div style="position:relative;width:22px;height:22px">
+      <span class="pulse-ring" style="position:absolute;inset:0;border-radius:50%;background:rgba(30,144,255,0.35);animation:pulse-ring 2s ease-out infinite"></span>
+      <span class="pulse-dot" style="position:absolute;inset:4px;border-radius:50%;background:#1E90FF;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)"></span>
+    </div>
+    <style>
+      @keyframes pulse-ring { 0% { transform:scale(1); opacity:0.6; } 100% { transform:scale(2.2); opacity:0; } }
+    </style>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
 })
 
 const LocationScreen = () => {
@@ -78,22 +81,31 @@ const LocationScreen = () => {
 
   const retryLocation = () => {
     requestedRef.current = false
+    if (!navigator.geolocation) {
+      /* Nothing to retry — keep the "location sharing disabled" banner actionable
+         instead of leaving the "locating you" pill spinning forever. */
+      setSearching(false)
+      setGeoError(t('could_not_get_location'))
+      return
+    }
     setSearching(true)
     setGeoError('')
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-          setGeoError('')
-          setSearching(false)
-        },
-        () => {
-          setSearching(false)
-          setGeoError(t('location_access_off'))
-        },
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
-      )
-    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setGeoError('')
+        setSearching(false)
+      },
+      (err) => {
+        setSearching(false)
+        setGeoError(
+          err?.code === err?.PERMISSION_DENIED || err?.code === 1
+            ? t('location_access_off')
+            : t('could_not_get_location')
+        )
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    )
   }
 
   return (

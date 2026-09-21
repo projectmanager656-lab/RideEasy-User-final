@@ -39,6 +39,16 @@ function formatArrival (minutes) {
     return new Date(Date.now() + minutes * 60_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+/**
+ * Fare failures must read as guidance, never as a raw status code or upstream text.
+ * Network errors and 5xx get the generic message; actionable 4xx messages are kept.
+ */
+function fareErrorMessage (err, fallbackMessage) {
+    const status = err?.response?.status
+    if (!status || status >= 500) return fallbackMessage
+    return formatApiError(err) || fallbackMessage
+}
+
 function normalizeCoordinates (value) {
     if (!value || typeof value !== 'object') return null
     const lat = Number(value.lat ?? value.latitude)
@@ -124,7 +134,7 @@ const ChooseRide = () => {
             })
             .catch((err) => {
                 if (cancelled) return
-                setFareError(formatApiError(err))
+                setFareError(fareErrorMessage(err, t('fare_fetch_failed')))
             })
             .finally(() => {
                 if (!cancelled) setFareLoading(false)
@@ -249,7 +259,7 @@ const ChooseRide = () => {
                 },
             }))
             .then((res) => setFare(stripApiEnvelope(res.data) || {}))
-            .catch((err) => setFareError(formatApiError(err)))
+            .catch((err) => setFareError(fareErrorMessage(err, t('fare_fetch_failed'))))
             .finally(() => setFareLoading(false))
     }
 

@@ -63,10 +63,6 @@ const USER_CANCEL_FEE_AFTER_ASSIGN_WINDOW_MS = 2 * 60 * 1000;
 const USER_CANCEL_FEE_AFTER_ASSIGN = 10;
 const USER_CANCEL_FEE_AFTER_ARRIVED = 25;
 
-const SOCKET_DEBUG =
-  process.env.RIDEEASY_SOCKET_DEBUG === "1" ||
-  process.env.RIDEEASY_SOCKET_DEBUG === "true";
-
 /** Active drivers accepting rides: status active + isOnline not explicitly false (legacy docs without field still match). */
 function driverPresenceMatch() {
   return {
@@ -301,6 +297,13 @@ async function notifyPassengerAccepted(
       await computeEtaCaptainToPickup(ride),
     );
 
+  console.log(
+    "[ride dispatch] rideAccepted ride=%s user=%s captain=%s",
+    String(ride._id),
+    uid,
+    captainIdOf(ride.captain) || "none",
+  );
+
   emitToUser(uid, RIDE_ACCEPTED, {
     ride: safe,
     confirmation,
@@ -329,13 +332,15 @@ async function findNearbyDriverIds({
   if (pickupLng == null || pickupLat == null) return [];
   const drivers = await captainModel
     .find({
-      approved: true,
-      blocked: { $ne: true },
-      ...subscriptionNotExpiredMatch(),
-      ...driverPresenceMatch(),
-      ...(await captainWalletMatch()),
-      servingCity: rideCity,
-      vehicleType: { $in: captainVehicleTypesForRide(vehicleType) },
+      /** `$and` keeps the subscription `$or` and the presence `$or` from clobbering each other. */
+      $and: [
+        { approved: true, blocked: { $ne: true } },
+        subscriptionNotExpiredMatch(),
+        driverPresenceMatch(),
+        await captainWalletMatch(),
+        { servingCity: rideCity },
+        { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
+      ],
       location: {
         $near: {
           $geometry: { type: "Point", coordinates: [pickupLng, pickupLat] },
@@ -352,13 +357,14 @@ async function findNearbyDriverIds({
 async function findCityFallbackDriverIds({ rideCity, vehicleType }) {
   const drivers = await captainModel
     .find({
-      approved: true,
-      blocked: { $ne: true },
-      ...subscriptionNotExpiredMatch(),
-      ...driverPresenceMatch(),
-      ...(await captainWalletMatch()),
-      servingCity: rideCity,
-      vehicleType: { $in: captainVehicleTypesForRide(vehicleType) },
+      $and: [
+        { approved: true, blocked: { $ne: true } },
+        subscriptionNotExpiredMatch(),
+        driverPresenceMatch(),
+        await captainWalletMatch(),
+        { servingCity: rideCity },
+        { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
+      ],
     })
     .limit(40)
     .select("_id");
@@ -369,16 +375,69 @@ async function findCityFallbackDriverIds({ rideCity, vehicleType }) {
 async function findCityAnyVehicleDriverIds({ rideCity }) {
   const drivers = await captainModel
     .find({
-      approved: true,
-      blocked: { $ne: true },
-      ...subscriptionNotExpiredMatch(),
-      ...driverPresenceMatch(),
-      ...(await captainWalletMatch()),
-      servingCity: rideCity,
+      $and: [
+        { approved: true, blocked: { $ne: true } },
+        subscriptionNotExpiredMatch(),
+        driverPresenceMatch(),
+        await captainWalletMatch(),
+        { servingCity: rideCity },
+      ],
     })
     .limit(40)
     .select("_id");
   return drivers.map((d) => d._id.toString());
+}
+
+async function countCaptainsMatching(...clauses) {
+  return captainModel.countDocuments(clauses.length ? { $and: clauses } : {});
+}
+
+/**
+ * "Nobody matched" is otherwise invisible — ride stays `searching` with no clue why.
+ * Counts how many captains survive each eligibility filter, in the same order the
+ * matching queries apply them, and logs the funnel so the blocking filter is obvious.
+ */
+async function explainNoDrivers({ rideCity, vehicleType, pickupLng, pickupLat }) {
+  const approved = { approved: true, blocked: { $ne: true } };
+  const subscription = subscriptionNotExpiredMatch();
+  const presence = driverPresenceMatch();
+  const wallet = await captainWalletMatch();
+  const city = { servingCity: rideCity };
+  const vehicle = { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } };
+  const geoWithin5km =
+    pickupLng == null || pickupLat == null
+      ? null
+      : {
+          location: {
+            $geoWithin: {
+              $centerSphere: [
+                [pickupLng, pickupLat],
+                RIDE_SEARCH_RADIUS_M / 6378100,
+              ],
+            },
+          },
+        };
+
+  const funnel = {
+    totalCaptains: await countCaptainsMatching(),
+    approvedNotBlocked: await countCaptainsMatching(approved),
+    subscriptionActive: await countCaptainsMatching(approved, subscription),
+    activeOnline: await countCaptainsMatching(approved, subscription, presence),
+    walletOk: await countCaptainsMatching(approved, subscription, presence, wallet),
+    sameCity: await countCaptainsMatching(approved, subscription, presence, wallet, city),
+    sameCityAndVehicle: await countCaptainsMatching(approved, subscription, presence, wallet, city, vehicle),
+    within5km: geoWithin5km
+      ? await countCaptainsMatching(approved, subscription, presence, wallet, city, vehicle, geoWithin5km)
+      : null,
+  };
+
+  console.warn(
+    "[ride dispatch] ZERO drivers matched for ride in %s (%s) — eligibility funnel:",
+    rideCity,
+    vehicleType,
+    funnel,
+  );
+  return funnel;
 }
 
 function broadcastRideNew(rideDoc, driverIds) {
@@ -386,25 +445,35 @@ function broadcastRideNew(rideDoc, driverIds) {
   const offeredAt = Date.now();
   const payload = { ride, offeredAt };
   const rid = ride?._id != null ? String(ride._id) : "";
-  if (SOCKET_DEBUG) {
-    console.log(
-      "[ride broadcast] ride=%s city=%s drivers=%s ids=%s",
-      rid,
-      rideDoc?.city || ride?.city || "",
-      driverIds.length,
-      driverIds.slice(0, 12).join(","),
-    );
-  }
   if (!driverIds.length) {
     console.warn(
       "[ride broadcast] no drivers matched for ride %s (check city, isOnline, subscription, vehicle)",
       rid,
     );
   }
+  let delivered = 0;
   for (const id of driverIds) {
-    emitToCaptain(id, RIDE_REQUEST, payload);
+    if (emitToCaptain(id, RIDE_REQUEST, payload) > 0) delivered += 1;
     emitToCaptain(id, "new-ride", payload);
   }
+  if (driverIds.length) {
+    console.log(
+      "[ride broadcast] ride=%s city=%s matched=%d delivered=%d offline=%d targetDrivers=%s",
+      rid,
+      rideDoc?.city || ride?.city || "",
+      driverIds.length,
+      delivered,
+      driverIds.length - delivered,
+      driverIds.join(","),
+    );
+    if (delivered === 0) {
+      console.warn(
+        "[ride dispatch] ride %s reached 0 connected drivers — offers are only reachable via /rides/pending polling",
+        rid,
+      );
+    }
+  }
+  return { matched: driverIds.length, delivered };
 }
 
 function mergeUniqueIds(...lists) {
@@ -583,22 +652,32 @@ module.exports.createRide = async (req, res) => {
     if (driverIds.length === 0) {
       driverIds = await findCityAnyVehicleDriverIds({ rideCity });
     }
-    if (SOCKET_DEBUG) {
-      console.log(
-        "[createRide] rideCity=%s vehicle=%s nearby=%s cityFb=%s",
+    console.log(
+      "[createRide] ride=%s city=%s vehicle=%s pickup=%s,%s nearby5km=%d citySameVehicle=%d total=%d",
+      String(ride._id),
+      rideCity,
+      populated.vehicleType,
+      pickupCoordinates.lat,
+      pickupCoordinates.lng,
+      nearbyDriverIds.length,
+      cityDriverIds.length,
+      driverIds.length,
+    );
+    if (driverIds.length === 0) {
+      await explainNoDrivers({
         rideCity,
-        populated.vehicleType,
-        nearbyDriverIds.length,
-        cityDriverIds.length,
-      );
+        vehicleType: populated.vehicleType,
+        pickupLng: pickupCoordinates.lng,
+        pickupLat: pickupCoordinates.lat,
+      });
     }
-    broadcastRideNew(populated, driverIds);
+    const dispatch = broadcastRideNew(populated, driverIds);
     return ok(
       res,
       req,
       201,
       "Ride created — OTP is shown after the driver arrives",
-      { ride: publicRide(populated) },
+      { ride: publicRide(populated), dispatch },
       { includeFlatData: false },
     );
   } catch (err) {
@@ -690,7 +769,17 @@ module.exports.getFare = async (req, res) => {
     const plng = Number(req.query.pickupLng);
     const dl = Number(req.query.dropLat);
     const dlng = Number(req.query.dropLng);
-    const hasFullClientCoords = [pl, plng, dl, dlng].every(Number.isFinite);
+    /** All four coordinates or none — a partial set is a client bug, not a reason to crash. */
+    const coordsPresent = [pl, plng, dl, dlng].filter(Number.isFinite).length;
+    if (coordsPresent > 0 && coordsPresent < 4) {
+      return fail(
+        res,
+        req,
+        400,
+        "Provide all four coordinates (pickupLat, pickupLng, dropLat, dropLng) or none",
+      );
+    }
+    const hasFullClientCoords = coordsPresent === 4;
 
     let pickupCoord;
     let dropCoord;
@@ -749,7 +838,12 @@ module.exports.getFare = async (req, res) => {
       requestId: req.requestId,
     });
   } catch (err) {
-    return fail(res, req, 500, err.message || "Failed to get fare");
+    const status = Number(err.statusCode) || 500;
+    if (status >= 500) {
+      console.error("[getFare] upstream failure:", err?.message || err);
+      return fail(res, req, status, "Unable to fetch fare right now. Please try again.");
+    }
+    return fail(res, req, status, err.message || "Failed to get fare");
   }
 };
 
@@ -1264,6 +1358,12 @@ module.exports.startRide = async (req, res) => {
     delete confirmation.otp;
     const uid = userIdOf(ride.user);
     const cid = captainIdOf(ride.captain);
+    console.log(
+      "[ride dispatch] rideStarted ride=%s user=%s captain=%s",
+      String(ride._id),
+      uid || "none",
+      cid || "none",
+    );
     const startedPayload = { rideId: ride._id, ride: pr, confirmation };
     if (uid) {
       emitToUser(uid, RIDE_STARTED, startedPayload);
@@ -1463,6 +1563,12 @@ module.exports.endRide = async (req, res) => {
     confirmation.rideStatus = "completed";
     const uid = userIdOf(ride.user);
     const cid = captainIdOf(updated.captain);
+    console.log(
+      "[ride dispatch] rideCompleted ride=%s user=%s captain=%s",
+      String(ride._id),
+      uid || "none",
+      cid || "none",
+    );
     const completedPayload = {
       rideId: ride._id,
       status: "completed",
