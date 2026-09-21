@@ -11,6 +11,7 @@ import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
 import { useLanguage } from '../i18n'
+import { haversineKm } from '../utils/serviceArea'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
@@ -321,6 +322,32 @@ const Riding = () => {
         return m
     }, [ride?.paymentMethod, t])
 
+    /** Monotonic floor for tripProgress — GPS jitter must never walk the bar backwards. */
+    const tripProgressRef = useRef({ rideId: null, value: 0 })
+    /**
+     * How much of the trip is done, for the "Live ride" stepper leg: the share of the
+     * pickup → drop distance the driver has already covered, straight-line (haversine)
+     * from the live driver position. Null when there is no usable GPS yet, which keeps
+     * the stepper static exactly as before.
+     */
+    const tripProgress = useMemo(() => {
+        if (ride?.status !== 'started') return null
+        if (!pickupCoords || !dropCoords || !driverCoords) return null
+        const total = haversineKm(pickupCoords.lat, pickupCoords.lng, dropCoords.lat, dropCoords.lng)
+        if (!(total > 0.05)) return null
+        const remaining = haversineKm(driverCoords.lat, driverCoords.lng, dropCoords.lat, dropCoords.lng)
+        const raw = 1 - remaining / total
+        if (!Number.isFinite(raw)) return null
+        const clamped = Math.max(0, Math.min(1, raw))
+        const floor = tripProgressRef.current
+        if (floor.rideId !== ride?._id) {
+            floor.rideId = ride?._id ?? null
+            floor.value = 0
+        }
+        floor.value = Math.max(floor.value, clamped)
+        return floor.value
+    }, [ride?.status, ride?._id, pickupCoords, dropCoords, driverCoords])
+
     const confirmRidePayment = useCallback(async (method) => {
         if (!ride?._id) return
         setPaying(true)
@@ -434,7 +461,7 @@ const Riding = () => {
                     </div>
                 ) : null}
                 <div className="mb-4">
-                    <RideStatusStepper status={ride?.status || 'accepted'} />
+                    <RideStatusStepper status={ride?.status || 'accepted'} progress={tripProgress} />
                 </div>
                 <div className='flex items-center justify-between gap-3'>
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-semibold text-brand-yellow ring-1 ring-brand-yellow/40" aria-hidden>

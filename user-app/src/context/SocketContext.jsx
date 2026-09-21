@@ -6,10 +6,9 @@ import { getPassengerToken } from '../utils/authTokens'
 /** Default `undefined` when no Provider (must not destructure directly from useContext). */
 export const SocketContext = createContext(undefined)
 
+/** Always logged (not DEV-gated): ride-dispatch problems are diagnosed from these lines. */
 function logSocket (msg, detail) {
-  if (import.meta.env.DEV) {
-    console.info(`[socket] ${msg}`, detail != null ? detail : '')
-  }
+  console.info(`[socket] ${msg}`, detail != null ? detail : '')
 }
 
 function createNoOpSocket () {

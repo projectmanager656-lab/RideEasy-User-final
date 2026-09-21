@@ -427,29 +427,6 @@ const UserOtp = () => {
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={() => navigate('/driver-details', {
-              state: {
-                ride,
-                pickupCoords,
-                dropCoords,
-                pickup,
-                destination,
-                passengerOtp,
-                confirmation: rideConfirmation,
-                vehicleType,
-                tierId: rideTierId,
-                price: fare,
-              },
-            })}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card-muted py-2.5 text-xs font-bold text-theme-primary transition hover:bg-theme-card active:scale-[0.98]"
-          >
-            <i className="ri-user-star-line text-sm text-brand-yellow" aria-hidden />
-            <span>{t('view_driver_details') || 'View Full Driver Details'}</span>
-            <i className="ri-arrow-right-s-line text-sm text-theme-muted" aria-hidden />
-          </button>
         </div>
 
         {/* Safety Instructions Checklist */}

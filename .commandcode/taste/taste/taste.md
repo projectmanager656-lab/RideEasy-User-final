@@ -1,0 +1,12 @@
+# Taste
+- When asking how to do something, wants explicit numbered step-by-step instructions rather than a conceptual explanation. Confidence: 0.45
+- Frames multi-part work as an itemized spec (numbered issues/steps with concrete sub-steps and expected behavior) and expects it addressed in that structure. Confidence: 0.65
+- Wants failure cases logged and handled explicitly rather than dropped silently (e.g. emitted events that hit nobody should surface a warning/error). Confidence: 0.5
+- Wants key server-side events logged clearly (with identifiers) for easy monitoring/debugging, not just failures. Confidence: 0.4
+- When debugging a cross-layer (frontend ↔ backend) flow, expects explicit diagnostic logging on both sides — connection/reconnection lifecycle, outgoing request payloads, backend reception with target identities, and receiving/skipping reasons on the consumer — not just on one end. Confidence: 0.45
+- Wants hanging/indefinite states eliminated: when a request can't be fulfilled, surface a clear response or a fallback/retry path instead of letting the UI freeze forever. Confidence: 0.5
+- Wants APIs to fail soft instead of crashing: validate inputs up front (null/undefined checks) and return the correct status (e.g. 400 for missing/invalid input, 502 for upstream failures) rather than turning client mistakes into a blanket 500. Confidence: 0.6
+- Wants external/third-party API calls (maps, routing, geocoding) wrapped in try/catch with a graceful fallback (e.g. straight-line Haversine estimate when the routing service is down) so features degrade instead of erroring out. Confidence: 0.6
+- Wants user-facing errors to be friendly and human-readable — no raw status codes or upstream error text leaking to the UI (e.g. show "Unable to fetch fare…" instead of "status code 502"). Confidence: 0.55
+- Declines to let the agent run verification shell commands (test suites, builds) without explicit say-so; prefers to approve/run them himself. Confidence: 0.4
+- Wants UI state kept consistent with the underlying source of truth: stale banners/state must be cleared or hidden the moment the real status changes, and the user must never be left on a screen showing out-of-date state (e.g. a lingering "searching" banner after navigating away). Confidence: 0.5

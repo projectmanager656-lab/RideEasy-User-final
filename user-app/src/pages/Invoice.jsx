@@ -150,12 +150,12 @@ const Invoice = () => {
             {/* Document header — RideEasy branding + INVOICE number */}
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-theme pb-4">
               <div>
-                <p className="text-2xl font-black tracking-tight text-theme-primary print:text-slate-900">RideEasy</p>
-                <p className="text-xs text-theme-muted print:text-slate-500">{t('brand_tagline')}</p>
-              </div>
-              <div className="text-right">
                 <p className="text-base font-bold uppercase tracking-wide text-theme-primary print:text-slate-900">{t('invoice')}</p>
                 <p className="text-xs text-theme-muted print:text-slate-500">{invoice.invoiceNumber}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-black tracking-tight text-theme-primary print:text-slate-900">RideEasy</p>
+                <p className="text-xs text-theme-muted print:text-slate-500">{t('brand_tagline')}</p>
               </div>
             </div>
 
@@ -251,19 +251,26 @@ const Invoice = () => {
             {/* Trip — pickup / drop with clear indicators */}
             <div className="mt-6 border-t border-theme pt-5">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-muted print:text-slate-500">{t('trip_details')}</p>
-              <div className="mt-3 space-y-3 text-sm">
+              <div className="mt-3 text-sm">
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-600" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-xs text-theme-muted print:text-slate-500">{t('pickup')}</p>
-                    <p className="font-medium text-theme-primary print:text-slate-900">{invoice.pickup || '—'}</p>
+                  <div className="flex flex-col items-center self-stretch">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 print:bg-emerald-100">
+                      <i className="ri-circle-fill text-[8px]" aria-hidden />
+                    </span>
+                    <span className="my-1 w-px flex-1 bg-theme-border print:bg-slate-300" aria-hidden />
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center text-red-500">
+                      <i className="ri-map-pin-2-fill text-base" aria-hidden />
+                    </span>
                   </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-xs text-theme-muted print:text-slate-500">{t('drop_off')}</p>
-                    <p className="font-medium text-theme-primary print:text-slate-900">{invoice.drop || '—'}</p>
+                  <div className="min-w-0 flex-1 space-y-4">
+                    <div className="min-w-0">
+                      <p className="text-xs text-theme-muted print:text-slate-500">{t('pickup')}</p>
+                      <p className="font-medium text-theme-primary print:text-slate-900">{invoice.pickup || '—'}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs text-theme-muted print:text-slate-500">{t('drop_off')}</p>
+                      <p className="font-medium text-theme-primary print:text-slate-900">{invoice.drop || '—'}</p>
+                    </div>
                   </div>
                 </div>
                 {(invoice.distanceKm != null || invoice.durationSec != null) && (

@@ -1,13 +1,13 @@
 import React, { createContext, useEffect, useMemo } from 'react'
 import { io } from 'socket.io-client'
 import { getSocketBaseUrl } from '../config/apiBaseUrl'
+import { getCaptainToken } from '../utils/authTokens'
 
 export const SocketContext = createContext(undefined)
 
+/** Always logged (not DEV-gated): ride-dispatch problems are diagnosed from these lines. */
 function logSocket (msg, detail) {
-  if (import.meta.env.DEV) {
-    console.info(`[socket] ${msg}`, detail != null ? detail : '')
-  }
+  console.info(`[socket] ${msg}`, detail != null ? detail : '')
 }
 
 /** Vercel serverless cannot keep Socket.IO connections; set VITE_DISABLE_SOCKET=true there. */
@@ -39,15 +39,47 @@ const socket =
         reconnectionDelayMax: 10000,
       })
 
+/**
+ * Captain JWT used for the last handshake attempt. The callback form of `auth`
+ * matters: it is re-evaluated on every connection attempt, so the token written
+ * at login is picked up without recreating the socket.
+ */
+let lastAuthToken = null
+
+/**
+ * Re-handshake when the captain token changed inside this SPA session (login or
+ * logout without a page reload). No-op while the live connection already used
+ * the current token.
+ */
+function ensureSocketAuth () {
+  if (import.meta.env.VITE_DISABLE_SOCKET === 'true') return
+  const token = getCaptainToken()
+  if (socket.connected && token === lastAuthToken) return
+  if (socket.connected) socket.disconnect()
+  socket.connect()
+}
+
 if (import.meta.env.VITE_DISABLE_SOCKET !== 'true') {
+  socket.auth = (cb) => {
+    const token = getCaptainToken()
+    lastAuthToken = token
+    cb(token ? { token } : {})
+  }
   socket.on('connect', () => logSocket('connected', { id: socket.id }))
   socket.on('disconnect', (reason) => logSocket('disconnect', reason))
-  socket.on('connect_error', (err) => logSocket('connect_error', err?.message || err))
+  socket.on('connect_error', (err) => {
+    const msg = err?.message || String(err)
+    if (msg === 'Unauthorized') {
+      console.warn('[socket] handshake rejected — captain token missing/expired; rideRequest will NOT arrive, falling back to /rides/pending polling')
+      return
+    }
+    console.warn('[socket] connect_error', msg)
+  })
   socket.io.on('reconnect_attempt', (n) => logSocket('reconnect_attempt', n))
 }
 
 const SocketProvider = ({ children }) => {
-  const value = useMemo(() => ({ socket }), [])
+  const value = useMemo(() => ({ socket, ensureSocketAuth }), [])
 
   useEffect(() => {
     if (import.meta.env.VITE_DISABLE_SOCKET === 'true') return

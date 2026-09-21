@@ -16,6 +16,15 @@ function formatDuration (seconds) {
     return r ? `${m} min ${r}s` : `${m} min`
 }
 
+/** Wall-clock seconds between two timestamps — fallback when the ride has no stored `duration`. */
+function secondsBetween (from, to) {
+    if (!from || !to) return null
+    const a = new Date(from).getTime()
+    const b = new Date(to).getTime()
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return null
+    return Math.round((b - a) / 1000)
+}
+
 function formatWhen (d) {
     if (!d) return '—'
     try {
@@ -178,7 +187,9 @@ export default function RideCompletionFlow ({
                         </div>
                         <div className="rounded-xl bg-theme-card-muted px-2 py-3 text-center">
                             <p className="text-[10px] uppercase text-theme-muted">Duration</p>
-                            <p className="mt-1 text-sm font-semibold text-theme-primary">{formatDuration(ride?.duration)}</p>
+                            <p className="mt-1 text-sm font-semibold text-theme-primary">
+                                {formatDuration(ride?.duration ?? secondsBetween(ride?.startedAt, ride?.completedAt))}
+                            </p>
                         </div>
                         <div className="rounded-xl bg-theme-card-muted px-2 py-3 text-center">
                             <p className="text-[10px] uppercase text-theme-muted">Fare</p>

@@ -5,6 +5,7 @@ import { apiClient, withAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
 import { useLanguage } from '../i18n'
+import { useUserData } from '../context/UserContext'
 
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
@@ -25,6 +26,7 @@ export default function ConfirmPickup () {
     const navigate = useNavigate()
     const location = useLocation()
     const { t } = useLanguage()
+    const { user } = useUserData()
     const state = location.state || {}
     const initialPickupCoords = normalizeCoordinates(state.pickupCoords)
     const dropCoords = normalizeCoordinates(state.dropCoords)
@@ -70,7 +72,7 @@ export default function ConfirmPickup () {
         setBooking(true)
         setBookingError('')
         try {
-            const response = await apiClient.post('/rides/create', {
+            const body = {
                 pickupLocation: pickup,
                 dropLocation: state.destination,
                 pickupLat: pickupCoords.lat,
@@ -78,12 +80,23 @@ export default function ConfirmPickup () {
                 ...(dropCoords ? { dropLat: dropCoords.lat, dropLng: dropCoords.lng } : {}),
                 vehicleType: state.vehicleType,
                 paymentMethod: state.paymentMethod || 'Cash',
+                ...(user?.name ? { customerName: user.name } : {}),
+                ...(user?.phone ? { customerPhone: user.phone } : {}),
                 ...(state.couponCode ? { couponCode: state.couponCode } : {}),
                 price: state.price,
                 distanceKm: state.distanceKm,
                 ...(state.scheduledAt ? { scheduledAt: state.scheduledAt } : {}),
-            }, withAuth())
+            }
+            console.info('[ride request] POST /rides/create', body)
+            const response = await apiClient.post('/rides/create', body, withAuth())
             const raw = stripApiEnvelope(response.data)
+            const dispatch = raw?.dispatch || null
+            if (dispatch) {
+                console.info('[ride request] created — matched=%d delivered=%d', dispatch.matched, dispatch.delivered)
+                if (Number(dispatch.delivered) === 0) {
+                    console.warn('[ride request] no driver received the offer over the socket (matched=%d) — drivers can still pick it up from the /rides/pending poll', dispatch.matched)
+                }
+            }
             const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
             delete ridePayload.otp
             if (ridePayload?._id) {
