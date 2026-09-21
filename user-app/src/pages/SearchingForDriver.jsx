@@ -940,14 +940,9 @@ const SearchingForDriver = () => {
                 <i className="ri-arrow-left-line text-lg" aria-hidden />
               </button>
               <h2 className="text-base font-bold text-theme-primary">{t('cancel_trip')}</h2>
-              <button
-                type="button"
-                onClick={() => performCancel()}
-                disabled={cancelling}
-                className="text-sm font-semibold text-brand-yellow active:scale-95 disabled:opacity-50"
-              >
-                {cancelling ? t('cancelling') : t('skip')}
-              </button>
+              {/* Spacer keeps "Cancel trip?" centred opposite the back button — the old
+                  "Skip" shortcut cancelled the ride with no reason and is gone. */}
+              <span className="w-10" aria-hidden />
             </div>
 
             {/* Scrollable content */}

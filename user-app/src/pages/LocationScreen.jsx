@@ -81,22 +81,31 @@ const LocationScreen = () => {
 
   const retryLocation = () => {
     requestedRef.current = false
+    if (!navigator.geolocation) {
+      /* Nothing to retry — keep the "location sharing disabled" banner actionable
+         instead of leaving the "locating you" pill spinning forever. */
+      setSearching(false)
+      setGeoError(t('could_not_get_location'))
+      return
+    }
     setSearching(true)
     setGeoError('')
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-          setGeoError('')
-          setSearching(false)
-        },
-        () => {
-          setSearching(false)
-          setGeoError(t('location_access_off'))
-        },
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
-      )
-    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setGeoError('')
+        setSearching(false)
+      },
+      (err) => {
+        setSearching(false)
+        setGeoError(
+          err?.code === err?.PERMISSION_DENIED || err?.code === 1
+            ? t('location_access_off')
+            : t('could_not_get_location')
+        )
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 }
+    )
   }
 
   return (

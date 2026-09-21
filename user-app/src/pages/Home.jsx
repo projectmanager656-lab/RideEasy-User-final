@@ -187,6 +187,7 @@ const Home = () => {
         if (!socket || !currentUser?._id) return;
         const uid = String(currentUser._id);
         const emitJoin = () => {
+            console.info('[socket] registering as passenger', { userId: uid });
             socket.emit('join', { userType: 'user', userId: uid });
         };
         emitJoin();
@@ -255,6 +256,18 @@ const Home = () => {
                     state: { ride: { ...data, status: st } },
                 })
                 return
+            }
+            /* A search that already ran past the window is dead. Resurrecting it makes
+               Home bounce the rider straight into the "No Driver Found" modal — e.g.
+               right after tapping "Where to go?" from the location screen. */
+            if (st === 'searching') {
+                const createdMs = data.createdAt ? new Date(data.createdAt).getTime() : NaN
+                const expiredSearch = Number.isFinite(createdMs)
+                    && (Date.now() - createdMs) / 1000 >= RIDE_SEARCH_TIMEOUT_SECONDS
+                if (expiredSearch) {
+                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    return
+                }
             }
             if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
                 try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }

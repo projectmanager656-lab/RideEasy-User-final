@@ -135,6 +135,7 @@ const CaptainHome = () => {
 
         const doJoin = () => {
             ensureSocketAuth()
+            console.info('[socket] registering as driver', { driverId: capId, city, online })
             socket.emit('join', { userId: capId, userType: 'captain' })
             if (navigator.geolocation) {
                 const emitJoin = (lat, lng) => {
