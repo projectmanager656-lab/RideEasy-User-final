@@ -160,8 +160,18 @@ export default function ConfirmPickup () {
                 </div>
                 <div className="mt-3 flex items-center justify-between text-sm text-theme-secondary">
                     <span>{state.vehicleType || 'Ride'}</span>
-                    <span className="font-semibold text-theme-primary">{formatPrice(state.price)}</span>
+                    {Number(state.discountAmount) > 0 ? (
+                        <span className="flex items-center gap-2">
+                            <span className="text-xs text-theme-muted line-through">{formatPrice(state.price)}</span>
+                            <span className="font-semibold text-emerald-400">{formatPrice(state.finalFare)}</span>
+                        </span>
+                    ) : (
+                        <span className="font-semibold text-theme-primary">{formatPrice(state.price)}</span>
+                    )}
                 </div>
+                {state.couponCode && Number(state.discountAmount) > 0 && (
+                    <p className="mt-1 text-xs text-emerald-400">{state.couponCode} applied · −{formatPrice(state.discountAmount)}</p>
+                )}
                 {bookingError && <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{bookingError}</p>}
                 <button
                     type="button"

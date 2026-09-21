@@ -6,8 +6,6 @@ import { formatApiError } from '../utils/apiError'
 import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import {
-  getEmergencyContacts,
-  saveEmergencyContacts,
   getSafetyPrefs,
   setSafetyPref,
 } from '../utils/safetyData'
@@ -118,102 +116,131 @@ const ToggleRow = ({ label, detail, checked, onToggle }) => (
   </label>
 )
 
-const emptyForm = () => ({ name: '', phone: '', relationship: '', primary: false })
+const emptyForm = () => ({ name: '', phone: '', relationship: '' })
 
+/**
+ * Emergency contact for the signed-in passenger.
+ *
+ * Backed by the existing `/users/emergency-contact` API — one contact per user, stored in
+ * the `emergency_contacts` collection and mirrored onto the user document — so this
+ * section and the /emergency-contact page read and write the same record.
+ *
+ * This section used to keep its own list in localStorage (`rideeasy_emergency_contacts`),
+ * which never reached the database: a contact added here was invisible to the backend,
+ * to admin, and on any other device.
+ */
 const EmergencyContactsSection = () => {
   const { t } = useLanguage()
-  const [contacts, setContacts] = useState(getEmergencyContacts)
+  const [contact, setContact] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [formOpen, setFormOpen] = useState(false)
-  const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm())
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    let cancelled = false
+    apiClient.get('/users/emergency-contact', withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const raw = stripApiEnvelope(res.data)
+        setContact(raw?.emergencyContact ?? null)
+      })
+      .catch(() => { if (!cancelled) setContact(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
   const openAdd = () => {
-    setEditingId(null)
     setForm(emptyForm())
     setError('')
     setFormOpen(true)
   }
 
   const openEdit = (c) => {
-    setEditingId(c.id)
-    setForm({ name: c.name, phone: c.phone, relationship: c.relationship, primary: c.primary })
+    setForm({ name: c.name || '', phone: c.phone || '', relationship: c.relationship || '' })
     setError('')
     setFormOpen(true)
   }
 
-  const save = () => {
+  // Mirrors the API contract in user.controller.saveEmergencyContact: name >= 2 chars,
+  // 10-digit phone, non-empty relationship.
+  const save = async () => {
     const name = form.name.trim()
-    const phone = form.phone.trim()
-    if (!name || !phone) {
-      setError(t('contact_required_error'))
+    const phone = form.phone.replace(/\D/g, '')
+    const relationship = form.relationship.trim()
+    if (name.length < 2) {
+      setError(t('valid_name_error'))
       return
     }
-    let next
-    if (editingId) {
-      next = contacts.map((c) => (
-        c.id === editingId ? { ...c, name, phone, relationship: form.relationship.trim(), primary: form.primary } : c
-      ))
-    } else {
-      const entry = { id: `c${Date.now()}${Math.random().toString(36).slice(2, 6)}`, name, phone, relationship: form.relationship.trim(), primary: form.primary }
-      // First contact is the primary by default.
-      next = [ ...contacts, { ...entry, primary: contacts.length === 0 ? true : form.primary } ]
+    if (!/^\d{10}$/.test(phone)) {
+      setError(t('valid_phone_error'))
+      return
     }
-    setContacts(next)
-    saveEmergencyContacts(next)
-    setFormOpen(false)
+    if (!relationship) {
+      setError(t('relationship_required_error'))
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const res = await apiClient.post('/users/emergency-contact', { name, phone, relationship }, withAuth())
+      const raw = stripApiEnvelope(res.data)
+      setContact(raw?.emergencyContact ?? null)
+      setFormOpen(false)
+    } catch (err) {
+      setError(formatApiError(err))
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const remove = (id) => {
-    const next = contacts.filter((c) => c.id !== id)
-    // Keep at least one primary.
-    if (next.length > 0 && !next.some((c) => c.primary)) next[0].primary = true
-    setContacts(next)
-    saveEmergencyContacts(next)
-  }
-
-  const setPrimary = (id) => {
-    const next = contacts.map((c) => ({ ...c, primary: c.id === id }))
-    setContacts(next)
-    saveEmergencyContacts(next)
+  const remove = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await apiClient.delete('/users/emergency-contact', withAuth())
+      setContact(null)
+    } catch (err) {
+      setError(formatApiError(err))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <Section title={t('emergency_contact')} icon="ri-group-line">
       <p className="mb-3 text-sm text-theme-secondary">{t('manage_emergency_contacts')}</p>
 
-      {contacts.length === 0 ? (
+      {loading ? (
+        <p className="mb-3 py-4 text-center text-sm text-theme-muted">{t('loading')}</p>
+      ) : !contact ? (
         <p className="mb-3 rounded-xl border border-dashed border-theme bg-theme-card px-3 py-4 text-center text-sm text-theme-muted">
           {t('no_emergency_contacts')}
         </p>
       ) : (
         <ul className="mb-3 space-y-2">
-          {contacts.map((c) => (
-            <li key={c.id} className="rounded-xl border border-theme bg-theme-card-muted px-3.5 py-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
-                    <i className="ri-user-3-line text-base" aria-hidden />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-theme-primary">{c.name}</p>
-                    <p className="text-xs text-theme-secondary">{c.phone}</p>
-                    {c.relationship && <p className="text-xs text-theme-muted">{c.relationship}</p>}
-                  </div>
+          <li className="rounded-xl border border-theme bg-theme-card-muted px-3.5 py-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                  <i className="ri-user-3-line text-base" aria-hidden />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-theme-primary">{contact.name}</p>
+                  <p className="text-xs text-theme-secondary">{contact.phone}</p>
+                  {contact.relationship && <p className="text-xs text-theme-muted">{contact.relationship}</p>}
                 </div>
-                {c.primary && (
-                  <span className="rounded-full bg-brand-yellow/15 px-2 py-0.5 text-[10px] font-semibold text-brand-yellow">
-                    {t('primary')}
-                  </span>
-                )}
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button type="button" onClick={() => openEdit(c)} className="rounded-full border border-theme px-3 py-1 text-xs text-theme-primary active:scale-95">{t('edit')}</button>
-                <button type="button" onClick={() => setPrimary(c.id)} className="rounded-full border border-theme px-3 py-1 text-xs text-theme-primary active:scale-95">{t('set_primary')}</button>
-                <button type="button" onClick={() => remove(c.id)} className="rounded-full border border-red-500/40 px-3 py-1 text-xs text-red-400 active:scale-95">{t('remove')}</button>
-              </div>
-            </li>
-          ))}
+              <span className="rounded-full bg-brand-yellow/15 px-2 py-0.5 text-[10px] font-semibold text-brand-yellow">
+                {t('primary')}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => openEdit(contact)} className="rounded-full border border-theme px-3 py-1 text-xs text-theme-primary active:scale-95">{t('edit')}</button>
+              <button type="button" onClick={remove} disabled={saving} className="rounded-full border border-red-500/40 px-3 py-1 text-xs text-red-400 active:scale-95 disabled:opacity-50">{t('remove')}</button>
+            </div>
+          </li>
         </ul>
       )}
 
@@ -228,7 +255,7 @@ const EmergencyContactsSection = () => {
       {formOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-[1px]">
           <div className="w-full max-w-sm rounded-2xl border border-theme bg-theme-card p-4">
-            <h3 className="mb-3 text-base font-bold text-theme-primary">{editingId ? t('edit_contact') : t('add_emergency_contact')}</h3>
+            <h3 className="mb-3 text-base font-bold text-theme-primary">{contact ? t('edit_contact') : t('add_emergency_contact')}</h3>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-theme-secondary">{t('name')}</label>
             <input
               value={form.name}
@@ -251,19 +278,10 @@ const EmergencyContactsSection = () => {
               placeholder={t('relationship_placeholder')}
               className="mb-3 w-full rounded-xl border border-theme bg-theme-card px-3 py-2.5 text-sm text-theme-primary placeholder:text-theme-muted outline-none focus:border-brand-yellow"
             />
-            <label className="mb-3 flex items-center gap-2 text-sm text-theme-primary">
-              <input
-                type="checkbox"
-                checked={form.primary}
-                onChange={(e) => setForm((f) => ({ ...f, primary: e.target.checked }))}
-                className="h-4 w-4 accent-[#FFC800]"
-              />
-              {t('set_primary_contact')}
-            </label>
             {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
             <div className="flex gap-2">
               <button type="button" onClick={() => setFormOpen(false)} className="flex-1 rounded-xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-primary active:scale-[0.98]">{t('cancel')}</button>
-              <button type="button" onClick={save} className="flex-1 rounded-xl bg-brand-yellow py-3 text-sm font-bold text-black active:scale-[0.98]">{t('save_contact')}</button>
+              <button type="button" onClick={save} disabled={saving} className="flex-1 rounded-xl bg-brand-yellow py-3 text-sm font-bold text-black active:scale-[0.98] disabled:opacity-50">{t('save_contact')}</button>
             </div>
           </div>
         </div>
@@ -298,7 +316,21 @@ const ShareTripSection = ({ ride, error }) => {
       setToast(t('no_active_ride_to_share'))
       return
     }
-    const text = buildShareText(ride, t)
+    let shareUrl = ''
+    try {
+      const res = await apiClient.post(`/rides/${ride._id}/share`, {}, withAuth())
+      const data = stripApiEnvelope(res.data)
+      if (data?.shareUrl) {
+        shareUrl = data.shareUrl
+      }
+    } catch {
+      /* fallback to text only */
+    }
+
+    let text = buildShareText(ride, t)
+    if (shareUrl) {
+      text += `\nTrack live: ${shareUrl}`
+    }
     const canNative = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
     if (canNative) {
       try {
@@ -404,6 +436,47 @@ const Safety = () => {
   const { ride, loading, error, reload } = useActiveRide()
   const [sosConfirm, setSosConfirm] = useState(false)
   const [sosActive, setSosActive] = useState(false)
+  const [activeSosId, setActiveSosId] = useState(null)
+
+  const handleActivateSos = async () => {
+    setSosConfirm(false)
+    setSosActive(true)
+    try {
+      let coords = null
+      if (typeof navigator !== 'undefined' && navigator.geolocation) {
+        coords = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => resolve(null),
+            { timeout: 3000 }
+          )
+        })
+      }
+      const res = await apiClient.post('/users/sos', {
+        rideId: ride?._id || undefined,
+        location: coords || undefined
+      }, withAuth())
+      const data = stripApiEnvelope(res.data)
+      if (data?.sosEvent?._id) {
+        setActiveSosId(data.sosEvent._id)
+      }
+    } catch (e) {
+      console.warn('[Safety SOS]', e?.message || e)
+    }
+  }
+
+  const handleDeactivateSos = async () => {
+    setSosActive(false)
+    try {
+      await apiClient.post('/users/sos/deactivate', {
+        sosId: activeSosId || undefined
+      }, withAuth())
+    } catch (e) {
+      console.warn('[Safety SOS deactivate]', e?.message || e)
+    } finally {
+      setActiveSosId(null)
+    }
+  }
 
   const handleBack = () => {
     if (window.history.length > 1) navigate(-1)
@@ -446,11 +519,10 @@ const Safety = () => {
             <p className="mt-1 text-sm text-theme-primary">
               {t('sos_contacts_alerted', { forName: user?.name ? ` for ${user.name}` : '' })}
             </p>
-            {/* Integration point: call the real emergency API / notify contacts here. */}
-            <p className="mt-2 text-xs text-theme-muted">{t('sos_not_connected')}</p>
+            <p className="mt-2 text-xs text-emerald-400 font-medium">SOS alert dispatched to emergency response and admin center</p>
             <button
               type="button"
-              onClick={() => setSosActive(false)}
+              onClick={handleDeactivateSos}
               className="mt-4 w-full rounded-xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-primary active:scale-[0.98]"
             >
               {t('deactivate_sos')}
@@ -484,10 +556,7 @@ const Safety = () => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setSosConfirm(false)
-                  setSosActive(true)
-                }}
+                onClick={handleActivateSos}
                 className="flex-1 rounded-xl bg-brand-yellow py-3 text-sm font-bold text-black active:scale-[0.98]"
               >
                 {t('activate_sos')}

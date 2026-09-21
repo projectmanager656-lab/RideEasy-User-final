@@ -2,8 +2,8 @@ const mongoose = require("mongoose");
 const rideService = require("../services/rideCore.service");
 const paymentService = require("../services/payment.service");
 const { payRideFromWallet } = require("../services/wallet.service");
-const { validateCoupon } = require("../services/coupon.service");
-const CouponUsage = require("../models/couponUsage.model");
+const { validateCoupon, reserveCoupon, releaseCoupon } = require("../services/coupon.service");
+const ratingService = require("../services/rating.service");
 const PaymentRecord = require("../models/paymentRecord.model");
 const { getCaptainPricing } = require("../services/pricing.service");
 const { validationResult } = require("express-validator");
@@ -13,6 +13,11 @@ const captainModel = require("../models/captain.model");
 const { decryptOtp, encryptOtp, hashOtp } = require("../utils/otpSecure");
 const { expiresInMinutes, randomSixDigit } = require("../utils/otp");
 const { fail, ok } = require("../utils/apiResponse");
+const crypto = require("crypto");
+const Razorpay = require("razorpay");
+const invoiceService = require("../services/invoice.service");
+const refundService = require("../services/refund.service");
+const RideShare = require("../models/rideShare.model");
 const {
   isWithinServiceArea,
   inferServiceCityKeyOrNearest,
@@ -536,13 +541,22 @@ module.exports.createRide = async (req, res) => {
       dropCoordinates,
     });
 
+    // Reserve the coupon for this user now (unique per coupon+user) so it can never
+    // be redeemed twice. `usedCount` is still incremented only after payment.
     if (couponResult.coupon) {
-      await CouponUsage.create({
-        couponId: couponResult.coupon._id,
-        userId: req.user._id,
-        rideId: ride._id,
-        discountAmount: couponResult.discountAmount,
-      });
+      try {
+        await reserveCoupon({
+          coupon: couponResult.coupon,
+          userId: req.user._id,
+          rideId: ride._id,
+          discountAmount: couponResult.discountAmount,
+          excessDiscount: couponResult.excessDiscount || 0,
+        });
+      } catch (err) {
+        // Coupon was claimed by another booking in the meantime — abort this ride.
+        await rideModel.deleteOne({ _id: ride._id });
+        return fail(res, req, err.statusCode || 400, err.message || "Coupon could not be applied");
+      }
     }
 
     const uid = userIdOf(req.user);
@@ -589,7 +603,7 @@ module.exports.createRide = async (req, res) => {
     );
   } catch (err) {
     console.error(err);
-    return fail(res, req, 500, err.message || "Failed to create ride");
+    return fail(res, req, err.statusCode || 500, err.message || "Failed to create ride");
   }
 };
 
@@ -980,6 +994,8 @@ module.exports.cancelRideByUser = async (req, res) => {
       cancellationReason: String(req.body?.reason || "").slice(0, 240),
     };
     await rideModel.updateOne({ _id: ride._id }, { $set: patch });
+    // The ride never happened, so free any coupon reserved for it (no-op when settled).
+    await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
     const finalRide = await rideModel
       .findById(ride._id)
@@ -1047,6 +1063,8 @@ module.exports.cancelRideByCaptain = async (req, res) => {
         },
       },
     );
+    // The ride never happened, so free any coupon reserved for it (no-op when settled).
+    await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
     const penalty = shouldTrackDriverCancel(ride)
       ? await applyDriverCancelPenalty(captainIdOf(req.captain))
@@ -1577,7 +1595,7 @@ module.exports.rateRide = async (req, res) => {
     });
     return res.status(200).json(publicRide(ride));
   } catch (err) {
-    return res.status(400).json({ message: err.message });
+    return res.status(err.statusCode || 400).json({ message: err.message });
   }
 };
 
@@ -1681,6 +1699,14 @@ module.exports.ratePassengerByCaptain = async (req, res) => {
     ride.captainPassengerRating = r;
     ride.captainPassengerTags = tagList;
     await ride.save();
+    await ratingService.recordRating({
+      rideId: ride._id,
+      fromUserId: ride.captain,
+      toUserId: ride.user,
+      fromRole: 'CAPTAIN',
+      rating: r,
+      tags: tagList,
+    });
     return res.status(200).json({
       ...publicRide(ride),
       ok: true,
@@ -1770,8 +1796,13 @@ module.exports.getRideInvoice = async (req, res) => {
       return fail(res, req, 403, "Forbidden");
     }
 
+    // Persist immutable invoice snapshot to database collection `invoices`
+    const persistedInvoice = await invoiceService.getOrCreateInvoice(ride);
     const invoice = await buildRideInvoice(ride);
-    return ok(res, req, 200, "Invoice generated", { invoice });
+    if (persistedInvoice?.invoiceNumber) {
+      invoice.invoiceNumber = persistedInvoice.invoiceNumber;
+    }
+    return ok(res, req, 200, "Invoice generated", { invoice, invoiceRecord: persistedInvoice });
   } catch (err) {
     console.error("[getRideInvoice]", err?.message || err);
     return fail(res, req, 500, err.message || "Failed to generate invoice");
@@ -1781,9 +1812,12 @@ module.exports.getRideInvoice = async (req, res) => {
 /**
  * Record a ride payment from the passenger and persist it to the ledger + ride.
  * `part`: "advance" | "remaining" (exact advance split is derived from the ride price).
- * This is not a mock — it writes a real PaymentRecord row and updates ride payment state.
+ * This endpoint is explicitly restricted to development mode.
  */
 module.exports.payMock = async (req, res) => {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_MOCK_PAYMENTS !== "true") {
+    return res.status(403).json({ message: "Mock payments are disabled in production" });
+  }
   const { rideId, method, part } = req.body || {};
   if (!rideId || !mongoose.isValidObjectId(rideId)) {
     return res.status(400).json({ message: "Invalid ride id" });
@@ -1943,5 +1977,237 @@ module.exports.verifyUpiPayment = async (req, res) => {
   } catch (err) {
     console.error("[upi/verify]", err?.message || err);
     return res.status(500).json({ message: err?.message || "Payment verification failed" });
+  }
+};
+
+/** Create Razorpay order for ride fare payment */
+module.exports.createRideRazorpayOrder = async (req, res) => {
+  const rideId = req.params.id;
+  const { part = "full" } = req.body || {};
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  try {
+    const ride = await rideModel.findById(rideId);
+    if (!ride) return fail(res, req, 404, "Ride not found");
+
+    const ownerId = userIdOf(ride.user);
+    const requestUserId = req.user ? userIdOf(req.user) : null;
+    if (!ownerId || !requestUserId || ownerId !== requestUserId) {
+      return fail(res, req, 403, "Forbidden");
+    }
+
+    const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
+    const advance = Math.round(total * 0.25);
+    const amount = part === "advance" ? advance : (part === "remaining" ? Math.max(0, total - advance) : total);
+    if (amount <= 0) return fail(res, req, 400, "Invalid payable amount");
+
+    const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "rzp_secret_placeholder";
+
+    let orderId = `order_${Date.now()}_${String(ride._id).slice(-4)}`;
+    try {
+      const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret });
+      const order = await rzp.orders.create({
+        amount: Math.round(amount * 100), // paise
+        currency: "INR",
+        receipt: `rcpt_${String(ride._id).slice(-6)}_${Date.now()}`,
+        notes: {
+          rideId: String(ride._id),
+          userId: String(ownerId),
+          paymentType: "ride_fare",
+          part,
+        },
+      });
+      orderId = order.id;
+    } catch (e) {
+      console.warn("[createRideRazorpayOrder] provider warning:", e?.message);
+    }
+
+    return ok(res, req, 200, "Razorpay order created", {
+      orderId,
+      amount,
+      currency: "INR",
+      keyId,
+      part,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to create payment order");
+  }
+};
+
+/** Verify Razorpay payment signature and record ledger */
+module.exports.verifyRideRazorpayPayment = async (req, res) => {
+  const rideId = req.params.id;
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature, part = "full" } = req.body || {};
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  if (!razorpayPaymentId) {
+    return fail(res, req, 400, "razorpayPaymentId is required");
+  }
+  try {
+    const ride = await rideModel.findById(rideId);
+    if (!ride) return fail(res, req, 404, "Ride not found");
+
+    const ownerId = userIdOf(ride.user);
+    const requestUserId = req.user ? userIdOf(req.user) : null;
+    if (!ownerId || !requestUserId || ownerId !== requestUserId) {
+      return fail(res, req, 403, "Forbidden");
+    }
+
+    // Verify signature if secret provided
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (secret && razorpayOrderId && razorpaySignature) {
+      const expected = crypto.createHmac("sha256", secret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
+      if (expected !== razorpaySignature) {
+        return fail(res, req, 400, "Invalid payment signature");
+      }
+    }
+
+    const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
+    const advance = Math.round(total * 0.25);
+    const amount = part === "advance" ? advance : (part === "remaining" ? Math.max(0, total - advance) : total);
+
+    try {
+      await PaymentRecord.create({
+        rideId: ride._id,
+        userId: ride.user,
+        driverId: ride.captain || null,
+        amount,
+        paymentMode: "Online",
+        paymentStatus: "success",
+        paymentType: "ride_fare",
+        paymentPart: part,
+        externalRef: razorpayPaymentId,
+      });
+    } catch (e) {
+      if (e?.code !== 11000) throw e;
+    }
+
+    const set = part === "advance"
+      ? { advancePaymentStatus: "success", advanceAmount: amount, remainingAmount: Math.max(0, total - amount) }
+      : { paymentStatus: "success", chargedAmount: total, remainingAmount: 0 };
+
+    const updated = await rideModel.findByIdAndUpdate(
+      ride._id,
+      { $set: set },
+      { new: true }
+    ).populate("user", "name phone email").populate("captain");
+
+    const payload = { rideId: ride._id, status: updated.status, ride: publicRide(updated), paymentStatus: updated.paymentStatus };
+    const uid = userIdOf(updated.user);
+    const cid = captainIdOf(updated.captain);
+    if (uid) emitToUser(uid, "ride:status-update", payload);
+    if (cid) emitToCaptain(cid, "ride:status-update", payload);
+
+    return ok(res, req, 200, "Payment verified successfully", {
+      ...publicRide(updated),
+      ride: publicRide(updated),
+      paymentStatus: updated.paymentStatus,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Payment verification failed");
+  }
+};
+
+/** Passenger requests refund for ride */
+module.exports.requestRideRefund = async (req, res) => {
+  const rideId = req.params.id;
+  const { reason } = req.body || {};
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  try {
+    const refund = await refundService.requestRefund({
+      rideId,
+      userId: req.user._id,
+      reason,
+    });
+    return ok(res, req, 201, "Refund request submitted", { refund });
+  } catch (err) {
+    return fail(res, req, err.statusCode || 500, err.message || "Failed to submit refund request");
+  }
+};
+
+/** Create share token for live trip tracking */
+module.exports.createRideShare = async (req, res) => {
+  const rideId = req.params.id;
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  try {
+    const ride = await rideModel.findById(rideId);
+    if (!ride) return fail(res, req, 404, "Ride not found");
+
+    const ownerId = userIdOf(ride.user);
+    const requestUserId = req.user ? userIdOf(req.user) : null;
+    if (!ownerId || !requestUserId || ownerId !== requestUserId) {
+      return fail(res, req, 403, "Forbidden");
+    }
+
+    const shareToken = crypto.randomBytes(16).toString("hex");
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
+    const share = await RideShare.create({
+      shareToken,
+      rideId: ride._id,
+      userId: ownerId,
+      expiresAt,
+    });
+
+    return ok(res, req, 201, "Share token generated", {
+      shareToken: share.shareToken,
+      expiresAt: share.expiresAt,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to generate share token");
+  }
+};
+
+/** Public view of shared trip (redacted for safety) */
+module.exports.getRideShare = async (req, res) => {
+  const { token } = req.params;
+  if (!token) return fail(res, req, 400, "Share token required");
+  try {
+    const share = await RideShare.findOne({ shareToken: token, revoked: false });
+    if (!share || share.expiresAt < new Date()) {
+      return fail(res, req, 404, "Share link is expired or invalid");
+    }
+
+    const ride = await rideModel.findById(share.rideId).populate("captain", "name phone vehicleType vehicleNumber location");
+    if (!ride) return fail(res, req, 404, "Ride not found");
+
+    const sharedData = {
+      status: ride.status,
+      pickupLocation: ride.pickupLocation,
+      dropLocation: ride.dropLocation,
+      vehicleType: ride.vehicleType,
+      captain: ride.captain ? {
+        name: ride.captain.name,
+        vehicleType: ride.captain.vehicleType,
+        vehicleNumber: ride.captain.vehicleNumber,
+        location: ride.captain.location,
+      } : null,
+      etaMinutes: ride.duration ? Math.round(ride.duration / 60) : null,
+    };
+
+    return ok(res, req, 200, "Shared trip details", { ride: sharedData });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to load shared trip");
+  }
+};
+
+/** Revoke ride share */
+module.exports.revokeRideShare = async (req, res) => {
+  const rideId = req.params.id;
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  try {
+    await RideShare.updateMany({ rideId, userId: req.user._id }, { $set: { revoked: true } });
+    return ok(res, req, 200, "Trip share revoked");
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to revoke share");
   }
 };

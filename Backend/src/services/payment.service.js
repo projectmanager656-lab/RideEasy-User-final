@@ -56,7 +56,11 @@ async function recordRideFareLedger(
           driverId: populated.captain?._id ?? populated.captain,
           userId: populated.user?._id ?? populated.user,
           amount: payableAmount,
-          paymentMode: "Cash",
+          discountAmount: Number(populated.discountAmount || 0),
+          couponCode: populated.couponCode || "",
+          originalFare: Number(populated.originalFare ?? populated.price ?? 0),
+          finalPayableAmount: payableAmount,
+          paymentMode: populated.paymentMethod || "Cash",
           paymentStatus: "success",
           paymentType: "ride_fare",
         },
@@ -110,7 +114,7 @@ async function settleRidePaymentIfNeeded(rideId) {
           captainNetEarning: null,
         })
         .select(
-          "paymentStatus captainNetEarning price discountAmount captain",
+          "paymentStatus captainNetEarning price discountAmount couponCode captain",
         )
         .session(session);
 
@@ -206,6 +210,11 @@ async function settleRidePaymentIfNeeded(rideId) {
         session,
         updatedRide,
       );
+
+      if (ride.couponCode) {
+        const { settleCouponRedemption } = require("./coupon.service");
+        await settleCouponRedemption({ rideId: rid, session });
+      }
 
       settledRide = updatedRide;
     });

@@ -6,6 +6,7 @@ const { LOCATION_UPDATE } = require("./rideSocket.events");
 const { emitJoinCatchUp } = require("./rideJoinCatchUp");
 const userModel = require("../models/user.model");
 const captainModel = require("../models/captain.model");
+const adminModel = require("../models/admin.model");
 const blackListTokenModel = require("../models/blackListToken.model");
 const rideModel = require("../models/rideCore.model");
 const DriverLocation = require("../models/driverLocation.model");
@@ -132,6 +133,11 @@ function emitToCaptain(captainId, event, data) {
   io.to(roomName).emit(event, data);
 }
 
+function emitToAdmin(event, data) {
+  if (!io) return;
+  io.to("admin").emit(event, data);
+}
+
 /**
  * Emit standardized ride phase events (in addition to legacy events).
  * Enable with RIDEEASY_STANDARD_SOCKET_EVENTS=true
@@ -199,15 +205,19 @@ function initializeSocket(server, app) {
       const role = decoded?.role;
       if (
         !mongoose.isValidObjectId(id) ||
-        !["user", "captain"].includes(role)
+        !["user", "captain", "admin"].includes(role)
       ) {
         return next(new Error("Unauthorized"));
       }
-      const account =
-        role === "user"
-          ? await userModel.findById(id).select("_id blocked")
-          : await captainModel.findById(id).select("_id blocked");
-      if (!account || account.blocked) return next(new Error("Unauthorized"));
+      let account;
+      if (role === "user") {
+        account = await userModel.findById(id).select("_id blocked");
+      } else if (role === "captain") {
+        account = await captainModel.findById(id).select("_id blocked");
+      } else if (role === "admin") {
+        account = await adminModel.findById(id).select("_id");
+      }
+      if (!account || (account.blocked && role !== "admin")) return next(new Error("Unauthorized"));
       socket.data.jwtPayload = decoded;
       socket.data.jwtUserId = String(account._id);
       socket.data.jwtRole = role;
@@ -226,9 +236,12 @@ function initializeSocket(server, app) {
     socket.on("join", async () => {
       const id = socket.data.jwtUserId;
       const role = socket.data.jwtRole;
-      if (!id || !["user", "captain"].includes(role)) return;
+      if (!id || !["user", "captain", "admin"].includes(role)) return;
 
-      if (role === "user") {
+      if (role === "admin") {
+        socket.join("admin");
+        slog("join admin", { adminId: id, socket: socket.id });
+      } else if (role === "user") {
         try {
           await userModel.findByIdAndUpdate(id, { socketId: socket.id });
         } catch (e) {
@@ -251,6 +264,13 @@ function initializeSocket(server, app) {
         joinDriverSocketRooms(socket, id, cityKey);
         void emitJoinCatchUp(socket);
         slog("join captain", { city: cityKey, socket: socket.id });
+      }
+    });
+
+    socket.on("admin:join", () => {
+      if (socket.data.jwtRole === "admin") {
+        socket.join("admin");
+        slog("admin:join", { adminId: socket.data.jwtUserId, socket: socket.id });
       }
     });
 
@@ -374,6 +394,7 @@ module.exports = {
   sendMessageToSocketId,
   emitToUser,
   emitToCaptain,
+  emitToAdmin,
   emitStandardRidePhase,
   STANDARD_PHASE_EVENTS,
   getIo,

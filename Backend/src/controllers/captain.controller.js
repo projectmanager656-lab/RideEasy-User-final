@@ -13,6 +13,7 @@ const { toPublicDoc } = require("../utils/publicDoc");
 const { ok, fail } = require("../utils/apiResponse");
 const { logLoginRequestBody } = require("../utils/loginDebug");
 const driverService = require("../services/driver.service");
+const notificationService = require("../services/notification.service");
 
 /** Minimal identity payload for authentication responses; full details remain on /captains/profile. */
 function toCaptainLoginDoc(captain) {
@@ -364,4 +365,33 @@ module.exports.verifyDriverPhoneOtp = async (req, res) => {
   await captain.save();
   const token = captain.generateAuthToken();
   return res.status(200).json({ token, captain: toPublicDoc(captain) });
+};
+
+module.exports.saveDeviceToken = async (req, res) => {
+  try {
+    const captainId = req.captain?._id;
+    const { token, platform, appVersion } = req.body || {};
+    if (!token) return fail(res, req, 400, "Token is required");
+    const record = await notificationService.registerDeviceToken({
+      captainId,
+      role: "captain",
+      token,
+      platform,
+      appVersion,
+    });
+    return ok(res, req, 200, "Device token saved", { deviceToken: record });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to save device token");
+  }
+};
+
+module.exports.removeDeviceToken = async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return fail(res, req, 400, "Token is required");
+    await notificationService.removeDeviceToken(token);
+    return ok(res, req, 200, "Device token removed");
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to remove device token");
+  }
 };

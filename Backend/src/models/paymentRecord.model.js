@@ -28,6 +28,10 @@ const paymentRecordSchema = new mongoose.Schema(
       sparse: true,
     },
     amount: { type: Number, required: true },
+    discountAmount: { type: Number, default: 0 },
+    couponCode: { type: String, default: "" },
+    originalFare: { type: Number },
+    finalPayableAmount: { type: Number },
     /** Ride settlements and captain subscription-plan records. */
     paymentMode: { type: String, enum: ["Cash", "UPI", "Online", "Wallet", "PLAN"], required: true },
     paymentPart: { type: String, enum: ["advance", "remaining", "full"], default: "full" },

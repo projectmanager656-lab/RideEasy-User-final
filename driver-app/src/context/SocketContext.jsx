@@ -1,6 +1,7 @@
 import React, { createContext, useEffect, useMemo } from 'react'
 import { io } from 'socket.io-client'
 import { getSocketBaseUrl } from '../config/apiBaseUrl'
+import { getCaptainToken } from '../utils/authTokens'
 
 export const SocketContext = createContext(undefined)
 
@@ -55,29 +56,44 @@ const SocketProvider = ({ children }) => {
     logSocket('initializing', { url: socketUrl })
 
     let cancelled = false
+    const liveUrl = `${socketUrl}/health/live`
 
-    ;(async () => {
-      const liveUrl = `${socketUrl}/health/live`
+    const syncConnection = async () => {
+      const token = getCaptainToken()
+      if (!token) {
+        if (socket.connected) socket.disconnect()
+        return
+      }
       for (let i = 0; i < 24 && !cancelled; i++) {
         try {
           const res = await fetch(liveUrl, { cache: 'no-store' })
-          if (res.ok) {
-            logSocket('backend live OK', liveUrl)
-            break
-          }
+          if (res.ok) break
         } catch {
           /* backend not listening yet */
         }
         await new Promise((r) => setTimeout(r, 400))
       }
-      if (!cancelled) {
-        logSocket('calling socket.connect()')
+      if (cancelled) return
+      // The backend rejects unauthenticated sockets and targets drivers by the
+      // captain id inside the JWT, so the token must be in the handshake.
+      if (socket.auth?.token !== token) {
+        socket.auth = { token }
+        if (socket.connected) socket.disconnect()
+      }
+      if (!socket.connected) {
+        logSocket('backend live OK', liveUrl)
+        logSocket('calling socket.connect()', { authenticated: true })
         socket.connect()
       }
-    })()
+    }
+
+    const onSessionChanged = () => { void syncConnection() }
+    window.addEventListener('rideeasy:session-changed', onSessionChanged)
+    void syncConnection()
 
     return () => {
       cancelled = true
+      window.removeEventListener('rideeasy:session-changed', onSessionChanged)
     }
   }, [])
 

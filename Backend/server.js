@@ -2,6 +2,7 @@ require('dotenv').config();
 const http = require('http');
 const app = require('./src/app');
 const { ensureDbConnected, disconnectDb } = require('./src/config/db');
+const { releaseStaleCouponReservations } = require('./src/services/coupon.service');
 const { initializeSocket } = require('./src/socket');
 const { getAllowedOriginsList } = require('./src/config/cors.config');
 
@@ -51,6 +52,22 @@ async function start() {
             console.log('[CORS] Socket.IO + REST allow origins:', getAllowedOriginsList());
         }
     });
+
+    /**
+     * One-shot, non-fatal, idempotent data repair: free coupons held by rides stuck in
+     * `searching` past PENDING_RIDE_MAX_AGE_MIN. There is no scheduler in this codebase,
+     * so this runs once per boot; if a recurring sweep is ever wanted, call the same
+     * exported function from a cron/maintenance job (it is safe to run repeatedly).
+     */
+    void releaseStaleCouponReservations()
+        .then(({ staleRides, released }) => {
+            if (released > 0) {
+                console.log(`[coupon] released ${released} stale reservation(s) from ${staleRides} stale searching ride(s)`);
+            }
+        })
+        .catch((err) => {
+            console.warn('[coupon] stale reservation sweep skipped:', err?.message || err);
+        });
 }
 
 start();

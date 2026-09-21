@@ -83,6 +83,18 @@ router.post('/upi/verify', auth.authUser, rideController.verifyUpiPayment);
 /** Passenger invoice built from the actual ride + payment ledger. */
 router.get('/:id/invoice', auth.authUser, rideController.getRideInvoice);
 
+// Razorpay ride payments
+router.post('/:id/create-razorpay-order', auth.authUser, rideController.createRideRazorpayOrder);
+router.post('/:id/verify-razorpay-payment', auth.authUser, rideController.verifyRideRazorpayPayment);
+
+// Refund request
+router.post('/:id/refund', auth.authUser, rideController.requestRideRefund);
+
+// Ride Share
+router.get('/shared/:token', rideController.getRideShare);
+router.post('/:id/share', auth.authUser, rideController.createRideShare);
+router.delete('/:id/share', auth.authUser, rideController.revokeRideShare);
+
 router.get('/:id', auth.authUserOrCaptain, rideController.getRideById); // keep after /:id/passenger-otp
 
 module.exports = router;

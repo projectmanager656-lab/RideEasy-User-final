@@ -280,19 +280,23 @@ const ChooseRide = () => {
                 price,
                 fare,
                 couponCode: couponState?.coupon?.code || '',
+                discountAmount: couponState?.coupon ? selectedDiscount : 0,
+                finalFare: couponState?.coupon ? selectedFinalFare : price,
                 distanceKm: fare?.distanceKm != null ? fare.distanceKm : (routeStats?.distanceMeters != null ? routeStats.distanceMeters / 1000 : undefined),
                 scheduledAt,
             },
         })
     }
 
-    const applyCoupon = async (requestedCode = couponCode) => {
-        const code = requestedCode.trim().toUpperCase()
-        if (!code || !selected?.price) return false
+    const applyCoupon = async (requestedCode = couponCode, fareOverride = null) => {
+        const candidate = typeof requestedCode === 'string' ? requestedCode : couponCode
+        const code = (typeof candidate === 'string' ? candidate : '').trim().toUpperCase()
+        const fare = Number(fareOverride ?? selected?.price)
+        if (!code || !Number.isFinite(fare) || fare <= 0) return false
         setCouponLoading(true)
         setBookingError('')
         try {
-            const res = await apiClient.post('/users/coupons/validate', { code, fare: Number(selected.price) }, withAuth())
+            const res = await apiClient.post('/users/coupons/validate', { code, fare }, withAuth())
             const body = stripApiEnvelope(res.data)
             setCouponState(body)
             setCouponCode(code)
@@ -304,6 +308,13 @@ const ChooseRide = () => {
         } finally {
             setCouponLoading(false)
         }
+    }
+
+    // Coupon amounts depend on the fare, so re-validate whenever the chosen tier changes.
+    const selectTier = (tier) => {
+        setSelectedTier(tier)
+        const appliedCode = couponState?.coupon?.code
+        if (appliedCode && Number(tier?.price) > 0) applyCoupon(appliedCode, tier.price)
     }
 
     const selectedOriginalFare = Number(selected?.price || 0)
@@ -425,7 +436,7 @@ const ChooseRide = () => {
                                 <button
                                     key={tier.id}
                                     type="button"
-                                    onClick={() => setSelectedTier(tier)}
+                                    onClick={() => selectTier(tier)}
                                     className={[
                                         'flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition active:scale-[0.99]',
                                         isSelected
@@ -454,9 +465,16 @@ const ChooseRide = () => {
                                         </span>
                                     </span>
                                     <span className="flex shrink-0 flex-col items-end gap-1">
-                                        <span className="text-sm font-bold text-theme-primary">
-                                            {priceText ?? '—'}
-                                        </span>
+                                        {isSelected && couponState?.coupon && selectedDiscount > 0 ? (
+                                            <>
+                                                <span className="text-[11px] font-medium text-theme-muted line-through">{formatPrice(selectedOriginalFare)}</span>
+                                                <span className="text-sm font-bold text-emerald-400">{formatPrice(selectedFinalFare)}</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-sm font-bold text-theme-primary">
+                                                {priceText ?? '—'}
+                                            </span>
+                                        )}
                                         {isSelected && (
                                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-yellow text-black">
                                                 <i className="ri-check-line text-xs" aria-hidden />
@@ -470,6 +488,18 @@ const ChooseRide = () => {
 
                     {bookingError && (
                         <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{bookingError}</p>
+                    )}
+
+                    {couponState?.coupon && (
+                        <div className="mt-3 space-y-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="font-semibold text-emerald-400">{couponState.coupon.code} applied</span>
+                                <button type="button" onClick={() => { setCouponState(null); setCouponCode('') }} className="font-semibold text-red-400 active:scale-95">Remove</button>
+                            </div>
+                            <div className="flex justify-between text-theme-secondary"><span>Fare</span><span>{formatPrice(selectedOriginalFare)}</span></div>
+                            <div className="flex justify-between text-emerald-400"><span>{couponState.coupon.code}</span><span>−{formatPrice(selectedDiscount)}</span></div>
+                            <div className="flex justify-between font-bold text-theme-primary"><span>You pay</span><span>{formatPrice(selectedFinalFare)}</span></div>
+                        </div>
                     )}
                 </div>
 
@@ -597,9 +627,18 @@ const ChooseRide = () => {
                         <div className="mt-4 border-t border-theme pt-4">
                             <div className="flex gap-2">
                                 <input value={couponCode} onChange={(e) => { setCouponCode(e.target.value); setCouponState(null) }} placeholder="Enter coupon code" className="min-w-0 flex-1 rounded-lg border border-theme bg-theme-bg px-3 py-2.5 text-sm text-theme-primary outline-none" />
-                                <button type="button" onClick={applyCoupon} disabled={couponLoading || !couponCode.trim()} className="rounded-lg border border-brand-yellow px-3 py-2 text-xs font-bold text-brand-yellow disabled:opacity-50">{couponLoading ? 'Checking…' : 'Apply'}</button>
+                                <button type="button" onClick={() => applyCoupon()} disabled={couponLoading || !couponCode.trim()} className="rounded-lg border border-brand-yellow px-3 py-2 text-xs font-bold text-brand-yellow disabled:opacity-50">{couponLoading ? 'Checking…' : 'Apply'}</button>
                             </div>
-                            {couponState?.coupon && <div className="mt-3 space-y-1 text-xs"><p className="text-emerald-400">{couponState.coupon.title} applied</p><p className="flex justify-between text-theme-muted"><span>Original fare</span><span>{formatPrice(selectedOriginalFare)}</span></p><p className="flex justify-between text-emerald-400"><span>Discount</span><span>−{formatPrice(selectedDiscount)}</span></p><p className="flex justify-between font-bold text-theme-primary"><span>Final fare</span><span>{formatPrice(selectedFinalFare)}</span></p></div>}
+                            {couponState?.coupon && <div className="mt-3 space-y-1 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-emerald-400">{couponState.coupon.title} applied</p>
+                                    <button type="button" onClick={() => { setCouponState(null); setCouponCode('') }} className="text-[11px] font-semibold text-red-400 active:scale-95">Remove</button>
+                                </div>
+                                <p className="flex justify-between text-theme-muted"><span>Original fare</span><span>{formatPrice(selectedOriginalFare)}</span></p>
+                                <p className="flex justify-between text-emerald-400"><span>Discount</span><span>−{formatPrice(selectedDiscount)}</span></p>
+                                <p className="flex justify-between font-bold text-theme-primary"><span>Final fare</span><span>{formatPrice(selectedFinalFare)}</span></p>
+                                {Number(couponState.excessDiscount || 0) > 0 && <p className="text-emerald-400">{formatPrice(Number(couponState.excessDiscount))} excess will be credited to your wallet</p>}
+                            </div>}
                         </div>
                     </div>
                 </div>

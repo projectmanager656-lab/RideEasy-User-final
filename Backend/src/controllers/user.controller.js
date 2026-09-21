@@ -10,6 +10,11 @@ const { ok, fail } = require('../utils/apiResponse');
 const { logLoginRequestBody } = require('../utils/loginDebug');
 const axios = require('axios');
 const WalletTransaction = require('../models/walletTransaction.model');
+const RecentSearch = require('../models/recentSearch.model');
+const SavedLocation = require('../models/savedLocation.model');
+const SosEvent = require('../models/sosEvent.model');
+const EmergencyContact = require('../models/emergencyContact.model');
+const notificationService = require('../services/notification.service');
 const { listAvailableCoupons, validateCoupon } = require('../services/coupon.service');
 
 async function generateUniqueReferralCode(seed = '') {
@@ -129,6 +134,7 @@ module.exports.validateCoupon = async (req, res) => {
             coupon: result.coupon,
             discountAmount: result.discountAmount,
             finalFare: result.finalFare,
+            excessDiscount: result.excessDiscount || 0,
         });
     } catch (err) {
         return fail(res, req, err.statusCode || 400, err.message);
@@ -335,11 +341,21 @@ module.exports.verifyPhoneOtp = async (req, res) => {
     return res.status(200).json({ token, user: toPublicDoc(user) });
 };
 
+function publicEmergencyContact (doc) {
+    if (!doc?.name) return null;
+    return { name: doc.name, phone: doc.phone || '', relationship: doc.relationship || '' };
+}
+
 module.exports.getEmergencyContact = async (req, res) => {
-    const user = await userModel.findById(req.user?._id).select('emergencyContact');
-    if (!user) return fail(res, req, 404, 'User not found');
+    const userId = req.user?._id;
+    let contact = await EmergencyContact.findOne({ userId, isActive: true }).sort({ updatedAt: -1 }).lean();
+    if (!contact) {
+        // Legacy fallback: contact stored on the user document.
+        const user = await userModel.findById(userId).select('emergencyContact').lean();
+        if (user?.emergencyContact?.name) contact = user.emergencyContact;
+    }
     return ok(res, req, 200, 'Emergency contact fetched', {
-        emergencyContact: user.emergencyContact?.name ? user.emergencyContact : null,
+        emergencyContact: publicEmergencyContact(contact),
     });
 };
 
@@ -350,22 +366,21 @@ module.exports.saveEmergencyContact = async (req, res) => {
     if (name.length < 2 || phone.length !== 10 || !relationship) {
         return fail(res, req, 400, 'Valid emergency contact details are required');
     }
-    const user = await userModel.findByIdAndUpdate(
-        req.user?._id,
-        { $set: { emergencyContact: { name, phone, relationship } } },
-        { new: true, runValidators: true },
-    ).select('emergencyContact');
-    if (!user) return fail(res, req, 404, 'User not found');
-    return ok(res, req, 200, 'Emergency contact saved', { emergencyContact: user.emergencyContact });
+    const userId = req.user?._id;
+    const contact = await EmergencyContact.findOneAndUpdate(
+        { userId },
+        { $set: { name, phone, relationship, isActive: true } },
+        { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true },
+    ).lean();
+    // Mirror onto the user document so existing admin/SOS views keep working.
+    await userModel.findByIdAndUpdate(userId, { $set: { emergencyContact: { name, phone, relationship } } });
+    return ok(res, req, 200, 'Emergency contact saved', { emergencyContact: publicEmergencyContact(contact) });
 };
 
 module.exports.deleteEmergencyContact = async (req, res) => {
-    const user = await userModel.findByIdAndUpdate(
-        req.user?._id,
-        { $set: { emergencyContact: { name: '', phone: '', relationship: '' } } },
-        { new: true },
-    ).select('emergencyContact');
-    if (!user) return fail(res, req, 404, 'User not found');
+    const userId = req.user?._id;
+    await EmergencyContact.deleteMany({ userId });
+    await userModel.findByIdAndUpdate(userId, { $set: { emergencyContact: { name: '', phone: '', relationship: '' } } });
     return ok(res, req, 200, 'Emergency contact deleted', { emergencyContact: null });
 };
 
@@ -400,6 +415,284 @@ module.exports.getOnboardingStatus = async (req, res) => {
     } catch (err) {
         console.error('[users/onboarding/status]', err?.message || err);
         return fail(res, req, 500, 'Could not fetch onboarding state');
+    }
+};
+
+/** Recent Searches */
+module.exports.getRecentSearches = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const list = await RecentSearch.find({ userId }).sort({ createdAt: -1 }).limit(10).lean();
+        return ok(res, req, 200, 'Recent searches fetched', { recentSearches: list });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to fetch recent searches');
+    }
+};
+
+module.exports.createRecentSearch = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { pickup, destination, pickupCoords, dropCoords, detail } = req.body || {};
+        if (!pickup || !destination) {
+            return fail(res, req, 400, 'Pickup and destination are required');
+        }
+        // Deduplicate recent search
+        await RecentSearch.deleteMany({ userId, pickup: String(pickup).trim(), destination: String(destination).trim() });
+        const record = await RecentSearch.create({
+            userId,
+            pickup: String(pickup).trim(),
+            destination: String(destination).trim(),
+            pickupCoords: pickupCoords || null,
+            dropCoords: dropCoords || null,
+            detail: detail || '',
+        });
+        return ok(res, req, 201, 'Recent search saved', { recentSearch: record });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to save recent search');
+    }
+};
+
+module.exports.deleteRecentSearch = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { id } = req.params;
+        await RecentSearch.deleteOne({ _id: id, userId });
+        return ok(res, req, 200, 'Recent search deleted');
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to delete recent search');
+    }
+};
+
+module.exports.clearRecentSearches = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        await RecentSearch.deleteMany({ userId });
+        return ok(res, req, 200, 'Recent searches cleared');
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to clear recent searches');
+    }
+};
+
+/** Saved Locations */
+module.exports.getSavedLocations = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const list = await SavedLocation.find({ userId }).sort({ updatedAt: -1 }).lean();
+        return ok(res, req, 200, 'Saved locations fetched', { savedLocations: list });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to fetch saved locations');
+    }
+};
+
+module.exports.createSavedLocation = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { type = 'other', label, address, latitude, longitude } = req.body || {};
+        if (!address) return fail(res, req, 400, 'Address is required');
+
+        const saved = await SavedLocation.create({
+            userId,
+            type: ['home', 'work', 'favorite', 'other'].includes(type) ? type : 'other',
+            label: label || '',
+            address: String(address).trim(),
+            latitude: latitude != null ? Number(latitude) : null,
+            longitude: longitude != null ? Number(longitude) : null,
+        });
+
+        // Sync with user's quick savedAddresses if home or work
+        if (type === 'home' || type === 'work') {
+            await userModel.findByIdAndUpdate(userId, {
+                $set: { [`savedAddresses.${type}`]: String(address).trim() },
+            });
+        }
+
+        return ok(res, req, 201, 'Saved location created', { savedLocation: saved });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to create saved location');
+    }
+};
+
+module.exports.updateSavedLocation = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { id } = req.params;
+        const { type, label, address, latitude, longitude } = req.body || {};
+        const update = {};
+        if (type) update.type = type;
+        if (label !== undefined) update.label = label;
+        if (address) update.address = String(address).trim();
+        if (latitude !== undefined) update.latitude = Number(latitude);
+        if (longitude !== undefined) update.longitude = Number(longitude);
+
+        const updated = await SavedLocation.findOneAndUpdate({ _id: id, userId }, { $set: update }, { new: true });
+        if (!updated) return fail(res, req, 404, 'Saved location not found');
+
+        if (updated.type === 'home' || updated.type === 'work') {
+            await userModel.findByIdAndUpdate(userId, {
+                $set: { [`savedAddresses.${updated.type}`]: updated.address },
+            });
+        }
+
+        return ok(res, req, 200, 'Saved location updated', { savedLocation: updated });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to update saved location');
+    }
+};
+
+module.exports.deleteSavedLocation = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { id } = req.params;
+        const deleted = await SavedLocation.findOneAndDelete({ _id: id, userId });
+        if (!deleted) return fail(res, req, 404, 'Saved location not found');
+
+        if (deleted.type === 'home' || deleted.type === 'work') {
+            await userModel.findByIdAndUpdate(userId, {
+                $set: { [`savedAddresses.${deleted.type}`]: '' },
+            });
+        }
+        return ok(res, req, 200, 'Saved location deleted');
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to delete saved location');
+    }
+};
+
+/** Device Push Token */
+module.exports.saveDeviceToken = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { token, platform, appVersion } = req.body || {};
+        if (!token) return fail(res, req, 400, 'Token is required');
+        const record = await notificationService.registerDeviceToken({
+            userId,
+            role: 'user',
+            token,
+            platform,
+            appVersion,
+        });
+        return ok(res, req, 200, 'Device token saved', { deviceToken: record });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to save device token');
+    }
+};
+
+module.exports.removeDeviceToken = async (req, res) => {
+    try {
+        const { token } = req.body || {};
+        if (!token) return fail(res, req, 400, 'Token is required');
+        await notificationService.removeDeviceToken(token);
+        return ok(res, req, 200, 'Device token removed');
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to remove device token');
+    }
+};
+
+/** SOS Emergency */
+module.exports.triggerSos = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const { rideId } = req.body || {};
+        // Accept both `{ lat, lng }` and the frontend shape `{ location: { lat, lng } }`.
+        const lat = req.body?.lat ?? req.body?.location?.lat;
+        const lng = req.body?.lng ?? req.body?.location?.lng;
+        const hasCoords = Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+        const location = hasCoords
+            ? { type: 'Point', coordinates: [Number(lng), Number(lat)] }
+            : undefined;
+
+        const event = await SosEvent.create({
+            userId,
+            rideId: rideId || null,
+            location,
+            status: 'triggered',
+        });
+
+        // Broadcast to admin room via Socket.IO
+        const socketModule = require('../socket');
+        const io = socketModule.getIo();
+        if (io) {
+            io.to('admin').emit('admin:sos', {
+                sosId: event._id,
+                userId,
+                rideId,
+                location,
+                status: 'triggered',
+                createdAt: event.createdAt,
+            });
+        }
+
+        // Persist notification for user & admin
+        await notificationService.createPersisted({
+            receiverId: userId,
+            receiverType: 'user',
+            title: 'SOS Emergency Activated',
+            message: 'Your emergency alert has been broadcast to RideEasy safety operations.',
+            type: 'system',
+            meta: { sosId: event._id },
+        });
+
+        return ok(res, req, 201, 'SOS emergency triggered', { sosEvent: event });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to trigger SOS');
+    }
+};
+
+module.exports.getActiveSos = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const active = await SosEvent.findOne({
+            userId,
+            status: { $in: ['triggered', 'acknowledged'] },
+        }).sort({ createdAt: -1 });
+        return ok(res, req, 200, 'SOS status fetched', { activeSos: active });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to fetch active SOS');
+    }
+};
+
+module.exports.deactivateSos = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        await SosEvent.updateMany(
+            { userId, status: { $in: ['triggered', 'acknowledged'] } },
+            { $set: { status: 'resolved', resolvedAt: new Date(), resolutionNotes: 'Deactivated by user' } },
+        );
+        return ok(res, req, 200, 'SOS deactivated');
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Failed to deactivate SOS');
+    }
+};
+
+/** Wallet Top-Up */
+module.exports.topupWallet = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const amount = Number(req.body?.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return fail(res, req, 400, 'Valid positive amount is required');
+        }
+
+        const updatedUser = await userModel.findByIdAndUpdate(
+            userId,
+            { $inc: { walletBalance: amount } },
+            { new: true },
+        ).select('walletBalance');
+
+        const tx = await WalletTransaction.create({
+            userId,
+            amount,
+            direction: 'credit',
+            status: 'success',
+            reference: `topup_${Date.now()}_${userId}`,
+            description: `Wallet top-up of ₹${amount}`,
+        });
+
+        return ok(res, req, 200, 'Wallet topped up successfully', {
+            walletBalance: updatedUser.walletBalance,
+            transaction: tx,
+        });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Wallet topup failed');
     }
 };
 

@@ -21,6 +21,7 @@ const en = {
   set_primary_contact: 'Set as primary contact',
   name_placeholder: 'e.g. Mom',
   relationship_placeholder: 'e.g. Sister',
+  relationship_required_error: 'Please choose a relationship.',
   contact_required_error: 'Please enter a name and phone number.',
 
   // --- Safety: SOS ---
@@ -146,6 +147,7 @@ const hi = {
   set_primary_contact: 'प्राथमिक संपर्क के रूप में सेट करें',
   name_placeholder: 'जैसे: माँ',
   relationship_placeholder: 'जैसे: बहन',
+  relationship_required_error: 'कृपया संबंध चुनें।',
   contact_required_error: 'कृपया नाम और फ़ोन नंबर दर्ज करें।',
 
   sos_emergency: 'आपातकालीन / SOS',
@@ -263,6 +265,7 @@ const mr = {
   set_primary_contact: 'प्राथमिक संपर्क म्हणून सेट करा',
   name_placeholder: 'उदा. आई',
   relationship_placeholder: 'उदा. बहीण',
+  relationship_required_error: 'कृपया नाते निवडा.',
   contact_required_error: 'कृपया नाव आणि फोन नंबर प्रविष्ट करा.',
 
   sos_emergency: 'आपत्कालीन / SOS',

@@ -56,6 +56,8 @@ const rideSchema = new mongoose.Schema({
     discountAmount: { type: Number, default: 0 },
     discountReason: { type: String, default: '' },
     chargedAmount: { type: Number },
+    originalFare: { type: Number },
+    finalFare: { type: Number },
     advanceAmount: { type: Number, default: 0 },
     remainingAmount: { type: Number, default: 0 },
     advancePaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },

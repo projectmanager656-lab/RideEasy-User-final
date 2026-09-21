@@ -5,6 +5,7 @@ const { expiresInMinutes, randomSixDigit } = require('../utils/otp');
 const { encryptOtp, hashOtp, verifyOtp } = require('../utils/otpSecure');
 const pricingService = require('./pricing.service');
 const paymentService = require('./payment.service');
+const ratingService = require('./rating.service');
 const ALLOWED_VEHICLE_TYPES = [ 'BIKE', 'AUTO', 'CAR' ];
 
 function rideError(message, statusCode = 400) {
@@ -114,6 +115,9 @@ module.exports.createRide = async ({
         discountAmount: Number(discountAmount || 0),
         discountReason: discountReason || '',
         couponCode: couponCode || '',
+        originalFare: Math.round(Number(price || 0) * 100) / 100,
+        finalFare: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
+        chargedAmount: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
         status: 'searching',
         paymentMethod: normalizePaymentMethod(paymentMethod),
         paymentStatus: 'pending',
@@ -249,13 +253,27 @@ module.exports.endRide = async ({ rideId, captain }) => {
         );
     }
 
+    const payable = ride.chargedAmount != null
+        ? Number(ride.chargedAmount)
+        : Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
+    const isFullyPaidByCoupon = payable === 0 && Number(ride.discountAmount || 0) > 0;
+
     const patch = {
         status: 'completed',
         completedAt,
         ...(durationSec != null ? { duration: durationSec } : {}),
+        ...(isFullyPaidByCoupon ? { paymentStatus: 'success', chargedAmount: 0 } : {}),
     };
     await rideModel.updateOne({ _id: rideId }, patch);
     await releaseCaptainBusyIfAvailable(captain._id);
+
+    if (isFullyPaidByCoupon) {
+        try {
+            await paymentService.settleRidePaymentIfNeeded(rideId);
+        } catch (e) {
+            console.warn('[endRide] zero-payable coupon settlement warning:', e?.message);
+        }
+    }
     // Cash is settled only when the assigned captain confirms receipt.
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };
@@ -274,6 +292,14 @@ module.exports.rateRide = async ({ rideId, user, rating, comment }) => {
     ride.rating = r;
     ride.ratingComment = (comment || '').slice(0, 500);
     await ride.save();
+    await ratingService.recordRating({
+        rideId: ride._id,
+        fromUserId: ride.user,
+        toUserId: ride.captain || null,
+        fromRole: 'USER',
+        rating: r,
+        comment: ride.ratingComment,
+    });
     if (ride.captain) {
         await captainModel.findByIdAndUpdate(ride.captain, { $inc: { ratingSum: r, ratingCount: 1 } });
     }

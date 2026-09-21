@@ -1,12 +1,13 @@
 /**
- * Safety data for the RideEasy Safety screen.
+ * Safety preferences for the RideEasy Safety screen.
  *
- * Emergency contacts & safety toggles have no backend endpoint yet, so they are
- * persisted to localStorage under namespaced keys (mirrors recentSearches.js).
- * Swap these get/set functions for API calls once backend endpoints exist.
+ * Emergency contacts are NOT here: they are stored server-side via
+ * `/users/emergency-contact` (collection `emergency_contacts`) and read/written by
+ * Safety.jsx and EmergencyContact.jsx directly.
+ *
+ * The toggles below still have no backend endpoint, so they stay device-local.
  */
 
-const CONTACTS_KEY = 'rideeasy_emergency_contacts'
 const PREFS_KEY = 'rideeasy_safety_prefs'
 
 export const DEFAULT_SAFETY_PREFS = {
@@ -28,16 +29,6 @@ function safeSet (key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value))
   } catch { /* ignore */ }
-}
-
-/** @returns {{ id: string, name: string, phone: string, relationship: string, primary: boolean }[] } */
-export function getEmergencyContacts () {
-  const list = safeGet(CONTACTS_KEY, [])
-  return Array.isArray(list) ? list : []
-}
-
-export function saveEmergencyContacts (list) {
-  safeSet(CONTACTS_KEY, Array.isArray(list) ? list : [])
 }
 
 /** @returns {{ shareTripAutomatically: boolean, shareLiveLocation: boolean, safetyNotifications: boolean } } */

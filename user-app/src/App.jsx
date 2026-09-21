@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
 import MoreOptionsModal from './components/MoreOptionsModal'
 import NativeAndroidFlavorRedirect from './components/NativeAndroidFlavorRedirect'
@@ -139,7 +138,6 @@ const App = () => {
             <Route path="/user/logout" element={<UserProtectWrapper><UserLogout /></UserProtectWrapper>} />
           </Routes>
         </Suspense>
-        <InstallPWAButton />
       </div>
       <BottomNav onMoreClick={() => setMoreOpen(true)} />
       <MoreOptionsModal open={moreOpen} onClose={() => setMoreOpen(false)} />

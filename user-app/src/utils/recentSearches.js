@@ -6,6 +6,7 @@
  * single destination (`{ name, detail }`). The `name` field is kept in sync
  * with `destination` so older consumers that read `item.name` keep working.
  */
+import { API_BASE_URL } from '../config/apiBaseUrl'
 
 const RECENT_SEARCHES_KEY = 'rideeasy_recent_searches'
 const MAX_RECENT = 8
@@ -100,8 +101,47 @@ export function addRecentSearch (params) {
             ...list.filter((item) => dedupeKey(item) !== key),
         ].slice(0, MAX_RECENT)
         localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next))
+
+        // Non-blocking sync to backend if authenticated
+        const token = localStorage.getItem('token')
+        if (token && API_BASE_URL) {
+            fetch(`${API_BASE_URL}/users/recent-searches`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    pickup: entry.pickup,
+                    destination: entry.destination,
+                    pickupCoords: entry.pickupCoords,
+                    dropCoords: entry.dropCoords
+                })
+            }).catch(() => {})
+        }
+
         return next
     } catch {
         /* ignore */
     }
+}
+
+export async function fetchBackendRecentSearches () {
+    try {
+        const token = localStorage.getItem('token')
+        if (!token || !API_BASE_URL) return getRecentSearches()
+        const res = await fetch(`${API_BASE_URL}/users/recent-searches`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        const data = await res.json()
+        const items = data?.data?.recentSearches || data?.recentSearches
+        if (Array.isArray(items) && items.length > 0) {
+            const formatted = items.map(entryOf).filter(Boolean)
+            localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(formatted))
+            return formatted
+        }
+    } catch {
+        /* ignore */
+    }
+    return getRecentSearches()
 }

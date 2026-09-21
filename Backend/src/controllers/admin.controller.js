@@ -1,4 +1,4 @@
-﻿const mongoose = require("mongoose");
+const mongoose = require("mongoose");
 const { validationResult } = require("express-validator");
 const { ok, fail } = require("../utils/apiResponse");
 const Admin = require("../models/admin.model");
@@ -6,6 +6,13 @@ const User = require("../models/user.model");
 const Captain = require("../models/captain.model");
 const CaptainOnboarding = require("../models/captainOnboarding.model");
 const Ride = require("../models/rideCore.model");
+const AuditLog = require("../models/auditLog.model");
+const Refund = require("../models/refund.model");
+const SosEvent = require("../models/sosEvent.model");
+const SupportTicket = require("../models/supportTicket.model");
+const Coupon = require("../models/coupon.model");
+const { logAdminAction } = require("../services/auditLog.service");
+const refundService = require("../services/refund.service");
 const pricingService = require("../services/pricing.service");
 
 /** Match ride.controller payRide / COMMISSION_PERCENT default (15%). */
@@ -343,6 +350,14 @@ module.exports.approveDriver = async (req, res) => {
       "name email phone servingCity vehicleType vehicleNumber approved blocked subscriptionStatus",
     );
     if (!driver) return fail(res, req, 404, "Driver not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "approve_driver",
+      targetType: "driver",
+      targetId: id,
+      newValue: { approved: true, servingCity, vehicleType },
+      req,
+    });
     return ok(
       res,
       req,
@@ -359,20 +374,38 @@ module.exports.approveDriver = async (req, res) => {
 module.exports.rejectDriver = async (req, res) => {
   try {
     const { id } = req.params;
+    const { reason } = req.body || {};
+    const rejectionReason = String(reason || "Application rejected by admin").trim();
+
     const driver = await Captain.findByIdAndUpdate(
       id,
-      { approved: false },
+      { approved: false, rejectionReason },
       { new: true },
     ).select(
       "name email phone servingCity vehicleType vehicleNumber approved blocked subscriptionStatus",
     );
     if (!driver) return fail(res, req, 404, "Driver not found");
+
+    await CaptainOnboarding.findOneAndUpdate(
+      { captainId: id },
+      { $set: { "documentVerification.status": "rejected", "documentVerification.rejectionReason": rejectionReason } }
+    ).catch(() => {});
+
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "reject_driver",
+      targetType: "driver",
+      targetId: id,
+      newValue: { approved: false, rejectionReason },
+      req,
+    });
+
     return ok(
       res,
       req,
       200,
-      "Driver approval removed",
-      { driver },
+      "Driver rejected",
+      { driver, rejectionReason },
       { includeFlatData: false },
     );
   } catch (err) {
@@ -642,6 +675,14 @@ module.exports.deleteUser = async (req, res) => {
     if (!validObjectId(id)) return fail(res, req, 400, "Invalid user id");
     const deleted = await User.findByIdAndDelete(id);
     if (!deleted) return fail(res, req, 404, "User not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "delete_user",
+      targetType: "user",
+      targetId: id,
+      oldValue: { email: deleted.email, name: deleted.name },
+      req,
+    });
     return ok(res, req, 200, "User deleted", { deletedId: id });
   } catch (err) {
     return fail(res, req, 500, err.message || "Delete user failed");
@@ -654,6 +695,14 @@ module.exports.deleteDriver = async (req, res) => {
     if (!validObjectId(id)) return fail(res, req, 400, "Invalid driver id");
     const deleted = await Captain.findByIdAndDelete(id);
     if (!deleted) return fail(res, req, 404, "Driver not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "delete_driver",
+      targetType: "driver",
+      targetId: id,
+      oldValue: { email: deleted.email, name: deleted.name },
+      req,
+    });
     return ok(res, req, 200, "Driver deleted", { deletedId: id });
   } catch (err) {
     return fail(res, req, 500, err.message || "Delete driver failed");
@@ -666,9 +715,321 @@ module.exports.deleteRide = async (req, res) => {
     if (!validObjectId(id)) return fail(res, req, 400, "Invalid ride id");
     const deleted = await Ride.findByIdAndDelete(id);
     if (!deleted) return fail(res, req, 404, "Ride not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "delete_ride",
+      targetType: "ride",
+      targetId: id,
+      oldValue: { price: deleted.price, status: deleted.status },
+      req,
+    });
     return ok(res, req, 200, "Ride deleted", { deletedId: id });
   } catch (err) {
     return fail(res, req, 500, err.message || "Delete ride failed");
+  }
+};
+
+/** Get Ride Details */
+module.exports.getRideDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!validObjectId(id)) return fail(res, req, 400, "Invalid ride id");
+    const ride = await Ride.findById(id).populate("user", "name email phone").populate("captain", "name email phone vehicleType vehicleNumber");
+    if (!ride) return fail(res, req, 404, "Ride not found");
+    return ok(res, req, 200, "Ride details", { ride });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to fetch ride details");
+  }
+};
+
+/** Audit Logs */
+module.exports.getAuditLogs = async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query?.limit) || 50));
+    const page = Math.max(1, Number(req.query?.page) || 1);
+    const skip = (page - 1) * limit;
+
+    const [logs, total] = await Promise.all([
+      AuditLog.find({}).sort({ timestamp: -1 }).skip(skip).limit(limit).lean(),
+      AuditLog.countDocuments({}),
+    ]);
+    return ok(res, req, 200, "Audit logs", { auditLogs: logs, total, page, limit });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Audit logs failed");
+  }
+};
+
+/** Refunds */
+module.exports.getRefunds = async (req, res) => {
+  try {
+    const refunds = await Refund.find({})
+      .populate("userId", "name email phone")
+      .populate("rideId", "pickupLocation dropLocation price status")
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    return ok(res, req, 200, "Refunds", { refunds });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to load refunds");
+  }
+};
+
+module.exports.processRefund = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const refund = await refundService.processRefund({
+      refundId: id,
+      adminId: req.admin?._id,
+      resolution: "COMPLETED",
+    });
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "process_refund",
+      targetType: "refund",
+      targetId: id,
+      newValue: { status: "COMPLETED", amount: refund.amount },
+      req,
+    });
+    return ok(res, req, 200, "Refund processed successfully", { refund });
+  } catch (err) {
+    return fail(res, req, err.statusCode || 500, err.message || "Process refund failed");
+  }
+};
+
+module.exports.rejectRefund = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body || {};
+    const refund = await refundService.processRefund({
+      refundId: id,
+      adminId: req.admin?._id,
+      resolution: "FAILED",
+      failureReason: reason || "Rejected by admin",
+    });
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "reject_refund",
+      targetType: "refund",
+      targetId: id,
+      newValue: { status: "FAILED", reason },
+      req,
+    });
+    return ok(res, req, 200, "Refund rejected", { refund });
+  } catch (err) {
+    return fail(res, req, err.statusCode || 500, err.message || "Reject refund failed");
+  }
+};
+
+/** SOS Events */
+module.exports.getSosEvents = async (req, res) => {
+  try {
+    const events = await SosEvent.find({})
+      .populate("userId", "name email phone emergencyContact")
+      .populate("rideId", "pickupLocation dropLocation status")
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    return ok(res, req, 200, "SOS events", { sosEvents: events });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to load SOS events");
+  }
+};
+
+module.exports.resolveSos = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { resolutionNotes } = req.body || {};
+    const event = await SosEvent.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: "resolved",
+          resolvedBy: req.admin?._id,
+          resolutionNotes: resolutionNotes || "Resolved by admin operations",
+          resolvedAt: new Date(),
+        },
+      },
+      { new: true }
+    );
+    if (!event) return fail(res, req, 404, "SOS event not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "resolve_sos",
+      targetType: "other",
+      targetId: id,
+      newValue: { status: "resolved", resolutionNotes },
+      req,
+    });
+    return ok(res, req, 200, "SOS event resolved", { sosEvent: event });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to resolve SOS");
+  }
+};
+
+/** Support Tickets */
+module.exports.getSupportTickets = async (req, res) => {
+  try {
+    const tickets = await SupportTicket.find({})
+      .populate("userId", "name email phone")
+      .populate("rideId", "pickupLocation dropLocation price status")
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    return ok(res, req, 200, "Support tickets", { supportTickets: tickets });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to fetch support tickets");
+  }
+};
+
+module.exports.updateSupportTicket = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, replyMessage, priority } = req.body || {};
+    const ticket = await SupportTicket.findById(id);
+    if (!ticket) return fail(res, req, 404, "Support ticket not found");
+
+    if (status) ticket.status = status;
+    if (priority) ticket.priority = priority;
+    if (replyMessage) {
+      ticket.responses.push({
+        senderRole: "admin",
+        senderId: req.admin?._id,
+        message: replyMessage,
+        createdAt: new Date(),
+      });
+    }
+    ticket.assignedAdmin = req.admin?._id;
+    await ticket.save();
+
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "update_support_ticket",
+      targetType: "support_ticket",
+      targetId: id,
+      newValue: { status, priority, replied: !!replyMessage },
+      req,
+    });
+
+    return ok(res, req, 200, "Support ticket updated", { supportTicket: ticket });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to update support ticket");
+  }
+};
+
+/** Coupons Management */
+module.exports.getCoupons = async (req, res) => {
+  try {
+    const coupons = await Coupon.find({}).sort({ createdAt: -1 }).lean();
+    return ok(res, req, 200, "Coupons", { coupons });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to fetch coupons");
+  }
+};
+
+module.exports.createCoupon = async (req, res) => {
+  try {
+    const { code, discountType, discountValue, maxDiscount, usageLimit, description } = req.body || {};
+    // Accept both the live field names and the older aliases.
+    const minimumFare = req.body?.minFare ?? req.body?.minimumFare ?? 0;
+    const validUntil = req.body?.validUntil ?? req.body?.expiresAt ?? null;
+    const validFrom = req.body?.validFrom ?? null;
+    const isActive = req.body?.isActive !== false && req.body?.active !== false;
+    const normalizedType = String(discountType || 'percentage').toLowerCase();
+    const type = [ 'percentage', 'flat', 'fixed' ].includes(normalizedType) ? normalizedType : 'percentage';
+    if (!code || !discountValue) {
+      return fail(res, req, 400, "Coupon code and discount value are required");
+    }
+    const expiresAt = validUntil ? new Date(validUntil) : null;
+    const coupon = await Coupon.create({
+      code: String(code).trim().toUpperCase(),
+      discountType: type,
+      discountValue: Number(discountValue),
+      minFare: minimumFare != null ? Number(minimumFare) : 0,
+      minimumFare: minimumFare != null ? Number(minimumFare) : 0,
+      maxDiscount: maxDiscount != null ? Number(maxDiscount) : null,
+      validFrom: validFrom ? new Date(validFrom) : null,
+      validUntil: expiresAt,
+      expiresAt,
+      usageLimit: usageLimit != null ? Number(usageLimit) : 0,
+      description: description || "",
+      eligibility: req.body?.eligibility || "All eligible users",
+      isNewUserOnly: req.body?.isNewUserOnly === true,
+      isActive,
+      active: isActive,
+    });
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "create_coupon",
+      targetType: "other",
+      targetId: String(coupon._id),
+      newValue: { code: coupon.code, discountValue: coupon.discountValue },
+      req,
+    });
+    return ok(res, req, 201, "Coupon created", { coupon });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to create coupon");
+  }
+};
+
+module.exports.deleteCoupon = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deleted = await Coupon.findByIdAndDelete(id);
+    if (!deleted) return fail(res, req, 404, "Coupon not found");
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "delete_coupon",
+      targetType: "other",
+      targetId: id,
+      oldValue: { code: deleted.code },
+      req,
+    });
+    return ok(res, req, 200, "Coupon deleted");
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to delete coupon");
+  }
+};
+
+/** System Configuration */
+module.exports.getConfig = async (req, res) => {
+  try {
+    const svcDoc = await pricingService.ensureServiceDoc();
+    return ok(res, req, 200, "Config", {
+      commissionPercent: svcDoc?.commissionPercent ?? 15,
+      launchTrialDays: svcDoc?.launchTrialDays ?? 0,
+      serviceAreas: svcDoc?.serviceAreas || ["Kolhapur", "Ichalkaranji", "Sangli"],
+      nodeEnv: process.env.NODE_ENV || "development",
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to load config");
+  }
+};
+
+module.exports.updateConfig = async (req, res) => {
+  try {
+    const { commissionPercent, launchTrialDays, serviceAreas } = req.body || {};
+    const meta = {};
+    if (commissionPercent != null) meta.commissionPercent = Number(commissionPercent);
+    if (launchTrialDays != null) meta.launchTrialDays = Number(launchTrialDays);
+    if (Array.isArray(serviceAreas)) meta.serviceAreas = serviceAreas;
+
+    await pricingService.updateServiceMeta(meta);
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "update_config",
+      targetType: "config",
+      targetId: "services_doc",
+      newValue: meta,
+      req,
+    });
+    const updated = await pricingService.ensureServiceDoc();
+    return ok(res, req, 200, "Config updated", {
+      commissionPercent: updated?.commissionPercent,
+      launchTrialDays: updated?.launchTrialDays,
+      serviceAreas: updated?.serviceAreas,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to update config");
   }
 };
 

@@ -34,6 +34,30 @@ router.get('/emergency-contact', auth.authUser, userController.getEmergencyConta
 router.post('/emergency-contact', auth.authUser, userController.saveEmergencyContact);
 router.delete('/emergency-contact', auth.authUser, userController.deleteEmergencyContact);
 
+// Recent Searches
+router.get('/recent-searches', auth.authUser, userController.getRecentSearches);
+router.post('/recent-searches', auth.authUser, userController.createRecentSearch);
+router.delete('/recent-searches', auth.authUser, userController.clearRecentSearches);
+router.delete('/recent-searches/:id', auth.authUser, userController.deleteRecentSearch);
+
+// Saved Locations
+router.get('/saved-locations', auth.authUser, userController.getSavedLocations);
+router.post('/saved-locations', auth.authUser, userController.createSavedLocation);
+router.put('/saved-locations/:id', auth.authUser, userController.updateSavedLocation);
+router.delete('/saved-locations/:id', auth.authUser, userController.deleteSavedLocation);
+
+// Device Push Token
+router.post('/device-token', auth.authUser, userController.saveDeviceToken);
+router.delete('/device-token', auth.authUser, userController.removeDeviceToken);
+
+// SOS Emergency
+router.post('/sos', auth.authUser, userController.triggerSos);
+router.get('/sos/active', auth.authUser, userController.getActiveSos);
+router.post('/sos/deactivate', auth.authUser, userController.deactivateSos);
+
+// Wallet Top-up
+router.post('/wallet/topup', auth.authUser, userController.topupWallet);
+
 router.post('/onboarding/complete', userController.completeOnboarding);
 router.get('/onboarding/status', userController.getOnboardingStatus);
 router.patch('/profile',

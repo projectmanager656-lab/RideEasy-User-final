@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const { validateEnv, warnDevelopmentEnv } = require('./config/env');
 validateEnv();
 warnDevelopmentEnv();
@@ -24,6 +24,7 @@ const driverSubscriptionRoutes = require('./routes/driverSubscriptions.routes');
 const healthRoutes = require('./routes/health.routes');
 const configRoutes = require('./routes/config.routes');
 const chatRoutes = require('./routes/chat.routes');
+const supportTicketRoutes = require('./routes/supportTicket.routes');
 const webhooksController = require('./controllers/webhooks.controller');
 
 const app = express();
@@ -155,11 +156,13 @@ app.use('/maps', mapsRoutes);
 app.use('/api/maps', mapsRoutes);
 app.use('/rides', rideRoutes);
 app.use('/chat', chatRoutes);
+app.use('/support-tickets', supportTicketRoutes);
 /** Optional `/api/*` aliases (same handlers) for clients expecting an `/api` prefix. */
 app.use('/api/users', userRoutes);
 app.use('/api/captains', captainRoutes);
 app.use('/api/rides', rideRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/support-tickets', supportTicketRoutes);
 app.use('/admin', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/driver-subscriptions', driverSubscriptionRoutes);

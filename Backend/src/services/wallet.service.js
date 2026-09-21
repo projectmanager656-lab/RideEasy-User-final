@@ -48,7 +48,7 @@ async function payRideFromWallet({ rideId, userId, part }) {
                 description: `Ride ${paymentPart} payment`,
             }], { session }).then((rows) => rows[0]);
             await PaymentRecord.create([{
-                rideId, userId, driverId: ride.captain, amount, paymentMode: 'Wallet', paymentStatus: 'success', paymentType: `ride_fare_${paymentPart}`, paymentPart, externalRef: reference,
+                rideId, userId, driverId: ride.captain, amount, discountAmount: Number(ride.discountAmount || 0), finalPayableAmount: total, paymentMode: 'Wallet', paymentStatus: 'success', paymentType: `ride_fare_${paymentPart}`, paymentPart, externalRef: reference,
             }], { session });
             const commissionPct = Number(await pricingService.getCommissionPercent());
             const platformFee = Math.round(amount * commissionPct / 100);
@@ -67,6 +67,10 @@ async function payRideFromWallet({ rideId, userId, part }) {
                     captainNetEarning: Math.max(0, total - Math.round(total * commissionPct / 100)),
                 };
             await rideModel.updateOne({ _id: rideId }, { $set: set }, { session });
+            if (paymentPart !== 'advance' && ride.couponCode) {
+                const { settleCouponRedemption } = require('./coupon.service');
+                await settleCouponRedemption({ rideId, session });
+            }
             result = { ride: { ...ride.toObject(), ...set, chargedAmount: paymentPart === 'remaining' ? total : ride.chargedAmount }, transaction, alreadyPaid: false };
         });
         return result;
