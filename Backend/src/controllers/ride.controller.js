@@ -13,6 +13,9 @@ const captainModel = require("../models/captain.model");
 const { decryptOtp, encryptOtp, hashOtp } = require("../utils/otpSecure");
 const { expiresInMinutes, randomSixDigit } = require("../utils/otp");
 const { fail, ok } = require("../utils/apiResponse");
+const notificationService = require("../services/notification.service");
+/** ONE canonical source for the scheduled-ride dispatch lead (also published to clients). */
+const { getScheduledDispatchLeadMinutes } = require("../config/env");
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const invoiceService = require("../services/invoice.service");
@@ -41,6 +44,35 @@ const {
 
 /** Driver search radius in metres. Override with RIDE_SEARCH_RADIUS_M when testing locally. */
 const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
+
+/**
+ * Turns the client's `scheduledAt` into the ONE authoritative pair of instants.
+ * The client sends an absolute ISO-8601 instant (UTC), so no
+ * browser-local string comparison or server-timezone guess is involved.
+ */
+function resolveScheduleWindow(raw) {
+  if (raw == null || String(raw).trim() === "") {
+    return { scheduledPickupAt: null, dispatchAt: null, isFutureSearch: false, leadMinutes: 0 };
+  }
+  const when = new Date(String(raw));
+  if (Number.isNaN(when.getTime())) return { error: "Invalid scheduled pickup time" };
+  if (when.getTime() <= Date.now()) {
+    return { error: "Scheduled pickup time must be in the future" };
+  }
+  const leadMinutes = getScheduledDispatchLeadMinutes();
+  const dispatchAt = new Date(when.getTime() - leadMinutes * 60 * 1000);
+  return {
+    scheduledPickupAt: when,
+    dispatchAt,
+    /**
+     * Searching starts now only when the dispatch instant has already passed, i.e. the
+     * chosen pickup is inside the lead window. The client uses the same rule (published
+     * via GET /config/scheduling) so a time it offers is never dispatched instantly.
+     */
+    isFutureSearch: dispatchAt.getTime() > Date.now(),
+    leadMinutes,
+  };
+}
 
 /** Mongo match: subscription active and not past expiry (or no expiry set). */
 function subscriptionNotExpiredMatch() {
@@ -499,6 +531,81 @@ function mergeUniqueIds(...lists) {
   ];
 }
 
+/**
+ * Runs the existing driver-search + offer broadcast for a ride that is already in
+ * `searching`. Shared by Book Now and the scheduled-ride dispatcher so there is
+ * exactly ONE matching implementation (no duplicated algorithm).
+ */
+async function startRideDispatch(rideOrId) {
+  const rideId = rideOrId?._id != null ? rideOrId._id : rideOrId;
+  const populated = await rideModel
+    .findById(rideId)
+    .populate("user")
+    .populate("captain");
+  if (!populated) return { matched: 0, delivered: 0, skipped: "ride_not_found" };
+
+  const pickupLng = populated.pickup?.coordinates?.[0];
+  const pickupLat = populated.pickup?.coordinates?.[1];
+  if (!Number.isFinite(pickupLng) || !Number.isFinite(pickupLat)) {
+    console.warn("[ride dispatch] ride %s has no pickup coordinates — cannot match drivers", String(rideId));
+    return { matched: 0, delivered: 0, skipped: "missing_pickup_coordinates" };
+  }
+
+  const rideCity = populated.city;
+  const nearbyDriverIds = await findNearbyDriverIds({
+    rideCity,
+    vehicleType: populated.vehicleType,
+    pickupLng,
+    pickupLat,
+  });
+  const cityDriverIds = await findCityFallbackDriverIds({
+    rideCity,
+    vehicleType: populated.vehicleType,
+  });
+  let driverIds = mergeUniqueIds(nearbyDriverIds, cityDriverIds);
+  if (driverIds.length === 0) {
+    driverIds = await findCityAnyVehicleDriverIds({ rideCity });
+  }
+  console.log(
+    "[ride dispatch] ride=%s city=%s vehicle=%s pickup=%s,%s nearby5km=%d citySameVehicle=%d total=%d",
+    String(rideId),
+    rideCity,
+    populated.vehicleType,
+    pickupLat,
+    pickupLng,
+    nearbyDriverIds.length,
+    cityDriverIds.length,
+    driverIds.length,
+  );
+  if (driverIds.length === 0) {
+    await explainNoDrivers({
+      rideCity,
+      vehicleType: populated.vehicleType,
+      pickupLng,
+      pickupLat,
+    });
+  }
+  let dispatch = broadcastRideNew(populated, driverIds);
+  if (driverIds.length === 0) {
+    /* Nobody survived the eligibility query (city, online, wallet, subscription,
+       vehicle). Rather than leave the rider on a silent "searching" screen, offer
+       the ride to every connected driver socket — the driver app still ignores it
+       when that driver is offline. */
+    const fallbackPayload = { ride: publicRide(populated), offeredAt: Date.now() };
+    const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
+    emitToOnlineDrivers("new-ride", fallbackPayload);
+    console.warn(
+      "[ride dispatch] ride %s matched 0 drivers — broadcast fallback reached %d connected driver socket(s)",
+      String(rideId),
+      fallbackSockets,
+    );
+    dispatch = { ...dispatch, fallbackBroadcast: fallbackSockets };
+  }
+  return dispatch;
+}
+
+module.exports.startRideDispatch = startRideDispatch;
+
 module.exports.createRide = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -604,6 +711,13 @@ module.exports.createRide = async (req, res) => {
 
     const couponResult = await validateCoupon({ code: couponCode, userId: req.user._id, fare: computedPrice });
 
+    /* A future booking is only reserved — it must NOT search for a driver yet. */
+    const scheduleWindow = resolveScheduleWindow(req.body?.scheduledAt);
+    if (scheduleWindow.error) {
+      return fail(res, req, 400, scheduleWindow.error);
+    }
+    const isScheduledBooking = scheduleWindow.isFutureSearch === true;
+
     const { ride } = await rideService.createRide({
       user: req.user._id,
       pickupLocation,
@@ -620,6 +734,9 @@ module.exports.createRide = async (req, res) => {
       customerPhone: customerPhone || req.user.phone,
       pickupCoordinates,
       dropCoordinates,
+      bookingType: isScheduledBooking ? 'scheduled' : 'now',
+      scheduledPickupAt: scheduleWindow.scheduledPickupAt,
+      dispatchAt: scheduleWindow.dispatchAt,
     });
 
     // Reserve the coupon for this user now (unique per coupon+user) so it can never
@@ -640,6 +757,67 @@ module.exports.createRide = async (req, res) => {
       }
     }
 
+    /**
+     * SCHEDULED booking: reserve only. No driver search, no matching, no
+     * `searching` status and no searching events — the backend scheduler does
+     * that at dispatch time (see services/scheduledRide.service.js).
+     */
+    if (isScheduledBooking) {
+      const scheduledRide = await rideModel
+        .findById(ride._id)
+        .populate("user")
+        .populate("captain");
+      const schedUid = userIdOf(req.user);
+      if (schedUid) {
+        emitToUser(schedUid, "ride:status-update", {
+          rideId: ride._id,
+          status: "scheduled",
+          ride: publicRide(scheduledRide),
+        });
+      }
+      console.log(
+        "[createRide] ride=%s SCHEDULED pickup=%s dispatchAt=%s lead=%dmin",
+        String(ride._id),
+        scheduledRide.scheduledPickupAt?.toISOString?.() || "",
+        scheduledRide.dispatchAt?.toISOString?.() || "",
+        scheduleWindow.leadMinutes,
+      );
+      /**
+       * Exactly ONE schedule-confirmation notification, created from this
+       * authoritative booking event (never from frontend rendering). The client
+       * renders the passenger's LOCAL pickup time from `meta.scheduledPickupAt`,
+       * since the server cannot know the device timezone.
+       */
+      if (schedUid) {
+        await notificationService.notifyRidePersist(
+          schedUid,
+          "user",
+          "Ride scheduled",
+          "Your ride has been scheduled.",
+          {
+            rideId: String(ride._id),
+            rideStatus: "scheduled",
+            source: "scheduled_booking",
+            scheduledPickupAt: scheduledRide.scheduledPickupAt,
+          },
+        );
+      }
+      return ok(
+        res,
+        req,
+        201,
+        "Ride scheduled",
+        {
+          ride: publicRide(scheduledRide),
+          scheduled: true,
+          scheduledPickupAt: scheduledRide.scheduledPickupAt,
+          dispatchAt: scheduledRide.dispatchAt,
+          dispatchLeadMinutes: scheduleWindow.leadMinutes,
+        },
+        { includeFlatData: false },
+      );
+    }
+
     const uid = userIdOf(req.user);
     emitToUser(uid, "ride:status-update", {
       rideId: ride._id,
@@ -650,55 +828,7 @@ module.exports.createRide = async (req, res) => {
       .findById(ride._id)
       .populate("user")
       .populate("captain");
-    const nearbyDriverIds = await findNearbyDriverIds({
-      rideCity,
-      vehicleType: populated.vehicleType,
-      pickupLng: pickupCoordinates.lng,
-      pickupLat: pickupCoordinates.lat,
-    });
-    const cityDriverIds = await findCityFallbackDriverIds({
-      rideCity,
-      vehicleType: populated.vehicleType,
-    });
-    let driverIds = mergeUniqueIds(nearbyDriverIds, cityDriverIds);
-    if (driverIds.length === 0) {
-      driverIds = await findCityAnyVehicleDriverIds({ rideCity });
-    }
-    console.log(
-      "[createRide] ride=%s city=%s vehicle=%s pickup=%s,%s nearby5km=%d citySameVehicle=%d total=%d",
-      String(ride._id),
-      rideCity,
-      populated.vehicleType,
-      pickupCoordinates.lat,
-      pickupCoordinates.lng,
-      nearbyDriverIds.length,
-      cityDriverIds.length,
-      driverIds.length,
-    );
-    if (driverIds.length === 0) {
-      await explainNoDrivers({
-        rideCity,
-        vehicleType: populated.vehicleType,
-        pickupLng: pickupCoordinates.lng,
-        pickupLat: pickupCoordinates.lat,
-      });
-    }
-    let dispatch = broadcastRideNew(populated, driverIds);
-    if (driverIds.length === 0) {
-      /* Nobody survived the eligibility query (city, online, wallet, subscription,
-         vehicle). Rather than leave the rider on a silent "searching" screen, offer
-         the ride to every connected driver socket — the driver app still ignores it
-         when that driver is offline. */
-      const fallbackPayload = { ride: publicRide(populated), offeredAt: Date.now() };
-      const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
-      emitToOnlineDrivers("new-ride", fallbackPayload);
-      console.warn(
-        "[ride dispatch] ride %s matched 0 drivers — broadcast fallback reached %d connected driver socket(s)",
-        String(ride._id),
-        fallbackSockets,
-      );
-      dispatch = { ...dispatch, fallbackBroadcast: fallbackSockets };
-    }
+    const dispatch = await startRideDispatch(ride._id);
     return ok(
       res,
       req,
@@ -1103,7 +1233,8 @@ module.exports.cancelRideByUser = async (req, res) => {
     if (!ownerId || ownerId !== userIdOf(req.user))
       return fail(res, req, 403, "Forbidden");
     const st = String(ride.status || "").toLowerCase();
-    if (!["searching", "accepted", "arrived"].includes(st)) {
+    /** `scheduled` = reserved future booking; cancelling it must stop the scheduler dispatching it. */
+    if (!["scheduled", "searching", "accepted", "arrived"].includes(st)) {
       return fail(res, req, 409, "Ride cannot be cancelled at this stage");
     }
     const fee = computeUserCancellationFee(ride);
@@ -1423,21 +1554,33 @@ async function findPendingRidesForCaptain(cap, captainId) {
   // (These remain in DB from previous tests and make driver panel show popups even when user didn't create a ride now.)
   const maxAgeMin = Number(process.env.PENDING_RIDE_MAX_AGE_MIN || 45);
   const createdAfter = new Date(Date.now() - maxAgeMin * 60 * 1000);
+  /**
+   * Recency is measured from when SEARCH began, not when the row was created, so a
+   * ride scheduled hours earlier is still offerable once the dispatcher starts it.
+   * Legacy rows without `searchStartedAt` fall back to `createdAt`.
+   */
+  const searchRecent = {
+    $or: [
+      { searchStartedAt: { $gte: createdAfter } },
+      { searchStartedAt: null, createdAt: { $gte: createdAfter } },
+    ],
+  };
+  const notClaimed = {
+    $or: [{ captain: null }, { captain: { $exists: false } }],
+  };
   const base = {
     status: "searching",
     city: cap.servingCity,
     vehicleType: cap.vehicleType,
-    createdAt: { $gte: createdAfter },
     declinedBy: { $nin: [captainId] },
-    $or: [{ captain: null }, { captain: { $exists: false } }],
+    $and: [searchRecent, notClaimed],
   };
 
   const baseLoose = {
     status: "searching",
     city: cap.servingCity,
-    createdAt: { $gte: createdAfter },
     declinedBy: { $nin: [captainId] },
-    $or: [{ captain: null }, { captain: { $exists: false } }],
+    $and: [searchRecent, notClaimed],
   };
 
   const coords = cap.location?.coordinates;
@@ -1918,7 +2061,7 @@ async function buildRideInvoice(ride) {
   };
 }
 
-/** Passenger invoice for a completed (or any) ride they own. */
+/** Passenger invoice — COMPLETED rides only. */
 module.exports.getRideInvoice = async (req, res) => {
   const rideId = req.params.id;
   if (!rideId || !mongoose.isValidObjectId(rideId)) {
@@ -1935,6 +2078,16 @@ module.exports.getRideInvoice = async (req, res) => {
     const requestUserId = req.user ? userIdOf(req.user) : null;
     if (!ownerId || !requestUserId || ownerId !== requestUserId) {
       return fail(res, req, 403, "Forbidden");
+    }
+
+    /**
+     * A RideEasy invoice represents a successfully COMPLETED ride, nothing else.
+     * Rejecting here also prevents an invoice snapshot being persisted for a ride
+     * that was scheduled / searching / active / cancelled. (A cancellation fee is
+     * deliberately not a ride invoice; that would be a separate feature.)
+     */
+    if (String(ride.status || "").toLowerCase() !== "completed") {
+      return fail(res, req, 409, "Invoice is available only for completed rides");
     }
 
     // Persist immutable invoice snapshot to database collection `invoices`

@@ -107,7 +107,8 @@ export default function RideCompletionFlow ({
     const paid = ride?.paymentStatus === 'success'
     const canRate = paid && ride?.rating == null && !skippedRating
     const doneWithRating = Boolean(ride?.rating || skippedRating)
-    const invoiceUrl = ride?._id ? `/invoice/${ride._id}` : null
+    /** Invoice exists only for a successfully completed ride — same rule everywhere. */
+    const invoiceUrl = ride?._id && ride?.status === 'completed' ? `/invoice/${ride._id}` : null
 
     /** 25% advance split — at completion we only collect the remaining 75%. */
     const totalFare = Number(ride?.price || 0)

@@ -18,6 +18,8 @@ router.post('/create',
     body('pickupLng').optional().isFloat({ min: -180, max: 180 }),
     body('dropLat').optional().isFloat({ min: -90, max: 90 }),
     body('dropLng').optional().isFloat({ min: -180, max: 180 }),
+    /** Future pickup for a scheduled booking. Absolute ISO-8601 instant from the client. */
+    body('scheduledAt').optional({ checkFalsy: true }).isISO8601(),
     rideController.createRide
 );
 

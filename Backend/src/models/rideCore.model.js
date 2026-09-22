@@ -24,9 +24,25 @@ const rideSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: [ 'searching', 'accepted', 'arrived', 'started', 'completed', 'cancelled' ],
+        enum: [ 'scheduled', 'searching', 'accepted', 'arrived', 'started', 'completed', 'cancelled' ],
         default: 'searching',
     },
+
+    /**
+     * Scheduled bookings: `now` = normal Book Now (searches immediately),
+     * `scheduled` = reserved for a future pickup and dispatched by the backend scheduler.
+     */
+    bookingType: { type: String, enum: [ 'now', 'scheduled' ], default: 'now' },
+    /** Authoritative pickup instant (UTC) chosen by the passenger. Null for Book Now. */
+    scheduledPickupAt: { type: Date, default: null },
+    /** When the backend should move this ride from `scheduled` to `searching`. */
+    dispatchAt: { type: Date, default: null },
+    /**
+     * When driver search actually began. Basis for the passenger search window, so a
+     * ride scheduled hours in advance is not treated as an expired search on dispatch.
+     * Equals creation time for Book Now.
+     */
+    searchStartedAt: { type: Date, default: null },
 
     /** Passenger-selected payment rail; settlement is still confirmed after completion. */
     paymentMethod: { type: String, enum: [ 'Cash', 'UPI', 'Online', 'Wallet' ], required: true, default: 'Cash' },
@@ -74,6 +90,8 @@ rideSchema.index({ user: 1, createdAt: -1 });
 /** Driver earnings / day queries */
 rideSchema.index({ captain: 1, status: 1, completedAt: -1 });
 rideSchema.index({ status: 1, createdAt: -1 });
+/** Scheduled-ride dispatcher: finds due `scheduled` rides on every tick. */
+rideSchema.index({ status: 1, dispatchAt: 1 });
 
 module.exports = mongoose.model('ride', rideSchema);
 

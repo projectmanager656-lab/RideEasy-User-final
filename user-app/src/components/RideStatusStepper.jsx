@@ -51,8 +51,12 @@ const RideStatusStepper = ({ status, progress = null }) => {
                                     {liveFill ? ` · ${Math.round(pct)}%` : ''}
                                 </div>
                             </div>
+                            {/* Connector spans this circle's centre → the next circle's centre:
+                                every step is an equal-width flex cell, so `left-1/2 w-full` covers
+                                exactly one cell width. Geometry is independent of label text, and the
+                                opaque `z-10` circle covers the overlap so no gap can appear. */}
                             {idx < STATUSES.length - 1 && (
-                                <div className="absolute left-1/2 right-0 top-3.5 h-1 rounded-full bg-theme-card-muted">
+                                <div className="absolute left-1/2 top-3 h-1 w-full rounded-full bg-theme-card-muted">
                                     <div
                                         className="h-full rounded-full bg-brand-yellow transition-[width] duration-700 ease-linear"
                                         style={{ width: done ? '100%' : liveFill ? `${pct}%` : active ? '50%' : '0%' }}

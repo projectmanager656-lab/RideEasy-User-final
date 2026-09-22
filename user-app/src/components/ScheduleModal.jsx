@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
+import { API_BASE_URL } from '../config/apiBaseUrl'
 
 const HOURS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
 const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
@@ -13,26 +14,134 @@ function pad2(n) {
     return String(n).padStart(2, '0')
 }
 
-function defaultDateParts() {
-    const d = new Date()
-    d.setDate(d.getDate() + 1)
+/** Minute grid step, derived from the grid itself so there is ONE source of truth. */
+const SLOT_MINUTES = Number(MINUTES[1]) - Number(MINUTES[0])
+
+/**
+ * Conservative fallback for the dispatch lead, used only until (or if) the backend
+ * rule cannot be read. Deliberately LARGER than any expected lead so the picker
+ * stays stricter, never looser — it can never offer a time the backend would
+ * immediately turn into an instant search.
+ */
+const FALLBACK_LEAD_MINUTES = 15
+
+let dispatchLeadCache = null
+let dispatchLeadPromise = null
+
+/**
+ * Read the dispatch lead the backend publishes at GET /config/scheduling.
+ * That endpoint is the ONE canonical source of the rule; the picker mirrors it so
+ * the frontend can never offer a pickup time the backend would dispatch instantly.
+ * Plain `fetch` (no auth) because `/config/*` is intentionally outside the
+ * passenger apiClient allow-list.
+ */
+function loadDispatchLeadMinutes() {
+    if (dispatchLeadCache != null) return Promise.resolve(dispatchLeadCache)
+    if (!dispatchLeadPromise) {
+        dispatchLeadPromise = fetch(`${API_BASE_URL}/config/scheduling`)
+            .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`config ${res.status}`))))
+            .then((body) => {
+                const lead = Number(body?.scheduledDispatchLeadMinutes)
+                if (!Number.isFinite(lead) || lead < 0) throw new Error('invalid scheduling lead')
+                dispatchLeadCache = lead
+                return lead
+            })
+            .catch(() => {
+                dispatchLeadCache = FALLBACK_LEAD_MINUTES
+                return dispatchLeadCache
+            })
+    }
+    return dispatchLeadPromise
+}
+
+/**
+ * Earliest instant the backend will accept: `now` rounded UP to the next slot on
+ * the picker's own minute grid. It never rounds down into the past, and
+ * `Date` normalisation handles hour / day / month / year rollover for free.
+ */
+function nextValidSlot(from = new Date()) {
+    const d = new Date(from)
+    d.setSeconds(0, 0)
+    const remainder = d.getMinutes() % SLOT_MINUTES
+    d.setMinutes(d.getMinutes() + (SLOT_MINUTES - remainder))
+    return d
+}
+
+function datePartsFrom(d) {
     return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear() }
 }
 
-function defaultTimeParts() {
-    const d = new Date()
-    d.setMinutes(d.getMinutes() + 60)
+function timePartsFrom(d) {
     const h24 = d.getHours()
-    const period = h24 >= 12 ? 'PM' : 'AM'
-    const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-    return { hour: String(h12), minute: '00', period }
+    return {
+        hour: String(h24 % 12 === 0 ? 12 : h24 % 12),
+        minute: pad2(d.getMinutes()),
+        period: h24 >= 12 ? 'PM' : 'AM',
+    }
+}
+
+/**
+ * The dispatch instant the backend derives for a pickup, i.e. the moment it would
+ * start searching. Mirrors `resolveScheduleWindow()` exactly.
+ */
+function dispatchInstantFor(pickupMs, leadMinutes) {
+    return pickupMs - leadMinutes * 60 * 1000
+}
+
+/** True when the backend would keep this pickup as a genuine scheduled ride. */
+function keepsScheduled(pickupMs, leadMinutes, nowMs = Date.now()) {
+    return dispatchInstantFor(pickupMs, leadMinutes) > nowMs
+}
+
+/**
+ * Earliest grid slot the backend will still keep `scheduled` — the first slot whose
+ * dispatch instant is strictly in the future. Never rounds down into the past.
+ */
+function earliestSchedulableSlot(leadMinutes, from = new Date()) {
+    const d = nextValidSlot(from)
+    const maxSteps = Math.ceil((leadMinutes + 60) / SLOT_MINUTES) + 1
+    for (let i = 0; i < maxSteps; i += 1) {
+        if (keepsScheduled(d.getTime(), leadMinutes, from.getTime())) return d
+        d.setMinutes(d.getMinutes() + SLOT_MINUTES)
+    }
+    return d
+}
+
+/** Defaults represent NOW (today at the earliest slot the backend will keep). */
+function defaultDateParts(leadMinutes = FALLBACK_LEAD_MINUTES) {
+    return datePartsFrom(earliestSchedulableSlot(leadMinutes))
+}
+
+function defaultTimeParts(leadMinutes = FALLBACK_LEAD_MINUTES) {
+    return timePartsFrom(earliestSchedulableSlot(leadMinutes))
+}
+
+/** Convert 12-hour (hour 1-12 + AM/PM) to a 24-hour number. Handles 12 AM → 0, 12 PM → 12. */
+function to24Hour(hour, period) {
+    const h12 = Number(hour) % 12
+    return period === 'PM' ? h12 + 12 : h12
 }
 
 /** Convert 12-hour (hour 1-12 + AM/PM) to 24-hour "HH:mm". */
 function to24HourTime(hour, minute, period) {
-    let h24 = Number(hour) % 12
-    if (period === 'PM') h24 += 12
-    return `${String(h24).padStart(2, '0')}:${minute}`
+    return `${pad2(to24Hour(hour, period))}:${minute}`
+}
+
+/**
+ * Compose the selected calendar date + 12-hour time into a LOCAL Date.
+ * The numeric constructor is used deliberately: it is unambiguous local time,
+ * unlike parsing formatted strings.
+ */
+function composeLocal(dateParts, { hour, minute, period }) {
+    return new Date(
+        dateParts.year,
+        dateParts.month,
+        dateParts.day,
+        to24Hour(hour, period),
+        Number(minute),
+        0,
+        0,
+    )
 }
 
 /** Compose local (no-UTC-shift) date + time into an ISO string for the booking flow. */
@@ -46,11 +155,24 @@ function daysInMonth(year, month) {
     return new Date(year, month + 1, 0).getDate()
 }
 
+/** Past dates are unavailable; TODAY stays selectable (its past times are handled separately). */
 function dayDisabled(day, month, year, today) {
-    const future = year > today.year
-        || (year === today.year && month > today.month)
-    if (future) return false
-    return !(year === today.year && month == today.month && day > today.date)
+    if (year !== today.year) return year < today.year
+    if (month !== today.month) return month < today.month
+    return day < today.date
+}
+
+/**
+ * Snap a selection back to the earliest schedulable slot whenever the backend would
+ * NOT keep it as a scheduled ride — used after every date/time edit, so the picker
+ * can never submit a time that would silently become an instant search.
+ */
+function ensureValidSelection(dateParts, parts, leadMinutes) {
+    if (keepsScheduled(composeLocal(dateParts, parts).getTime(), leadMinutes)) {
+        return { dateParts, parts }
+    }
+    const slot = earliestSchedulableSlot(leadMinutes)
+    return { dateParts: datePartsFrom(slot), parts: timePartsFrom(slot) }
 }
 
 function gridCellClass(selected, disabled) {
@@ -96,12 +218,36 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     const [openPicker, setOpenPicker] = useState(null) // 'day' | 'month' | 'year' | 'hour' | 'minute' | 'period'
     const sheetRef = useRef(null)
 
-    const today = useMemo(() => {
+    /**
+     * Today is STATE, not a one-off memo: the modal stays mounted for the whole
+     * session, so it is refreshed every time the sheet opens. Otherwise a session
+     * left open past midnight would keep treating yesterday as "today".
+     */
+    const [today, setToday] = useState(() => {
         const n = new Date()
         return { year: n.getFullYear(), month: n.getMonth(), date: n.getDate() }
+    })
+
+    /**
+     * Backend dispatch lead. Seeded conservatively, then replaced by the value the
+     * backend publishes (GET /config/scheduling) so the picker mirrors the real rule.
+     */
+    const [leadMinutes, setLeadMinutes] = useState(FALLBACK_LEAD_MINUTES)
+
+    /** Fetch the rule as soon as the app mounts, so it is ready before the first open. */
+    useEffect(() => {
+        let cancelled = false
+        void loadDispatchLeadMinutes().then((lead) => {
+            if (!cancelled) setLeadMinutes(lead)
+        })
+        return () => { cancelled = true }
     }, [])
 
-    const years = useMemo(() => [today.year], [today.year])
+    /** Years selectable in the grid — current year, plus next year when a slot rolls over. */
+    const years = useMemo(
+        () => Array.from(new Set([ today.year, nextValidSlot().getFullYear() ])).sort(),
+        [today.year],
+    )
 
     const dayCount = daysInMonth(dateParts.year, dateParts.month)
 
@@ -118,13 +264,28 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     /** Reset state only when the modal transitions closed → open. */
     const wasOpenRef = useRef(false)
     useEffect(() => {
-        if (open && !wasOpenRef.current) {
-            setDateParts(defaultDateParts)
-            setParts(defaultTimeParts)
-            setError('')
-            setOpenPicker(null)
+        if (!open || wasOpenRef.current) {
+            wasOpenRef.current = open
+            return undefined
         }
         wasOpenRef.current = open
+        /** Re-read the clock so reopening never shows a stale day/time. */
+        const n = new Date()
+        setToday({ year: n.getFullYear(), month: n.getMonth(), date: n.getDate() })
+        setError('')
+        setOpenPicker(null)
+        /**
+         * Seed from the backend's current rule. The lead is cached after the first
+         * fetch, so this settles within a microtask and the seed is exact.
+         */
+        let cancelled = false
+        void loadDispatchLeadMinutes().then((lead) => {
+            if (cancelled) return
+            setLeadMinutes(lead)
+            setDateParts(defaultDateParts(lead))
+            setParts(defaultTimeParts(lead))
+        })
+        return () => { cancelled = true }
     }, [open])
 
     /** Escape closes the open selector first, then the whole modal. */
@@ -141,12 +302,36 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
         return () => window.removeEventListener('keydown', onKey)
     }, [open, onClose])
 
+    /**
+     * Unavailable when the backend would NOT keep this slot as a scheduled ride —
+     * i.e. the whole dispatch lead must still be in the future. One rule, mirrored
+     * from the server, so the picker and the backend always agree.
+     */
+    const slotUnavailable = (hour, minute, period) =>
+        !keepsScheduled(composeLocal(dateParts, { hour, minute, period }).getTime(), leadMinutes)
+    const LAST_MINUTE = MINUTES[MINUTES.length - 1]
+
+    /**
+     * Apply a date/time edit, then snap the whole selection forward if the backend
+     * would no longer keep it scheduled (e.g. switching back to today).
+     */
+    const applySelection = (nextDateParts, nextParts) => {
+        const { dateParts: dp, parts: p } = ensureValidSelection(nextDateParts, nextParts, leadMinutes)
+        setDateParts(dp)
+        setParts(p)
+        setError('')
+        return dp
+    }
+
     const handleContinue = () => {
         const { day, month, year } = dateParts
-        const time24 = to24HourTime(parts.hour, parts.minute, parts.period)
-        const scheduled = new Date(`${year}-${pad2(month + 1)}-${pad2(day)}T${time24}`)
-        if (Number.isNaN(scheduled.getTime()) || scheduled.getTime() <= Date.now()) {
-            setError(t('choose_future_date_time'))
+        /** Backend is authoritative; this mirrors its rule before we submit. */
+        if (!keepsScheduled(composeLocal(dateParts, parts).getTime(), leadMinutes)) {
+            applySelection(dateParts, parts)
+            const earliest = earliestSchedulableSlot(leadMinutes)
+            setError(t('schedule_too_soon', {
+                time: `${pad2(earliest.getHours() % 12 === 0 ? 12 : earliest.getHours() % 12)}:${pad2(earliest.getMinutes())} ${earliest.getHours() >= 12 ? 'PM' : 'AM'}`,
+            }))
             return
         }
         setError('')
@@ -285,7 +470,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                                 selected={(d) => d === dateParts.day}
                                 disabled={(d) => dayDisabled(d, dateParts.month, dateParts.year, today)}
                                 onSelect={(d) => {
-                                    setDateParts((p) => ({ ...p, day: d }))
+                                    applySelection({ ...dateParts, day: d }, parts)
                                     setOpenPicker(null)
                                 }}
                                 columns={7}
@@ -297,11 +482,9 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                                 selected={(m) => m === dateParts.month}
                                 disabled={() => false}
                                 onSelect={(m) => {
-                                    setDateParts((p) => {
-                                        const maxDay = daysInMonth(p.year, m)
-                                        const day = Math.min(p.day, maxDay)
-                                        return { ...p, month: m, day }
-                                    })
+                                    const maxDay = daysInMonth(dateParts.year, m)
+                                    const day = Math.min(dateParts.day, maxDay)
+                                    applySelection({ ...dateParts, month: m, day }, parts)
                                     setOpenPicker(null)
                                 }}
                                 label={(m) => months[m].slice(0, 3)}
@@ -313,11 +496,9 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                                 selected={(y) => y === dateParts.year}
                                 disabled={() => false}
                                 onSelect={(y) => {
-                                    setDateParts((p) => {
-                                        const maxDay = daysInMonth(y, p.month)
-                                        const day = Math.min(p.day, maxDay)
-                                        return { ...p, year: y, day }
-                                    })
+                                    const maxDay = daysInMonth(y, dateParts.month)
+                                    const day = Math.min(dateParts.day, maxDay)
+                                    applySelection({ ...dateParts, year: y, day }, parts)
                                     setOpenPicker(null)
                                 }}
                                 columns={3}
@@ -327,9 +508,10 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                             <OptionGrid
                                 options={HOURS}
                                 selected={(h) => h === parts.hour}
-                                disabled={() => false}
+                                /** A whole hour is unavailable once even its last slot has passed. */
+                                disabled={(h) => slotUnavailable(h, LAST_MINUTE, parts.period)}
                                 onSelect={(h) => {
-                                    setParts((p) => ({ ...p, hour: h }))
+                                    applySelection(dateParts, { ...parts, hour: h })
                                     setOpenPicker(null)
                                 }}
                             />
@@ -338,33 +520,39 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                             <OptionGrid
                                 options={MINUTES}
                                 selected={(m) => m === parts.minute}
-                                disabled={() => false}
+                                disabled={(m) => slotUnavailable(parts.hour, m, parts.period)}
                                 onSelect={(m) => {
-                                    setParts((p) => ({ ...p, minute: m }))
+                                    applySelection(dateParts, { ...parts, minute: m })
                                     setOpenPicker(null)
                                 }}
                             />
                         )}
                         {openPicker === 'period' && (
                             <div className="flex gap-2 p-1">
-                                {['AM', 'PM'].map((p) => (
-                                    <button
-                                        key={p}
-                                        type="button"
-                                        onClick={() => {
-                                            setParts((prev) => ({ ...prev, period: p }))
-                                            setOpenPicker(null)
-                                        }}
-                                        className={[
-                                            'h-10 flex-1 rounded-lg border text-sm font-bold transition active:scale-95',
-                                            parts.period === p
-                                                ? 'border-brand-yellow bg-brand-yellow text-black'
-                                                : 'border-theme bg-theme-card text-theme-primary hover:border-theme-strong',
-                                        ].join(' ')}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
+                                {['AM', 'PM'].map((p) => {
+                                    const disabled = slotUnavailable(parts.hour, LAST_MINUTE, p)
+                                    return (
+                                        <button
+                                            key={p}
+                                            type="button"
+                                            disabled={disabled}
+                                            onClick={() => {
+                                                applySelection(dateParts, { ...parts, period: p })
+                                                setOpenPicker(null)
+                                            }}
+                                            className={[
+                                                'h-10 flex-1 rounded-lg border text-sm font-bold transition active:scale-95',
+                                                disabled
+                                                    ? 'cursor-not-allowed border-transparent bg-transparent text-theme-muted'
+                                                    : parts.period === p
+                                                        ? 'border-brand-yellow bg-brand-yellow text-black'
+                                                        : 'border-theme bg-theme-card text-theme-primary hover:border-theme-strong',
+                                            ].join(' ')}
+                                        >
+                                            {p}
+                                        </button>
+                                    )
+                                })}
                             </div>
                         )}
                     </div>

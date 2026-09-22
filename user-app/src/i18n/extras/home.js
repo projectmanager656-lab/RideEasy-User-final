@@ -6,6 +6,12 @@ const en = {
 
   // --- Home.jsx ---
   no_new_notifications: 'No new notifications.',
+  // --- In-app ride notifications (scheduled rides) ---
+  notif_ride_scheduled_title: 'Ride scheduled',
+  notif_ride_scheduled_body: 'Your ride is scheduled for {{time}}.',
+  notif_ride_scheduled_body_generic: 'Your ride has been scheduled.',
+  notif_searching_title: 'Searching for your driver',
+  notif_searching_body: "We've started looking for a driver for your scheduled ride.",
   could_not_resolve_locations: 'Could not resolve the selected locations. Please try another.',
   could_not_resolve_pickup: 'Could not resolve the selected pickup location. Please try another.',
   could_not_resolve_drop: 'Could not resolve the selected drop location. Please try another.',
@@ -52,6 +58,11 @@ const hi = {
 
   // --- Home.jsx ---
   no_new_notifications: 'कोई नई सूचना नहीं है।',
+  notif_ride_scheduled_title: 'राइड शेड्यूल हो गई',
+  notif_ride_scheduled_body: 'आपकी राइड {{time}} बजे निर्धारित है।',
+  notif_ride_scheduled_body_generic: 'आपकी राइड शेड्यूल हो गई है।',
+  notif_searching_title: 'आपके ड्राइवर की खोज हो रही है',
+  notif_searching_body: 'हमने आपकी शेड्यूल की गई राइड के लिए ड्राइवर खोजना शुरू कर दिया है।',
   could_not_resolve_locations: 'चुने गए स्थानों को खोजा नहीं जा सका। कृपया कोई दूसरा स्थान चुनें।',
   could_not_resolve_pickup: 'चुना गया पिकअप स्थान खोजा नहीं जा सका। कृपया कोई दूसरा स्थान चुनें।',
   could_not_resolve_drop: 'चुना गया ड्रॉप स्थान खोजा नहीं जा सका। कृपया कोई दूसरा स्थान चुनें।',
@@ -98,6 +109,11 @@ const mr = {
 
   // --- Home.jsx ---
   no_new_notifications: 'नवीन सूचना नाही.',
+  notif_ride_scheduled_title: 'राइड शेड्यूल झाली',
+  notif_ride_scheduled_body: 'तुमची राइड {{time}} वाजता नियोजित आहे.',
+  notif_ride_scheduled_body_generic: 'तुमची राइड शेड्यूल झाली आहे.',
+  notif_searching_title: 'तुमच्या ड्रायव्हरचा शोध सुरू आहे',
+  notif_searching_body: 'तुमच्या शेड्यूल केलेल्या राइडसाठी आम्ही ड्रायव्हर शोधायला सुरुवात केली आहे.',
   could_not_resolve_locations: 'निवडलेली ठिकाणे शोधता आली नाहीत. कृपया दुसरे ठिकाण निवडा.',
   could_not_resolve_pickup: 'निवडलेले पिकअप ठिकाण शोधता आले नाही. कृपया दुसरे ठिकाण निवडा.',
   could_not_resolve_drop: 'निवडलेले ड्रॉप ठिकाण शोधता आले नाही. कृपया दुसरे ठिकाण निवडा.',

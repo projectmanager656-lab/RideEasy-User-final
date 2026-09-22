@@ -23,6 +23,24 @@ function emitToCaptain (captainId, event, payload) {
     if (m?.emitToCaptain) m.emitToCaptain(captainId, event, payload);
 }
 
+/** Socket event the passenger app listens on for new in-app notifications. */
+const NOTIFICATION_EVENT = 'notification:new';
+
+/** Plain, client-safe notification shape (never leaks another receiver's data). */
+function publicNotificationPayload (notif) {
+    if (!notif) return null;
+    const o = notif.toObject ? notif.toObject() : { ...notif };
+    return {
+        _id: o._id,
+        title: o.title,
+        message: o.message,
+        type: o.type,
+        meta: o.meta || null,
+        isRead: Boolean(o.isRead),
+        createdAt: o.createdAt,
+    };
+}
+
 async function createPersisted ({
     receiverId,
     receiverType,
@@ -43,6 +61,14 @@ async function createPersisted ({
         });
         // Dispatch push notification to registered device tokens
         void sendPushNotification({ receiverId, receiverType, title, message, meta }).catch(() => {});
+        /**
+         * Realtime in-app delivery. Emitted only to the passenger's own private
+         * `user:{id}` room, so an open app updates its notification list and unread
+         * badge without a refresh. Persistence above is the source of truth.
+         */
+        if (receiverType === 'user' && receiverId) {
+            emitToUser(receiverId, NOTIFICATION_EVENT, publicNotificationPayload(notif));
+        }
         return notif;
     } catch (e) {
         logger.warn('notification.persist failed', { message: e?.message });
@@ -123,6 +149,8 @@ async function sendPushNotification({ receiverId, receiverType, title, message, 
 module.exports = {
     emitToUser,
     emitToCaptain,
+    NOTIFICATION_EVENT,
+    publicNotificationPayload,
     createPersisted,
     notifyRidePersist,
     listForReceiver,

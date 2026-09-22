@@ -6,3 +6,6 @@ export const RIDE_COMPLETED = 'rideCompleted'
 
 /** Live GPS for driver ↔ passenger. Payload: { rideId, lat, lng, at, source: 'driver' | 'passenger' } */
 export const LOCATION_UPDATE = 'locationUpdate'
+
+/** New in-app notification for this passenger. Must match backend notification.service.js NOTIFICATION_EVENT. */
+export const NOTIFICATION_NEW = 'notification:new'

@@ -651,6 +651,38 @@ module.exports.removeDeviceToken = async (req, res) => {
     }
 };
 
+/**
+ * In-app notifications for the authenticated passenger only.
+ * Reuses the existing notification service — this endpoint just exposes it.
+ */
+module.exports.listNotifications = async (req, res) => {
+    try {
+        const rows = await notificationService.listForReceiver(req.user._id, 'user', { limit: 40 });
+        const notifications = rows.map((n) => notificationService.publicNotificationPayload(n));
+        return ok(res, req, 200, 'Notifications', {
+            notifications,
+            unreadCount: notifications.filter((n) => !n.isRead).length,
+        });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Could not load notifications');
+    }
+};
+
+/** Mark one of the caller's own notifications as read. */
+module.exports.markNotificationRead = async (req, res) => {
+    const id = req.params.id;
+    if (!mongoose.isValidObjectId(id)) return fail(res, req, 400, 'Invalid notification id');
+    try {
+        const updated = await notificationService.markRead(id, req.user._id);
+        if (!updated) return fail(res, req, 404, 'Notification not found');
+        return ok(res, req, 200, 'Notification read', {
+            notification: notificationService.publicNotificationPayload(updated),
+        });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Could not update notification');
+    }
+};
+
 /** SOS Emergency */
 module.exports.triggerSos = async (req, res) => {
     try {

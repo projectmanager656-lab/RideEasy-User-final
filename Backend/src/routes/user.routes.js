@@ -50,6 +50,10 @@ router.delete('/saved-locations/:id', auth.authUser, userController.deleteSavedL
 router.post('/device-token', auth.authUser, userController.saveDeviceToken);
 router.delete('/device-token', auth.authUser, userController.removeDeviceToken);
 
+// In-app notifications (Home notification sheet)
+router.get('/notifications', auth.authUser, userController.listNotifications);
+router.post('/notifications/:id/read', auth.authUser, userController.markNotificationRead);
+
 // SOS Emergency
 router.post('/sos', auth.authUser, userController.triggerSos);
 router.get('/sos/active', auth.authUser, userController.getActiveSos);
