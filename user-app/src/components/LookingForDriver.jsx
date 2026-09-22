@@ -1,6 +1,7 @@
 import React from 'react'
 import RideStatusStepper from './RideStatusStepper'
 import { tierFare } from '../constants/rideTiers'
+import { normalizeLocationText } from '../utils/locationText'
 import { useLanguage } from '../i18n'
 
 function rideStatusNorm(s) {
@@ -58,7 +59,7 @@ const LookingForDriver = (props) => {
                         <div className="min-w-0 flex-1">
                             <h3 className='text-lg font-medium text-theme-primary'>{t('pickup')}</h3>
                             <p className='text-sm -mt-1 text-theme-secondary break-words'>
-                                {props.pickup || props.ride?.pickupLocation || '—'}
+                                {normalizeLocationText(props.pickup || props.ride?.pickupLocation)}
                             </p>
                         </div>
                     </div>
@@ -67,7 +68,7 @@ const LookingForDriver = (props) => {
                         <div className="min-w-0 flex-1">
                             <h3 className='text-lg font-medium text-theme-primary'>{t('drop_off')}</h3>
                             <p className='text-sm -mt-1 text-theme-secondary break-words'>
-                                {props.destination || props.ride?.dropLocation || '—'}
+                                {normalizeLocationText(props.destination || props.ride?.dropLocation)}
                             </p>
                         </div>
                     </div>

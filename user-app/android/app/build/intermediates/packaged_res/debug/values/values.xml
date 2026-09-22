@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="colorAccent">#FFA800</color>
+    <color name="colorPrimary">#FFA800</color>
+    <color name="colorPrimaryDark">#05070A</color>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="rideeasy_window_bg">#05070A</color>
     <string name="app_name">RideEasy Passenger</string>
     <string name="custom_url_scheme">com.rideeasy.passenger</string>
     <string name="package_name">com.rideeasy.passenger</string>
@@ -15,8 +19,19 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        
+        <item name="android:windowBackground">@color/rideeasy_window_bg</item>
+        <item name="android:statusBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:navigationBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:navigationBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

@@ -1,11 +1,12 @@
 import React, { Suspense, lazy, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
 import MoreOptionsModal from './components/MoreOptionsModal'
 import NativeAndroidFlavorRedirect from './components/NativeAndroidFlavorRedirect'
 import RidingRouteGuard from './components/RidingRouteGuard'
 import { UserDataContext } from './context/UserContext'
 import { hasCompletedOnboarding, syncOnboardingFromServer } from './utils/onboarding'
+import useAndroidBackButton from './hooks/useAndroidBackButton'
 import { useLanguage } from './i18n'
 import 'remixicon/fonts/remixicon.css'
 
@@ -60,8 +61,9 @@ const RouteScrollReset = ({ scrollRef }) => {
 //  - no token + onboarding not done → /welcome
 //  - no token + onboarding done     → /login
 //  - token (session restored)       → /location (the ride home screen)
+//  - token + profile not loadable   → /location (Retry panel, stays signed in)
 const UserAppRoot = () => {
-  const { authLoading, isAuthenticated } = useContext(UserDataContext)
+  const { authLoading, isAuthenticated, hasSessionToken } = useContext(UserDataContext)
   const [ serverSynced, setServerSynced ] = useState(false)
 
   // Restore this device's server-side onboarding state (if the local flag
@@ -81,6 +83,15 @@ const UserAppRoot = () => {
   }
 
   if (!isAuthenticated) {
+    /**
+     * A stored token means this device is already signed in — only a 401 clears
+     * it. If the profile could not be loaded (offline cold start, server hiccup,
+     * suspended account) hand off to the protected shell, which shows a Retry
+     * panel. A signed-in rider must never be sent back to Login/Welcome.
+     */
+    if (hasSessionToken) {
+      return <Navigate to="/location" replace />
+    }
     // First launch → Welcome (swipe to Login). Returning users go straight
     // to the Login page.
     if (!hasCompletedOnboarding()) {
@@ -96,6 +107,18 @@ const App = () => {
   const { t } = useLanguage()
   const [moreOpen, setMoreOpen] = useState(false)
   const scrollRef = useRef(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // Android hardware Back (no-op on web): registered once, follows app history,
+  // exits normally at the root, and never quits out of an active ride/payment.
+  useAndroidBackButton({ navigate, pathname: location.pathname })
+
+  // Drop the static boot splash as soon as React has painted instead of leaving
+  // it up on a fixed 1.5s timer — the app is already interactive underneath.
+  useEffect(() => {
+    document.getElementById('boot-splash')?.remove()
+  }, [])
 
   return (
     <div className="relative mx-auto flex h-full w-full max-w-[430px] flex-col overflow-hidden bg-theme-bg text-theme-primary">

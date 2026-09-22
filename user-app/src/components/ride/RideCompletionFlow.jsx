@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { normalizeLocationText } from '../../utils/locationText'
 
 function formatINR (n) {
     const x = Number(n)
@@ -221,7 +222,7 @@ export default function RideCompletionFlow ({
                             </span>
                             <div className="min-w-0">
                                 <p className="text-xs text-theme-muted">Pickup</p>
-                                <p className="text-sm font-medium text-theme-primary">{ride?.pickupLocation || '—'}</p>
+                                <p className="text-sm font-medium text-theme-primary">{normalizeLocationText(ride?.pickupLocation)}</p>
                             </div>
                         </div>
                         <div className="ml-4 border-l border-dashed border-theme pl-5" />
@@ -231,7 +232,7 @@ export default function RideCompletionFlow ({
                             </span>
                             <div className="min-w-0">
                                 <p className="text-xs text-theme-muted">Drop</p>
-                                <p className="text-sm font-medium text-theme-primary">{ride?.dropLocation || '—'}</p>
+                                <p className="text-sm font-medium text-theme-primary">{normalizeLocationText(ride?.dropLocation)}</p>
                             </div>
                         </div>
                     </div>

@@ -301,7 +301,11 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
     <AuthShell strongBackdrop>
       {/* Login pane — always visible beneath the sliding panels */}
       <div className={paneBase}>
-        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col pt-6`}>
+          {/* mt-auto spacer keeps the form bottom-anchored when there is spare room,
+              while still letting the whole pane scroll when the Android keyboard
+              shrinks it. `justify-end` would instead clip the top of an overflowing form. */}
+          <div className="mt-auto" aria-hidden />
           {/* tagline — sits just above the login card on every screen */}
           <p className="mb-6 text-center text-sm font-medium tracking-wide text-theme-primary drop-shadow-md md:text-base">
             {t('ride_anytime_anywhere')}
@@ -326,7 +330,8 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
       {/* Registration pane — slides up over the login pane */}
       <div ref={registerRef} className={`${hiddenPaneBase} z-10`} aria-hidden={!registerOpen}>
         {paneBackdrop}
-        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col pt-6`}>
+          <div className="mt-auto" aria-hidden />
           <RegistrationForm
             draft={draft}
             onDraftChange={setDraft}
@@ -344,7 +349,8 @@ const AuthScreen = ({ skipTokenRedirect = false }) => {
       {/* OTP pane — slides in over the registration panel */}
       <div ref={otpRef} className={`${hiddenPaneBase} z-20`} aria-hidden={!otpOpen}>
         {paneBackdrop}
-        <div data-pane-scroll className={`${paneScroller} relative flex flex-col justify-end pt-6`}>
+        <div data-pane-scroll className={`${paneScroller} relative flex flex-col pt-6`}>
+          <div className="mt-auto" aria-hidden />
           <OtpVerification
             phone={draft.phone}
             email={draft.email}

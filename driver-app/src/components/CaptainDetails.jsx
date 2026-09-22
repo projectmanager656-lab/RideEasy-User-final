@@ -3,16 +3,7 @@ import { CaptainDataContext } from '../context/CaptainContext'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { driverBackendJson } from '../services/driverBackendFetch'
 import { stripApiEnvelope } from '../utils/apiBody'
-
-function normalizeLocationText(value, fallback = '—') {
-    if (typeof value === 'string') return value
-    if (value && typeof value === 'object') {
-        if (typeof value.name === 'string') return value.name
-        if (typeof value.address === 'string') return value.address
-        if (Array.isArray(value.coordinates) && value.coordinates.length >= 2) return `${value.coordinates[1]}, ${value.coordinates[0]}`
-    }
-    return fallback
-}
+import { normalizeLocationText } from '../utils/locationText'
 
 function formatDateTime(value) {
     if (!value) return null

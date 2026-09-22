@@ -416,6 +416,7 @@ color primary_text_default_material_dark
 color primary_text_default_material_light
 color primary_text_disabled_material_dark
 color primary_text_disabled_material_light
+color rideeasy_window_bg
 color ripple_material_dark
 color ripple_material_light
 color secondary_text_default_material_dark

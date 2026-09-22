@@ -16,6 +16,10 @@
   html {
     height: 100%;
     -webkit-text-size-adjust: 100%;
+    /* Paint the status-bar inset area with the app background. On edge-to-edge
+       Android the WebView extends under the status bar — without this the inset
+       area shows the (white) window background as a strip above the app. */
+    background-color: rgb(var(--bg));
   }
 
   /* Centralized RideEasy theme tokens. The `data-theme` attribute is set on
@@ -61,8 +65,19 @@
 
   #root {
     height: 100%;
-    @apply min-h-dvh min-h-screen relative mx-auto w-full max-w-[480px] shadow-2xl overflow-x-hidden;
+    /*
+     * No 100vh/100dvh min-height here. A viewport-unit min-height keeps #root taller
+     * than the Android WebView once the keyboard opens (adjustResize shrinks the
+     * WebView), which pushed the focused login/register field behind the keyboard.
+     * height:100% follows the real viewport, so the whole layout shrinks with it.
+     */
+    @apply relative mx-auto w-full max-w-[480px] shadow-2xl overflow-x-hidden;
     background-color: rgb(var(--bg));
+    /* Edge-to-edge Android: keep content clear of the status bar / gesture bar.
+       Resolves to 0 when the WebView is already inset (older Android), so this
+       never double-pads. */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* Theme-aware utility color aliases (rgb components from the tokens above). */

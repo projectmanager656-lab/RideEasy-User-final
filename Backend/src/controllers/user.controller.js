@@ -1,3 +1,5 @@
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
 const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 const userModel = require('../models/user.model');
@@ -724,6 +726,191 @@ module.exports.deactivateSos = async (req, res) => {
         return fail(res, req, 500, err.message || 'Failed to deactivate SOS');
     }
 };
+
+
+/**
+ * Create Razorpay order for wallet recharge.
+ * Wallet is NOT credited here.
+ */
+module.exports.createWalletRazorpayOrder = async (req, res) => {
+    try {
+        const userId = req.user?._id || req.user?.id;
+        const amount = Number(req.body?.amount);
+
+        if (!userId) {
+            return fail(res, req, 401, "Authentication required");
+        }
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return fail(res, req, 400, "Invalid wallet amount");
+        }
+
+        if (amount > 1000000) {
+            return fail(res, req, 400, "Maximum wallet top-up is ₹10,00,000");
+        }
+
+        const keyId = String(process.env.RAZORPAY_KEY_ID || '').trim();
+        const keySecret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+        if (!keyId || !keySecret) {
+            return fail(res, req, 500, "Razorpay configuration is missing");
+        }
+
+        const razorpay = new Razorpay({
+            key_id: keyId,
+            key_secret: keySecret
+        });
+
+        const order = await razorpay.orders.create({
+            amount: Math.round(amount * 100),
+            currency: "INR",
+            receipt: `wallet_${String(userId).slice(-8)}_${Date.now()}`,
+            notes: {
+                userId: String(userId),
+                paymentType: "wallet_topup"
+            }
+        });
+
+        return ok(res, req, 200, "Wallet payment order created", {
+            orderId: order.id,
+            amount,
+            currency: "INR",
+            keyId
+        });
+    } catch (err) {
+        return fail(
+            res,
+            req,
+            500,
+            err.message || "Failed to create wallet payment order"
+        );
+    }
+};
+
+/**
+ * Verify Razorpay wallet payment.
+ * Wallet is credited ONLY after signature verification.
+ */
+module.exports.verifyWalletRazorpayPayment = async (req, res) => {
+    try {
+        const userId = req.user?._id || req.user?.id;
+
+        const {
+            razorpayOrderId,
+            razorpayPaymentId,
+            razorpaySignature,
+            amount
+        } = req.body || {};
+
+        if (!userId) {
+            return fail(res, req, 401, "Authentication required");
+        }
+
+        if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+            return fail(res, req, 400, "Razorpay payment details are required");
+        }
+
+        const secret = String(process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+        if (!secret) {
+            return fail(res, req, 500, "Razorpay secret is not configured");
+        }
+
+        const expectedSignature = crypto
+            .createHmac("sha256", secret)
+            .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+            .digest("hex");
+
+        if (expectedSignature !== razorpaySignature) {
+            return fail(res, req, 400, "Invalid payment signature");
+        }
+
+        const topupAmount = Number(amount);
+
+        if (!Number.isFinite(topupAmount) || topupAmount <= 0) {
+            return fail(res, req, 400, "Invalid wallet amount");
+        }
+
+        if (topupAmount > 1000000) {
+            return fail(res, req, 400, "Invalid wallet amount");
+        }
+
+        const reference = `razorpay_wallet_${razorpayPaymentId}`;
+
+        // Idempotency: don't credit the same Razorpay payment twice.
+        const existing = await WalletTransaction.findOne({
+            reference
+        }).lean();
+
+        if (existing) {
+            const currentUser = await userModel
+                .findById(userId)
+                .select("walletBalance")
+                .lean();
+
+            return ok(res, req, 200, "Wallet payment already processed", {
+                walletBalance: Number(currentUser?.walletBalance || 0),
+                transaction: existing,
+                alreadyProcessed: true
+            });
+        }
+
+        const updatedUser = await userModel.findByIdAndUpdate(
+            userId,
+            {
+                $inc: {
+                    walletBalance: topupAmount
+                }
+            },
+            {
+                new: true
+            }
+        ).select("walletBalance");
+
+        if (!updatedUser) {
+            return fail(res, req, 404, "User not found");
+        }
+
+        const transaction = await WalletTransaction.create({
+            userId,
+            rideId: null,
+            amount: topupAmount,
+            direction: "credit",
+            status: "success",
+            reference,
+            description: `Wallet recharge via Razorpay`
+        });
+
+        return ok(res, req, 200, "Wallet recharged successfully", {
+            walletBalance: Number(updatedUser.walletBalance || 0),
+            transaction,
+            alreadyProcessed: false
+        });
+    } catch (err) {
+        // If another request already created the unique reference,
+        // return the current wallet instead of crediting twice.
+        if (err?.code === 11000) {
+            const userId = req.user?._id || req.user?.id;
+            const currentUser = await userModel
+                .findById(userId)
+                .select("walletBalance")
+                .lean();
+
+            return ok(res, req, 200, "Wallet payment already processed", {
+                walletBalance: Number(currentUser?.walletBalance || 0),
+                alreadyProcessed: true
+            });
+        }
+
+        return fail(
+            res,
+            req,
+            500,
+            err.message || "Wallet payment verification failed"
+        );
+    }
+};
+
 
 /** Wallet Top-Up */
 module.exports.topupWallet = async (req, res) => {

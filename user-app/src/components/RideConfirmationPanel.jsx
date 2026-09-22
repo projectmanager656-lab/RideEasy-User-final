@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../i18n'
+import { normalizeLocationText } from '../utils/locationText'
 import RideStatusStepper from './RideStatusStepper'
 import RideMap from './RideMap'
 
@@ -45,8 +46,8 @@ export default function RideConfirmationPanel ({
     confirmation: c,
     vehicleType: vType,
     price: fare,
-    pickup: ride?.pickupLocation || ride?.pickup,
-    destination: ride?.dropLocation || ride?.destination,
+    pickup: normalizeLocationText(ride?.pickupLocation || ride?.pickup),
+    destination: normalizeLocationText(ride?.dropLocation || ride?.destination),
   }
 
   return (
@@ -156,14 +157,14 @@ export default function RideConfirmationPanel ({
           <i className="ri-map-pin-user-fill text-xl text-emerald-600" />
           <div>
             <h3 className="text-base font-medium">{t('pickup')}</h3>
-            <p className="text-sm text-theme-muted">{ride?.pickupLocation || ride?.pickup}</p>
+            <p className="text-sm text-theme-muted">{normalizeLocationText(ride?.pickupLocation || ride?.pickup)}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 p-3 border-b border-theme">
           <i className="ri-map-pin-2-fill text-xl text-rose-600" />
           <div>
             <h3 className="text-base font-medium">{t('drop')}</h3>
-            <p className="text-sm text-theme-muted">{ride?.dropLocation || ride?.destination}</p>
+            <p className="text-sm text-theme-muted">{normalizeLocationText(ride?.dropLocation || ride?.destination)}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 p-3">

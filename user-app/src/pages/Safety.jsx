@@ -511,8 +511,8 @@ const Safety = () => {
   }
 
   return (
-    <div className="min-h-dvh min-h-screen w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-theme bg-theme-bg/90 px-4 pt-4 pb-3 backdrop-blur">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
+      <header className="z-10 flex shrink-0 items-center gap-3 border-b border-theme bg-theme-bg/90 px-4 pt-4 pb-3 backdrop-blur">
         <button type="button" onClick={handleBack} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand active:scale-95" aria-label={t('back')}>
           <i className="ri-arrow-left-line text-2xl" />
         </button>
@@ -522,7 +522,9 @@ const Safety = () => {
         </button>
       </header>
 
-      <div className="mx-auto w-full max-w-lg space-y-4 px-3 pt-4 sm:px-4">
+      {/* Only this area scrolls — the header stays fixed. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch]">
+      <div className="mx-auto w-full max-w-lg space-y-4 px-3 pt-4 pb-24 sm:px-4">
         {/* SOS */}
         {!sosActive ? (
           <section className="rounded-2xl border border-red-500/40 bg-gradient-to-b from-red-950/40 to-theme-card p-4">
@@ -568,6 +570,7 @@ const Safety = () => {
         <DriverVerificationSection ride={ride} loading={loading} error={error} />
 
         <SafetyPreferencesSection />
+      </div>
       </div>
 
       {/* SOS confirmation */}

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
 import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
@@ -161,8 +162,8 @@ const SearchingForDriver = () => {
   const rideId = ride?._id || null
 
   /** Passed-through details from the Choose Ride screen (fall back to ride fields). */
-  const pickup = state.pickup || ride?.pickupLocation || ''
-  const destination = state.destination || ride?.dropLocation || ''
+  const pickup = normalizeLocationText(state.pickup || ride?.pickupLocation, '')
+  const destination = normalizeLocationText(state.destination || ride?.dropLocation, '')
   const vehicleType = state.vehicleType || ride?.vehicleType || null
   const rideTierId = state.tierId || null
   const fare = state.price != null ? state.price : (ride?.price ?? ride?.fare ?? null)

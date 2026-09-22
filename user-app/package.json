@@ -18,6 +18,8 @@
   "dependencies": {
     "@capacitor/app": "^6.0.3",
     "@capacitor/core": "^6.2.1",
+    "@capacitor/keyboard": "^6.0.4",
+    "@capacitor/status-bar": "^6.0.3",
     "@gsap/react": "^2.1.1",
     "@sentry/react": "^10.46.0",
     "axios": "^1.7.7",

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RideMap from '../components/RideMap'
 import ScheduleModal from '../components/ScheduleModal'
@@ -67,6 +67,9 @@ const RIDE_OPTIONS = [
     { tier: findRideTier('PREMIUM'), logo: logoPremium },
 ].filter((o) => o.tier)
 
+/** Ride-sheet snap heights as a fraction of the page (collapsed → half → expanded). */
+const SNAP_FRACTIONS = [ 0.56, 0.76, 0.92 ]
+
 const ChooseRide = () => {
     const navigate = useNavigate()
     const location = useLocation()
@@ -106,6 +109,142 @@ const ChooseRide = () => {
         pickupCoords?.lat != null && pickupCoords?.lng != null
         && dropCoords?.lat != null && dropCoords?.lng != null
     )
+
+    /* ── Bottom sheet: collapsed → half → expanded ─────────────────────────────
+     * The sheet is anchored to the bottom of the page and its HEIGHT is the drag
+     * axis, so the map, the footer (payment + actions) and the bottom nav never
+     * move — only the panel grows over the map. Snap heights are fractions of the
+     * page, so 0.56 keeps the resting layout identical to the original design. */
+    const pageRef = useRef(null)
+    const sheetRef = useRef(null)
+    const handleRef = useRef(null)
+
+    const [ pageHeight, setPageHeight ] = useState(0)
+    const [ sheetSnap, setSheetSnap ] = useState(0)
+    const [ sheetDragPx, setSheetDragPx ] = useState(null)
+    const [ sheetAnimating, setSheetAnimating ] = useState(false)
+
+    const snapHeights = useMemo(
+        () => (pageHeight ? SNAP_FRACTIONS.map((fraction) => Math.round(pageHeight * fraction)) : null),
+        [ pageHeight ]
+    )
+    const sheetHeight = sheetDragPx != null
+        ? sheetDragPx
+        : (snapHeights ? snapHeights[sheetSnap] : null)
+
+    // Live values for the native touch handlers, which are attached once.
+    const sheetHeightRef = useRef(0)
+    if (sheetHeight != null) sheetHeightRef.current = sheetHeight
+    const sheetSnapRef = useRef(0)
+    sheetSnapRef.current = sheetSnap
+
+    /** Track the usable page height (follows the Android keyboard and rotation). */
+    useEffect(() => {
+        const el = pageRef.current
+        if (!el) return undefined
+        const measure = () => setPageHeight(Math.round(el.clientHeight))
+        measure()
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure)
+            return () => window.removeEventListener('resize', measure)
+        }
+        const observer = new ResizeObserver(measure)
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [ hasRoute ])
+
+    /**
+     * Panel drag — the drag HANDLE is the only thing that moves the sheet.
+     * The ride list keeps scrolling normally and taps on cards/buttons are never
+     * intercepted: the gesture lives entirely on the handle, which is
+     * `touch-action: none` and captures the pointer for the duration of the drag.
+     */
+    useEffect(() => {
+        const handle = handleRef.current
+        if (!handle || !snapHeights) return undefined
+
+        const minH = snapHeights[0]
+        const maxH = snapHeights[snapHeights.length - 1]
+        let startY = 0
+        let startH = 0
+        let lastY = 0
+        let lastT = 0
+        let velocity = 0
+        let dragging = false
+
+        const onDown = (event) => {
+            if (dragging) return
+            if (event.pointerType === 'mouse' && event.button !== 0) return
+            dragging = true
+            startY = event.clientY
+            lastY = startY
+            lastT = event.timeStamp
+            velocity = 0
+            startH = sheetHeightRef.current
+            setSheetAnimating(false)
+            try { handle.setPointerCapture(event.pointerId) } catch { /* ignore */ }
+        }
+
+        const onMove = (event) => {
+            if (!dragging) return
+            event.preventDefault()
+            const y = event.clientY
+            const dt = event.timeStamp - lastT
+            if (dt > 0) velocity = (y - lastY) / dt
+            lastY = y
+            lastT = event.timeStamp
+            setSheetDragPx(Math.min(maxH, Math.max(minH, Math.round(startH - (y - startY)))))
+        }
+
+        const settle = (event) => {
+            if (!dragging) return
+            dragging = false
+            try { handle.releasePointerCapture(event.pointerId) } catch { /* ignore */ }
+
+            const released = sheetHeightRef.current
+            let next = sheetSnapRef.current
+            if (Math.abs(velocity) > 0.45) {
+                // Flick: advance one snap in the drag direction.
+                next = velocity < 0
+                    ? Math.min(sheetSnapRef.current + 1, snapHeights.length - 1)
+                    : Math.max(sheetSnapRef.current - 1, 0)
+            } else {
+                let best = 0
+                let bestDistance = Infinity
+                snapHeights.forEach((height, index) => {
+                    const distance = Math.abs(height - released)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        best = index
+                    }
+                })
+                next = best
+            }
+
+            velocity = 0
+            setSheetDragPx(null)
+            setSheetAnimating(true)
+            setSheetSnap(next)
+        }
+
+        handle.addEventListener('pointerdown', onDown)
+        handle.addEventListener('pointermove', onMove, { passive: false })
+        handle.addEventListener('pointerup', settle)
+        handle.addEventListener('pointercancel', settle)
+        return () => {
+            handle.removeEventListener('pointerdown', onDown)
+            handle.removeEventListener('pointermove', onMove)
+            handle.removeEventListener('pointerup', settle)
+            handle.removeEventListener('pointercancel', settle)
+        }
+    }, [ snapHeights ])
+
+    /** Release the snap transition once it has finished. */
+    useEffect(() => {
+        if (!sheetAnimating) return undefined
+        const timer = setTimeout(() => setSheetAnimating(false), 320)
+        return () => clearTimeout(timer)
+    }, [ sheetAnimating, sheetSnap ])
 
     /** Load fare from backend unless Home already passed it through. */
     useEffect(() => {
@@ -349,7 +488,7 @@ const ChooseRide = () => {
     }
 
     return (
-        <div className="relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
+        <div ref={pageRef} className="relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
             {/* Map */}
             <div className="relative h-[44%] min-h-[260px] w-full shrink-0 overflow-hidden">
                 <RideMap
@@ -410,12 +549,30 @@ const ChooseRide = () => {
                 )}
             </div>
 
-            {/* Bottom sheet */}
-            <div className="relative z-10 flex min-h-0 flex-1 flex-col rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.45)]">
-                <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted" />
+            {/* Bottom sheet — bottom-anchored; only its height changes when dragged */}
+            <div
+                ref={sheetRef}
+                className="absolute inset-x-0 bottom-0 z-10 flex min-h-0 flex-col rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.45)]"
+                style={{
+                    height: sheetHeight != null ? `${sheetHeight}px` : '56%',
+                    transition: sheetAnimating ? 'height 300ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
+                }}
+            >
+                {/* Drag handle — the only control that resizes the panel. The padded
+                    wrapper is a comfortable touch target; its negative bottom margin
+                    keeps the layout pixel-identical to the original single bar, and
+                    `relative z-10` keeps it hit-testable where it overlaps the list. */}
+                <div
+                    ref={handleRef}
+                    className="relative z-10 -mb-[26px] flex shrink-0 cursor-grab touch-none justify-center pb-[26px] pt-2.5"
+                >
+                    <div className="h-1 w-10 rounded-full bg-theme-card-muted" />
+                </div>
 
-                {/* Scrollable ride content */}
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {/* Scrollable ride content — the only part of this page that scrolls.
+                    overflow-x-hidden/lock the pan axis so the list can never scroll
+                    sideways or chain its scroll to the page behind it. */}
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
                     <h2 className="mb-3 mt-3 text-lg font-bold text-theme-primary">{t('choose_a_ride')}</h2>
                     {/* Fare loading / error */}
                     {fareLoading && (

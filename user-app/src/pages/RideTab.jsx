@@ -16,7 +16,9 @@ const RideTab = () => {
     })
 
     return (
-        <div className="flex min-h-full flex-col px-4 pt-4">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
+            {/* Only this area scrolls — this tab has no header of its own. */}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch] px-4 pt-4 pb-24">
             <h1 className="text-lg font-bold text-theme-primary">{t('ride')}</h1>
             <p className="text-[11px] text-theme-muted">{t('current_ride')}</p>
 
@@ -80,6 +82,7 @@ const RideTab = () => {
                         </button>
                     </>
                 )}
+            </div>
             </div>
         </div>
     )

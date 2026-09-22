@@ -55,6 +55,10 @@ router.post('/sos', auth.authUser, userController.triggerSos);
 router.get('/sos/active', auth.authUser, userController.getActiveSos);
 router.post('/sos/deactivate', auth.authUser, userController.deactivateSos);
 
+// Secure Wallet Razorpay recharge
+router.post('/wallet/create-razorpay-order', auth.authUser, userController.createWalletRazorpayOrder);
+router.post('/wallet/verify-razorpay-payment', auth.authUser, userController.verifyWalletRazorpayPayment);
+
 // Wallet Top-up
 router.post('/wallet/topup', auth.authUser, userController.topupWallet);
 

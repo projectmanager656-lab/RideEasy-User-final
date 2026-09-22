@@ -1,8 +1,10 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 import { useLanguage } from '../i18n'
 import vehicleAutoImg from '../assets/logo-auto.png'
 import vehicleCarImg from '../assets/logo-car.png'
@@ -25,8 +27,8 @@ function normalizeRide(r) {
     time: r?.time || null,
     completedAt: r?.completedAt,
     createdAt: r?.createdAt,
-    pickup: r?.pickupLocation || r?.pickup || '—',
-    destination: r?.dropLocation || r?.destination || '—',
+    pickup: normalizeLocationText(r?.pickupLocation || r?.pickup),
+    destination: normalizeLocationText(r?.dropLocation || r?.destination),
     distance: r?.distance,
     duration: r?.duration,
     paymentMethod: r?.paymentMethod,
@@ -443,9 +445,9 @@ const RideHistory = () => {
   }, [items, activeFilter, query, dateFilter])
 
   return (
-    <div className="min-h-dvh min-h-screen scrollbar-hide w-full max-w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
+    <div className="flex h-full w-full max-w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
       {/* header */}
-      <header className="sticky top-0 z-20 border-b border-theme bg-theme-bg/95 px-4 pt-4 pb-3 backdrop-blur">
+      <header className="sticky top-0 z-20 shrink-0 border-b border-theme bg-theme-bg/95 px-4 pt-4 pb-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-lg items-center gap-3">
           <Link
             to="/home"
@@ -474,7 +476,7 @@ const RideHistory = () => {
 
       {/* real calendar filter */}
       {showCalendar ? (
-        <div className="border-b border-theme bg-theme-bg/95 px-3 py-3 sm:px-4">
+        <div className="shrink-0 border-b border-theme bg-theme-bg/95 px-3 py-3 sm:px-4">
           <div className="mx-auto w-full max-w-lg">
             <div className="flex items-center justify-between">
               {calView === 'days' ? (
@@ -664,7 +666,8 @@ const RideHistory = () => {
         </div>
       ) : null}
 
-      <div className="mx-auto w-full max-w-lg px-3 pt-3 sm:px-4">
+      {/* Fixed summary + search/filter block — stays put while the list scrolls */}
+      <div className="mx-auto w-full max-w-lg shrink-0 px-3 pt-3 sm:px-4">
         {error ? (
           <div
             role="status"
@@ -745,6 +748,11 @@ const RideHistory = () => {
             </button>
           </div>
         ) : null}
+      </div>
+
+      {/* Only the ride history list below the summary/search scrolls */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch]">
+        <div className="mx-auto w-full max-w-lg px-3 pb-24 sm:px-4">
 
         {!loading && displayed.length === 0 ? (
           <div className="py-10 text-center">
@@ -775,6 +783,7 @@ const RideHistory = () => {
             </button>
           </div>
         ) : null}
+        </div>
       </div>
 
       {detailRide ? <RideDetailModal ride={detailRide} t={t} onClose={() => setDetailRide(null)} /> : null}

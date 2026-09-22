@@ -1,6 +1,10 @@
 R_DEF: Internal format may change without notice
 local
+color colorAccent
+color colorPrimary
+color colorPrimaryDark
 color ic_launcher_background
+color rideeasy_window_bg
 drawable ic_launcher_background
 drawable ic_launcher_foreground
 drawable splash

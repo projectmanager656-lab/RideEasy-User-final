@@ -60,14 +60,16 @@ const SocketProvider = ({ children }) => {
         if (socket.connected) socket.disconnect()
         return
       }
-      for (let i = 0; i < 24 && !cancelled; i++) {
+      // Brief health probe so we connect once the backend is reachable instead of
+      // logging a burst of connect errors. Socket.IO owns reconnection after this.
+      for (let i = 0; i < 8 && !cancelled; i++) {
         try {
           const res = await fetch(liveUrl, { cache: 'no-store' })
           if (res.ok) break
         } catch {
           /* backend not listening */
         }
-        await new Promise((r) => setTimeout(r, 400))
+        await new Promise((r) => setTimeout(r, 300))
       }
       if (cancelled) return
       socket.auth = { token }

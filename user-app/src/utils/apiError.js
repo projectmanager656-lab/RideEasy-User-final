@@ -10,15 +10,15 @@ export function formatApiError (error) {
       error?.code === 'ECONNREFUSED' ||
       /ECONNREFUSED|connection refused/i.test(msg)
     if (msg.includes('Network Error') || error?.code === 'ERR_NETWORK' || refused) {
-      const hint = refused
-        ? ' Nothing is listening (start the API: from repo root run `npm run dev:backend` or `npm run dev:all`).'
-        : ''
-      return `Cannot reach the API at ${API_BASE_URL}. Set VITE_BASE_URL or VITE_API_BASE_URL to your API origin, check CORS, and that the backend is running.${hint}`
+      // Distinct from a timeout: nothing answered at all.
+      return `Unable to connect to the server at ${API_BASE_URL}. Check that the backend is running and that this device is on the same Wi-Fi network as it.`
     }
     if (error?.code === 'ECONNABORTED' || msg.toLowerCase().includes('timeout')) {
-      return 'Request timed out. Check your connection and try again.'
+      // A physical phone that is not on the backend's network hangs until the
+      // request times out, so name the URL and the likely cause.
+      return `The server at ${API_BASE_URL} did not respond in time. On a phone this usually means it is not on the same Wi-Fi network as the backend, or the backend is not running.`
     }
-    return msg || `Network error. Confirm VITE_BASE_URL points to your backend (${API_BASE_URL}).`
+    return msg || `Network error. Could not reach ${API_BASE_URL}.`
   }
 
   const { status, data } = error.response

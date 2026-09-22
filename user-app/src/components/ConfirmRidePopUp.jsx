@@ -3,6 +3,7 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 import { getCaptainToken } from '../utils/authTokens'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
 import { useLanguage } from '../i18n'
@@ -85,13 +86,13 @@ const ConfirmRidePopUp = (props) => {
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="ri-map-pin-user-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.pickupLocation || props.ride?.pickup}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.pickupLocation || props.ride?.pickup)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="text-lg ri-map-pin-2-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.dropLocation || props.ride?.destination}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.dropLocation || props.ride?.destination)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3'>

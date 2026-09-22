@@ -170,7 +170,7 @@ const LocationScreen = () => {
         <div className="shrink-0 px-4 pt-9">
           <button
             type="button"
-            onClick={() => navigate('/home', { replace: true })}
+            onClick={() => navigate('/home')}
             className="flex w-full items-center gap-3 rounded-2xl border border-theme bg-theme-card px-4 py-3.5 shadow-lg shadow-black/40 transition active:scale-[0.99]"
           >
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
@@ -206,7 +206,7 @@ const LocationScreen = () => {
                 <button
                   key={`${item.name}-${idx}`}
                   type="button"
-                  onClick={() => navigate('/home', { replace: true, state: { recentLocation: item } })}
+                  onClick={() => navigate('/home', { state: { recentLocation: item } })}
                   className="flex w-full items-center gap-3 border-b border-theme px-3.5 py-3 text-left transition last:border-b-0 hover:bg-theme-card-muted active:bg-theme-card-muted"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">

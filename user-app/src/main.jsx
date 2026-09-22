@@ -10,6 +10,7 @@ import { initSentry } from './initSentry';
 import { LanguageProvider } from './i18n'
 import { ThemeProvider } from './context/ThemeContext'
 
+import { Capacitor } from '@capacitor/core'
 void initSentry();
 
 // Fatal-error surface: if anything throws before React mounts (or the app
@@ -32,11 +33,6 @@ function showFatalError (detail) {
 window.addEventListener('error', (e) => showFatalError(e.error || e.message))
 window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason))
 
-// Remove the static boot splash once the app has mounted for real.
-function removeBootSplash () {
-  document.getElementById('boot-splash')?.remove()
-}
-
 // PWA / stale-cache safety: after a new build the old hashed JS chunks no
 // longer exist. Reload once instead of leaving the user on a blank screen.
 let reloadedOnPreloadError = false
@@ -55,17 +51,41 @@ const HEALED_KEY = 'rideeasy_sw_healed'
 
 async function purgeStaleServiceWorkers () {
   try {
+    // Capacitor Android uses http://localhost and must not run PWA
+    // service-worker cleanup/registration logic.
+    const isCapacitor =
+      typeof window !== 'undefined' &&
+      (
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'ionic:' ||
+        (
+          window.location.protocol === 'http:' &&
+          window.location.hostname === 'localhost'
+        )
+      )
+
+    if (isCapacitor) return
+
     const prev = localStorage.getItem(STAMP_KEY)
     localStorage.setItem(STAMP_KEY, BUILD_STAMP)
+
     if (prev === BUILD_STAMP) return
     if (!('serviceWorker' in navigator)) return
+
     const regs = await navigator.serviceWorker.getRegistrations().catch(() => [])
     if (regs.length === 0) return
-    await Promise.all(regs.map((reg) => reg.unregister().catch(() => {})))
+
+    await Promise.all(
+      regs.map((reg) => reg.unregister().catch(() => {}))
+    )
+
     if (window.caches) {
       const keys = await window.caches.keys().catch(() => [])
-      await Promise.all(keys.map((key) => window.caches.delete(key).catch(() => {})))
+      await Promise.all(
+        keys.map((key) => window.caches.delete(key).catch(() => {}))
+      )
     }
+
     if (!sessionStorage.getItem(HEALED_KEY)) {
       sessionStorage.setItem(HEALED_KEY, '1')
       window.location.reload()
@@ -75,6 +95,18 @@ async function purgeStaleServiceWorkers () {
   }
 }
 void purgeStaleServiceWorkers()
+
+// Register the PWA service worker only in a normal web browser.
+// Capacitor Android uses http://localhost and must not load /sw.js.
+if (!Capacitor.isNativePlatform()) {
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => {
+      registerSW({ immediate: true })
+    })
+    .catch((error) => {
+      console.warn('PWA service worker registration skipped:', error)
+    })
+}
 
 createRoot(document.getElementById('root')).render(
 
@@ -93,5 +125,3 @@ createRoot(document.getElementById('root')).render(
   </SocketProvider>
 
 )
-
-setTimeout(removeBootSplash, 1500)

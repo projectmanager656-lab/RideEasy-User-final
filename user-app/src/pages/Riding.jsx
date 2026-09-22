@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useSocket } from '../hooks/useSocket'
+import { normalizeLocationText } from '../utils/locationText'
 import RideMap from '../components/RideMap'
 import LiveTracking from '../components/LiveTracking'
 import RideStatusStepper from '../components/RideStatusStepper'
@@ -240,9 +241,11 @@ const Riding = () => {
     }, [ride?._id])
 
     useEffect(() => {
-        if (!ride?.pickupLocation?.trim()) return
+        // normalizeLocationText tolerates both string and { address } locations.
+        const address = normalizeLocationText(ride?.pickupLocation, '')
+        if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.pickupLocation.trim() },
+            params: { address },
             headers: { Authorization: `Bearer ${getPassengerToken()}` }
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
@@ -250,9 +253,10 @@ const Riding = () => {
     }, [ride?.pickupLocation])
 
     useEffect(() => {
-        if (!ride?.dropLocation?.trim()) return
+        const address = normalizeLocationText(ride?.dropLocation, '')
+        if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.dropLocation.trim() },
+            params: { address },
             headers: { Authorization: `Bearer ${getPassengerToken()}` }
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setDropCoords({ lat: res.data.lat, lng: res.data.lng })
@@ -308,8 +312,10 @@ const Riding = () => {
     }, [ride?._id, ride?.status, t])
 
     const openInGoogleMaps = () => {
-        const dest = dropCoords || (ride?.dropLocation ? encodeURIComponent(ride.dropLocation) : null)
-        const origin = driverCoords ? `${driverCoords.lat},${driverCoords.lng}` : (ride?.pickupLocation ? encodeURIComponent(ride.pickupLocation) : '')
+        const dropText = normalizeLocationText(ride?.dropLocation, '')
+        const pickupText = normalizeLocationText(ride?.pickupLocation, '')
+        const dest = dropCoords || (dropText ? encodeURIComponent(dropText) : null)
+        const origin = driverCoords ? `${driverCoords.lat},${driverCoords.lng}` : (pickupText ? encodeURIComponent(pickupText) : '')
         if (!dest) return
         const destStr = typeof dest === 'string' ? dest : `${dest.lat},${dest.lng}`
         const url = `${getExternalMapsDirBase()}/?api=1&destination=${destStr}&origin=${origin || ''}&travelmode=driving`
@@ -485,14 +491,14 @@ const Riding = () => {
                             <i className="text-lg ri-map-pin-user-fill text-brand-yellow" aria-hidden />
                             <div className="min-w-0">
                                 <h3 className='text-lg font-medium text-theme-primary'>{t('pickup')}</h3>
-                                <p className='text-sm -mt-1 text-theme-secondary'>{ride?.pickupLocation || '—'}</p>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{normalizeLocationText(ride?.pickupLocation)}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3 border-b border-theme'>
                             <i className="text-lg ri-map-pin-2-fill text-rose-400" aria-hidden />
                             <div className="min-w-0">
                                 <h3 className='text-lg font-medium text-theme-primary'>{t('drop')}</h3>
-                                <p className='text-sm -mt-1 text-theme-secondary'>{ride?.dropLocation || ride?.destination}</p>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{normalizeLocationText(ride?.dropLocation || ride?.destination)}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3'>
@@ -549,8 +555,8 @@ const Riding = () => {
                                                     const rideDetails = {
                                                         driverName: ride?.captain?.name || 'Driver',
                                                         vehicleInfo: `${ride?.captain?.vehicleType || 'Vehicle'} ${ride?.captain?.vehicleNumber || ''}`,
-                                                        pickup: ride?.pickupLocation || '—',
-                                                        destination: ride?.dropLocation || ride?.destination || '—',
+                                                        pickup: normalizeLocationText(ride?.pickupLocation),
+                                                        destination: normalizeLocationText(ride?.dropLocation || ride?.destination),
                                                         status: ride?.status || '—',
                                                         eta: ride?.eta || 'Calculating...',
                                                         rideId: ride?._id || '—'

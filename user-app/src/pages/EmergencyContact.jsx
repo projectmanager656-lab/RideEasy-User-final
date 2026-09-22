@@ -134,9 +134,9 @@ const EmergencyContact = () => {
   }
 
   return (
-    <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-28">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
       {/* header */}
-      <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
+      <header className="z-10 shrink-0 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-md items-start gap-3">
           <button
             type="button"
@@ -153,7 +153,9 @@ const EmergencyContact = () => {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-md space-y-4 px-4 pt-5">
+      {/* Only this area scrolls — the header stays fixed. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch]">
+      <div className="mx-auto w-full max-w-md space-y-4 px-4 pt-5 pb-28">
         {/* emergency contact info card */}
         <section className="rounded-2xl border border-theme bg-theme-card p-4">
           {loading ? (
@@ -287,6 +289,7 @@ const EmergencyContact = () => {
             </div>
           </form>
         )}
+      </div>
       </div>
     </div>
   )

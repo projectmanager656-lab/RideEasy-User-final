@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 import { useLanguage } from '../i18n'
 import { FAQ_DATA, CATEGORY_IDS } from '../utils/faqData'
 
@@ -168,7 +169,7 @@ const HelpSupport = () => {
     setLostError('')
     const ride = rides.find((r) => String(r._id) === String(lostRide))
     const rideLabel = ride
-      ? `${ride.pickupLocation || ''} → ${ride.dropLocation || ''}`
+      ? `${normalizeLocationText(ride.pickupLocation, '')} → ${normalizeLocationText(ride.dropLocation, '')}`
       : 'No ride selected'
     try {
       await apiClient.post('/support-tickets', {
@@ -208,15 +209,17 @@ const HelpSupport = () => {
   }
 
   return (
-    <div className="min-h-dvh min-h-screen w-full overflow-x-hidden bg-theme-bg text-theme-primary pb-24">
-      <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-theme bg-theme-bg/90 px-4 pt-4 pb-3 backdrop-blur">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
+      <header className="z-10 flex shrink-0 items-center gap-3 border-b border-theme bg-theme-bg/90 px-4 pt-4 pb-3 backdrop-blur">
         <button type="button" onClick={handleBack} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-theme bg-theme-card text-brand active:scale-95" aria-label={t('back')}>
           <i className="ri-arrow-left-line text-2xl" />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-2xl font-extrabold tracking-tight">{t('help_support')}</h1>
       </header>
 
-      <div className="mx-auto w-full max-w-lg space-y-4 px-3 pt-4 sm:px-4">
+      {/* Only this area scrolls — the header stays fixed. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch]">
+      <div className="mx-auto w-full max-w-lg space-y-4 px-3 pt-4 pb-24 sm:px-4">
         {/* Search */}
         <Section title={t('search_help')} icon="ri-search-line">
           <div className="relative">
@@ -308,6 +311,7 @@ const HelpSupport = () => {
             </button>
           </div>
         </Section>
+      </div>
       </div>
 
       {/* Report a problem modal */}
@@ -414,7 +418,7 @@ const HelpSupport = () => {
                       <option value="">{t('select_a_ride')}</option>
                       {rides.map((r) => (
                         <option key={r._id} value={r._id}>
-                          {new Date(r.createdAt || r.completedAt || Date.now()).toLocaleDateString()} · {r.pickupLocation || ''} → {r.dropLocation || ''}
+                          {new Date(r.createdAt || r.completedAt || Date.now()).toLocaleDateString()} · {normalizeLocationText(r.pickupLocation, '')} → {normalizeLocationText(r.dropLocation, '')}
                         </option>
                       ))}
                     </select>
