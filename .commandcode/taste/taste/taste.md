@@ -1,14 +1,12 @@
 # Taste
-- When asking how to do something, wants explicit numbered step-by-step instructions rather than a conceptual explanation. Confidence: 0.45
-- Frames multi-part work as an itemized spec (numbered issues/steps with concrete sub-steps and expected behavior) and expects it addressed in that structure. Confidence: 0.7
-- Wants failure cases logged and handled explicitly rather than dropped silently (e.g. emitted events that hit nobody should surface a warning/error). Confidence: 0.5
-- Wants key server-side events logged clearly (with identifiers) for easy monitoring/debugging, not just failures. Confidence: 0.4
-- When debugging a cross-layer (frontend ↔ backend) flow, expects explicit diagnostic logging on both sides — connection/reconnection lifecycle, outgoing request payloads, backend reception with target identities, and receiving/skipping reasons on the consumer — not just on one end. Confidence: 0.55
-- Wants hanging/indefinite states eliminated: when a request can't be fulfilled, surface a clear response or a fallback/retry path instead of letting the UI freeze forever. Confidence: 0.5
-- Wants APIs to fail soft instead of crashing: validate inputs up front (null/undefined checks) and return the correct status (e.g. 400 for missing/invalid input, 502 for upstream failures) rather than turning client mistakes into a blanket 500. Confidence: 0.6
-- Wants external/third-party API calls (maps, routing, geocoding) wrapped in try/catch with a graceful fallback (e.g. straight-line Haversine estimate when the routing service is down) so features degrade instead of erroring out. Confidence: 0.6
-- Wants user-facing errors to be friendly and human-readable — no raw status codes or upstream error text leaking to the UI (e.g. show "Unable to fetch fare…" instead of "status code 502"). Confidence: 0.55
-- Declines to let the agent run verification shell commands (test suites, builds) without explicit say-so; prefers to approve/run them himself. Confidence: 0.4
-- Wants UI state kept consistent with the underlying source of truth: stale banners/state must be cleared or hidden the moment the real status changes, and the user must never be left on a screen showing out-of-date state (e.g. a lingering "searching" banner after navigating away). Confidence: 0.6
-- Wants navigation to reset lingering screen/flow state so stale overlays (e.g. an old "No Driver Found" modal) can't pop up immediately on screen load. Confidence: 0.5
-- Wants dismissible permission/opt-in prompts to stay recoverable: declining should close only the modal while a persistent, actionable "tap to enable" entry point remains so the user can opt in later. Confidence: 0.5
+- Expects a thorough read-only inspection of the whole project (architecture, frontend/backend contracts, models, auth, realtime) BEFORE any file is modified. Confidence: 0.8
+- Prefers one canonical implementation as the single source of truth; do not create duplicate/parallel copies or extra "New"/"Merged"/"Final" folders when an existing location is the intended final destination. Confidence: 0.7
+- Wants staged, clearly-phased execution (analyze → decide → change → validate → report), with a plan/todo list tracked along the way. Confidence: 0.6
+- Prefers the smallest possible change; do not refactor working code, redesign UI, or restructure the project just because another architecture looks cleaner. Confidence: 0.8
+- Wants changes kept backward-compatible with existing consumers; do not rename APIs, endpoints, or Socket.IO events unnecessarily. Confidence: 0.75
+- Preserve existing working functionality and response/API contracts first; understand why two implementations differ before changing anything. Confidence: 0.7
+- Never hard-code credentials/secrets (JWT secrets, DB creds, API keys, payment secrets) and never copy secret values from an old `.env`; document only env var names and their purposes. Confidence: 0.85
+- Explicitly distinguishes VERIFIED vs CODE-LEVEL VERIFIED vs NOT TESTED DUE TO EXTERNAL DEPENDENCY, and does not want errors hidden; only claim something works if actually verified or provable by code analysis. Confidence: 0.8
+- Expects a detailed structured final report: itemized files created/modified/removed, dependencies added/removed, required env var names (never values), compatibility status per app (frontend API + socket + lifecycle), tests actually run, and remaining warnings/untested areas. Confidence: 0.75
+- Wants explicit go/no-go guidance before destructive steps (e.g. which files are safe to delete, whether it's safe to remove a folder) rather than unilateral cleanup. Confidence: 0.7
+- Works on Windows and prefers PowerShell-based commands (e.g. commands to install deps and start services). Confidence: 0.6
