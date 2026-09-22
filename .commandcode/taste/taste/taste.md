@@ -85,3 +85,9 @@
 - Wants time-dependent test fixtures placed far enough in the future that they cannot go stale or trip real background behaviour mid-run, and any unexpected change in seeded data investigated as a possible real product bug (logs, process uptime, DB state) before being dismissed as an environment artifact. Confidence: 0.6
 
 - Reports observations that fall outside the agreed scope as explicitly flagged and unproven (with the theoretical risk noted) instead of silently ignoring them, overstating them, or fixing them without permission. Confidence: 0.6
+
+- When resolving merge/rebase conflicts, expects a true union of both sides: every function, export, endpoint and route from their work AND the teammate's incoming changes must survive, with nothing omitted, overwritten or silently dropped. Confidence: 0.7
+
+- Expects the agent to carry git operations through to completion — stage, `rebase --continue`, and push the shared branch to the remote — not just leave resolved files sitting in the working tree. Confidence: 0.6
+
+- Wants its own taste/notes file kept clean across merges: conflict markers removed and no duplicated bullets after reconciling both sides. Confidence: 0.5
