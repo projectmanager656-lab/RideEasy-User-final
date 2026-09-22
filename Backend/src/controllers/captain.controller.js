@@ -162,7 +162,12 @@ module.exports.addWalletBalance = async (req, res) => {
   });
 };
 
-/** Update optional payment onboarding data without coupling it to signup. */
+/**
+ * Update optional payment onboarding data without coupling it to signup.
+ * `bankDetails` is accepted for backward compatibility with released driver builds
+ * that still post it, but is intentionally ignored: captains are paid via upiId /
+ * paymentQrUrl, and the captain schema no longer stores bank account fields.
+ */
 module.exports.updateCaptainPayee = async (req, res) => {
   const body = req.body || {};
   const patch = {};
@@ -175,8 +180,6 @@ module.exports.updateCaptainPayee = async (req, res) => {
     patch.paymentQrUrl = String(body.paymentQrUrl || "")
       .trim()
       .slice(0, 2048);
-  if (body.bankDetails !== undefined)
-    return fail(res, req, 400, "Bank details are not supported for captains");
   if (!Object.keys(patch).length)
     return fail(res, req, 400, "Nothing to update");
   const captain = await captainModel.findByIdAndUpdate(req.captain._id, patch, {
