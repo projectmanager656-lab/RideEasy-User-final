@@ -100,7 +100,12 @@ module.exports.createRide = async ({
     couponCode,
     pickupCoordinates,
     dropCoordinates,
+    bookingType = 'now',
+    scheduledPickupAt = null,
+    dispatchAt = null,
 }) => {
+    /** Book Now searches straight away; a scheduled booking waits for `dispatchAt`. */
+    const isScheduled = bookingType === 'scheduled';
     /** OTP is created only when the driver arrives. */
     const ride = await rideModel.create({
         user,
@@ -118,7 +123,11 @@ module.exports.createRide = async ({
         originalFare: Math.round(Number(price || 0) * 100) / 100,
         finalFare: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
         chargedAmount: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
-        status: 'searching',
+        status: isScheduled ? 'scheduled' : 'searching',
+        bookingType: isScheduled ? 'scheduled' : 'now',
+        scheduledPickupAt: isScheduled ? scheduledPickupAt : null,
+        dispatchAt: isScheduled ? dispatchAt : null,
+        searchStartedAt: isScheduled ? null : new Date(),
         paymentMethod: normalizePaymentMethod(paymentMethod),
         paymentStatus: 'pending',
         customerName,

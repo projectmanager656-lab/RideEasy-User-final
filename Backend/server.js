@@ -3,6 +3,7 @@ const http = require('http');
 const app = require('./src/app');
 const { ensureDbConnected, disconnectDb } = require('./src/config/db');
 const { releaseStaleCouponReservations } = require('./src/services/coupon.service');
+const { startScheduledRideScheduler, stopScheduledRideScheduler } = require('./src/services/scheduledRide.service');
 const { initializeSocket } = require('./src/socket');
 const { getAllowedOriginsList } = require('./src/config/cors.config');
 
@@ -18,6 +19,7 @@ initializeSocket(server, app);
 
 function gracefulShutdown(signal) {
     console.log(`[shutdown] ${signal}`);
+    stopScheduledRideScheduler();
     server.close(async () => {
         try {
             await disconnectDb();
@@ -68,6 +70,13 @@ async function start() {
         .catch((err) => {
             console.warn('[coupon] stale reservation sweep skipped:', err?.message || err);
         });
+
+    /**
+     * Scheduled-ride dispatcher: flips `scheduled` rides to `searching` once their
+     * `dispatchAt` passes and reuses the normal driver matching. DB-driven, so it
+     * recovers rides whose dispatch time elapsed while the process was down.
+     */
+    startScheduledRideScheduler();
 }
 
 start();

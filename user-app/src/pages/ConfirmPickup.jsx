@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RideMap from '../components/RideMap'
+import ScheduledRideConfirmation from '../components/ScheduledRideConfirmation'
 import { apiClient, withAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
@@ -36,6 +37,8 @@ export default function ConfirmPickup () {
     const [locationError, setLocationError] = useState('')
     const [booking, setBooking] = useState(false)
     const [bookingError, setBookingError] = useState('')
+    /** Set when the backend reserved a future ride — shows confirmation instead of searching. */
+    const [scheduledRide, setScheduledRide] = useState(null)
     const geocodeRequestRef = useRef(0)
 
     const updatePickupCoords = useCallback((coords) => {
@@ -85,7 +88,12 @@ export default function ConfirmPickup () {
                 ...(state.couponCode ? { couponCode: state.couponCode } : {}),
                 price: state.price,
                 distanceKm: state.distanceKm,
-                ...(state.scheduledAt ? { scheduledAt: state.scheduledAt } : {}),
+                /**
+                 * Send ONE absolute instant (UTC). The picker holds a local wall-clock
+                 * string, so it is converted here in the passenger's own timezone —
+                 * the backend never has to guess a timezone.
+                 */
+                ...(state.scheduledAt ? { scheduledAt: new Date(state.scheduledAt).toISOString() } : {}),
             }
             console.info('[ride request] POST /rides/create', body)
             const response = await apiClient.post('/rides/create', body, withAuth())
@@ -103,6 +111,15 @@ export default function ConfirmPickup () {
                 try {
                     sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
                 } catch { /* ignore */ }
+            }
+            /**
+             * SCHEDULED ride: the backend only reserved it, so the passenger must NOT
+             * enter the searching flow now. Show the confirmation instead — the backend
+             * dispatcher starts the driver search at dispatch time.
+             */
+            if (ridePayload?.status === 'scheduled' || raw?.scheduled === true) {
+                setScheduledRide(ridePayload)
+                return
             }
             navigate('/searching-for-driver', {
                 replace: true,
@@ -125,6 +142,19 @@ export default function ConfirmPickup () {
         } finally {
             setBooking(false)
         }
+    }
+
+    if (scheduledRide) {
+        return (
+            <ScheduledRideConfirmation
+                ride={scheduledRide}
+                pickup={pickup}
+                destination={state.destination}
+                vehicleType={state.vehicleType}
+                onDone={() => navigate('/home', { replace: true })}
+                onViewTrips={() => navigate('/history', { replace: true })}
+            />
+        )
     }
 
     if (!pickupCoords || !dropCoords) {

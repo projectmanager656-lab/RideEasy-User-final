@@ -285,14 +285,24 @@ const SearchingForDriver = () => {
         navigateRef.current('/riding', { state: { ride: nextRide } })
         return
       }
+      /**
+       * The `arrived` event carries the passenger OTP inside `confirmation`
+       * (emitted only to this passenger's private socket room). Capture it here so
+       * the PIN appears the moment the driver arrives — no refresh needed.
+       * Side effects are kept OUT of the setRide updater so React can safely
+       * re-invoke it (updaters must stay pure).
+       */
+      if (data.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
+      const otpVal = data.confirmation?.otp ?? data.otp
+      if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      if (data.status === 'completed' || data.status === 'cancelled') {
+        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      }
       setRide((prev) => {
         const base = { ...(prev || {}) }
-        const next = data.ride ? { ...base, ...data.ride, status: data.status } : { ...base, status: data.status }
-        if (data.confirmation) setRideConfirmation((prevConf) => ({ ...(prevConf || {}), ...data.confirmation }))
-        if (data.status === 'completed' || data.status === 'cancelled') {
-          try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-        }
-        return next
+        return data.ride
+          ? { ...base, ...data.ride, status: data.status }
+          : { ...base, status: data.status }
       })
     }
 
@@ -337,6 +347,30 @@ const SearchingForDriver = () => {
       socket.off('ride:status-update', handleStatusUpdate)
     }
   }, [socket, rideId])
+
+  /**
+   * Authoritative OTP re-sync. If the ride is `arrived` but the socket payload did
+   * not deliver the PIN (partial payload / event race), read the ride once from the
+   * backend — the same source the mount-fetch and refresh use — and apply it.
+   * Read-only: `GET /rides/:id` only decrypts the existing PIN, it never mints a new
+   * one. Runs at most once per arrival because `passengerOtp` short-circuits it.
+   */
+  useEffect(() => {
+    if (!rideId || passengerOtp) return
+    if (normalizeStatus(ride?.status) !== 'arrived') return
+    let cancelled = false
+    apiClient.get(`/rides/${rideId}`, withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const o = stripApiEnvelope(res.data)
+        const conf = o.confirmation && typeof o.confirmation === 'object' ? o.confirmation : null
+        if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [rideId, ride?.status, passengerOtp])
 
   /**
    * Poll ride status while searching (8s) / after assignment (5s).
@@ -438,13 +472,16 @@ const SearchingForDriver = () => {
   const isAssigned = status === 'accepted'
   const isArrived = status === 'arrived'
 
-  // Sync remaining search seconds if ride has createdAt
+  // Sync remaining search seconds from when the search actually began.
+  // A scheduled ride is created hours earlier, so `createdAt` would make the
+  // window look already expired the moment the backend dispatches it.
   useEffect(() => {
-    if (ride?.createdAt && isSearching) {
-      const elapsed = Math.floor((Date.now() - new Date(ride.createdAt).getTime()) / 1000)
+    const searchStartedAt = ride?.searchStartedAt || ride?.createdAt
+    if (searchStartedAt && isSearching) {
+      const elapsed = Math.floor((Date.now() - new Date(searchStartedAt).getTime()) / 1000)
       setSearchTimeLeft(Math.max(0, LOOKING_TIMEOUT_SECONDS - Math.max(0, elapsed)))
     }
-  }, [ride?.createdAt, isSearching])
+  }, [ride?.searchStartedAt, ride?.createdAt, isSearching])
 
   // Count down 2 minutes overall search time
   useEffect(() => {

@@ -11,7 +11,8 @@ import vehicleCarImg from '../assets/logo-car.png'
 import vehicleBikeImg from '../assets/logo-bike.png'
 
 // Backend ride statuses that represent an upcoming / active trip (not yet done).
-const ACTIVE_STATUSES = new Set(['searching', 'accepted', 'arrived', 'started'])
+// `scheduled` = a reserved future booking that the backend has not dispatched yet.
+const ACTIVE_STATUSES = new Set(['scheduled', 'searching', 'accepted', 'arrived', 'started'])
 
 // ---------------------------------------------------------------------------
 // Helpers — shape both demo rides and live API rides the same way.
@@ -359,7 +360,12 @@ const RideDetailModal = ({ ride, t, onClose }) => {
           </span>
         </div>
 
-        {!cancelled && ride.id ? (
+        {/*
+          Invoice represents a successfully COMPLETED ride only. Every other status —
+          scheduled/upcoming, searching, accepted, arrived, started and cancelled —
+          has no invoice. `normalizeRide` lowercases the authoritative backend status.
+        */}
+        {ride.status === 'completed' && ride.id ? (
           <div className="mt-4">
             <Link
               to={`/invoice/${ride.id}`}

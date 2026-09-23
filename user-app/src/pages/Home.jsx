@@ -3,7 +3,7 @@ import 'remixicon/fonts/remixicon.css'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
-import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE, NOTIFICATION_NEW } from '../constants/rideSocketEvents'
 import { useSocket } from '../hooks/useSocket';
 import { UserDataContext } from '../context/UserContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -12,6 +12,7 @@ import LocationSelector from '../components/LocationSelector';
 import ForMeSheet from '../components/ForMeSheet';
 import SafetyPromoCard from '../components/SafetyPromoCard';
 import ScheduleModal from '../components/ScheduleModal';
+import ScheduledRideConfirmation from '../components/ScheduledRideConfirmation';
 import NotificationSheet from '../components/NotificationSheet';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
@@ -94,6 +95,8 @@ const Home = () => {
     const [ fare, setFare ] = useState({})
     const [ vehicleType, setVehicleType ] = useState(null)
     const [ ride, setRide ] = useState(null)
+    /** Reserved future booking — shows the scheduled confirmation instead of driver search. */
+    const [ scheduledRide, setScheduledRide ] = useState(null)
     const [ pickupCoords, setPickupCoords ] = useState(null)
     const [ dropCoords, setDropCoords ] = useState(null)
     const [ driverCoords, setDriverCoords ] = useState(null)
@@ -104,6 +107,9 @@ const Home = () => {
     const [ findingTrip, setFindingTrip ] = useState(false)
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
     const [ notificationsOpen, setNotificationsOpen ] = useState(false)
+    /** In-app notifications for this passenger (Home bell + sheet). */
+    const [ notifications, setNotifications ] = useState([])
+    const [ notificationsLoading, setNotificationsLoading ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(null)
     const [ assignmentError, setAssignmentError ] = useState('')
     const [ pickupSelection, setPickupSelection ] = useState(null)
@@ -122,6 +128,8 @@ const Home = () => {
     const keepSearchFirstRef = useRef(true)
     /** True when Home restored an active ride from the session key (refresh / re-entry). */
     const resumedRideFromSessionRef = useRef(false)
+    /** True after the first socket connect — lets reconnects trigger a notification resync. */
+    const sawConnectedRef = useRef(false)
 
     const navigate = useNavigate()
     const location = useLocation()
@@ -191,9 +199,20 @@ const Home = () => {
             socket.emit('join', { userType: 'user', userId: uid });
         };
         emitJoin();
-        socket.on('connect', emitJoin);
+        /**
+         * Re-join after a reconnect. Every socket frame sent while the client was
+         * disconnected is gone for good (room emits are not buffered), so also
+         * resync the notification list once — otherwise a dispatch that landed during
+         * a drop would leave the badge and the sheet stale. One fetch per reconnect.
+         */
+        const onConnect = () => {
+            emitJoin();
+            if (sawConnectedRef.current) void loadNotificationsRef.current?.();
+            sawConnectedRef.current = true;
+        };
+        socket.on('connect', onConnect);
         return () => {
-            socket.off('connect', emitJoin);
+            socket.off('connect', onConnect);
         };
     }, [socket, currentUser?._id]);
 
@@ -261,16 +280,31 @@ const Home = () => {
                Home bounce the rider straight into the "No Driver Found" modal — e.g.
                right after tapping "Where to go?" from the location screen. */
             if (st === 'searching') {
-                const createdMs = data.createdAt ? new Date(data.createdAt).getTime() : NaN
-                const expiredSearch = Number.isFinite(createdMs)
-                    && (Date.now() - createdMs) / 1000 >= RIDE_SEARCH_TIMEOUT_SECONDS
+                /** Measure from when the search actually began (dispatch), not row creation. */
+                const baseMs = data.searchStartedAt
+                    ? new Date(data.searchStartedAt).getTime()
+                    : (data.createdAt ? new Date(data.createdAt).getTime() : NaN)
+                const expiredSearch = Number.isFinite(baseMs)
+                    && (Date.now() - baseMs) / 1000 >= RIDE_SEARCH_TIMEOUT_SECONDS
                 if (expiredSearch) {
                     try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
                     return
                 }
             }
-            if (![ 'searching', 'accepted', 'arrived' ].includes(st)) {
+            if (![ 'scheduled', 'searching', 'accepted', 'arrived' ].includes(st)) {
                 try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                return
+            }
+            /**
+             * A scheduled booking the backend has already started is the passenger's
+             * live ride — enter the existing searching flow. Book Now keeps its current
+             * behaviour of staying on Home until the user resumes it.
+             */
+            if (st !== 'scheduled' && data.bookingType === 'scheduled') {
+                navigate('/searching-for-driver', {
+                    replace: true,
+                    state: { ride: { ...data, status: st } },
+                })
                 return
             }
             resumedRideFromSessionRef.current = true
@@ -348,6 +382,23 @@ const Home = () => {
                     }
                 }
                 if (st === 'searching') {
+                    /**
+                     * A reserved scheduled booking the backend has just activated.
+                     * Deliberately does NOT force navigation: the passenger enters
+                     * through the Home notification ("Searching for your driver"), and
+                     * that click recovers the authoritative ride before navigating.
+                     * We only drop the reservation screen and keep ride state fresh.
+                     */
+                    if (data.dispatchedFrom === 'scheduled') {
+                        setScheduledRide(null)
+                        /**
+                         * Safety net for the notification list: if the separate
+                         * `notification:new` frame was missed (socket reconnect), this
+                         * one-shot refetch still surfaces "Searching for your driver"
+                         * and updates the unread badge. One fetch per dispatch — no polling.
+                         */
+                        void loadNotificationsRef.current?.()
+                    }
                     if (!keepSearchFirstRef.current) {
                         setVehicleFound(true)
                         setWaitingForDriver(false)
@@ -458,14 +509,86 @@ const Home = () => {
         socket.on(RIDE_COMPLETED, handleRideCompletedEvt)
         socket.on('ride:status-update', handleStatusUpdate)
 
+        /** Realtime in-app notification (e.g. scheduled ride activated). */
+        const handleNotificationNew = (payload) => {
+            if (!payload?._id) return
+            setNotifications((prev) => (
+                prev.some((n) => String(n._id) === String(payload._id))
+                    ? prev
+                    : [ payload, ...prev ]
+            ))
+        }
+        socket.on(NOTIFICATION_NEW, handleNotificationNew)
+
         return () => {
             socket.off(RIDE_ACCEPTED, handleRideAccepted)
             socket.off(LOCATION_UPDATE, handleLocationUpdate)
             socket.off(RIDE_STARTED, handleRideStarted)
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
+            socket.off(NOTIFICATION_NEW, handleNotificationNew)
         }
     }, [socket, navigate, syncRideFromServer]);
+
+    /** Authoritative read of this passenger's in-app notifications. */
+    const loadNotifications = useCallback(async () => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        setNotificationsLoading(true)
+        try {
+            const res = await apiClient.get('/users/notifications', withAuth())
+            const body = stripApiEnvelope(res.data)
+            if (Array.isArray(body?.notifications)) setNotifications(body.notifications)
+        } catch { /* notifications are non-critical */ } finally {
+            setNotificationsLoading(false)
+        }
+    }, [])
+
+    /** Lets the socket handler (defined earlier) trigger a one-shot refetch. */
+    const loadNotificationsRef = useRef(null)
+    loadNotificationsRef.current = loadNotifications
+
+    useEffect(() => {
+        if (!currentUser?._id) return
+        void loadNotifications()
+    }, [loadNotifications, currentUser?._id])
+
+    /** Reconcile whenever the sheet is opened. */
+    useEffect(() => {
+        if (notificationsOpen) void loadNotifications()
+    }, [notificationsOpen, loadNotifications])
+
+    /** Mark one notification read (server-authoritative, optimistic locally). */
+    const markNotificationRead = useCallback(async (id) => {
+        if (!id) return
+        setNotifications((prev) => prev.map((n) => (
+            String(n._id) === String(id) ? { ...n, isRead: true } : n
+        )))
+        try {
+            await apiClient.post(`/users/notifications/${id}/read`, {}, withAuth())
+        } catch { /* next load reconciles */ }
+    }, [])
+
+    /**
+     * Notification click → recover the CURRENT ride from the backend and route by
+     * its LIVE status. The status stored on the notification may be stale.
+     */
+    const openNotification = useCallback(async (n) => {
+        setNotificationsOpen(false)
+        void markNotificationRead(n?._id)
+        const rideId = n?.meta?.rideId
+        if (!rideId) return
+        const data = await syncRideFromServer(rideId)
+        const st = normalizeRideStatus(data?.status)
+        const navState = { ride: { ...(data || { _id: rideId }), status: st || data?.status } }
+        if (st === 'searching') return navigate('/searching-for-driver', { state: navState })
+        if (st === 'accepted') return navigate('/driver-details', { state: navState })
+        if (st === 'arrived') return navigate('/user-otp', { state: navState })
+        if (st === 'started' || st === 'completed') return navigate('/riding', { state: navState })
+        /* Still reserved (or finished): the upcoming/history list is the right destination. */
+        if (st === 'scheduled' || st === 'cancelled') return navigate('/history', { state: navState })
+        return undefined
+    }, [markNotificationRead, navigate, syncRideFromServer]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -1108,11 +1231,30 @@ const Home = () => {
                 paymentMethod: paymentMethod || 'Cash',
                 price,
                 distanceKm: fare.distanceKm,
-                ...(scheduledAt ? { scheduledAt } : {})
+                /** Absolute instant (UTC) so the backend never guesses a timezone. */
+                ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {})
             }, withAuth())
             const raw = stripApiEnvelope(response.data)
             const ridePayload = { ...(raw?.ride && typeof raw.ride === 'object' ? raw.ride : raw) }
             delete ridePayload.otp
+            /**
+             * SCHEDULED booking: reserved only. Leave the searching state and show the
+             * confirmation — the backend dispatcher starts the driver search later.
+             */
+            if (ridePayload?.status === 'scheduled' || raw?.scheduled === true) {
+                setVehicleFound(false)
+                setWaitingForDriver(false)
+                setConfirmRidePanel(false)
+                setVehiclePanel(false)
+                setRide(null)
+                setScheduledRide(ridePayload)
+                if (ridePayload?._id) {
+                    try {
+                        sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
+                    } catch { /* ignore */ }
+                }
+                return ridePayload
+            }
             setRide(ridePayload)
             setPassengerOtp('')
             setDriverCoords(null)
@@ -1251,12 +1393,30 @@ const Home = () => {
         || activeRideStatus === 'arrived'
         || activeRideStatus === 'started'
 
+    /** Drives the bell badge; kept in sync by the socket event and by each load. */
+    const unreadNotificationCount = notifications.filter((n) => !n.isRead).length
+
+    /** Reserved future booking — confirm it instead of showing any driver-searching UI. */
+    if (scheduledRide) {
+        return (
+            <ScheduledRideConfirmation
+                ride={scheduledRide}
+                pickup={pickup}
+                destination={destination}
+                vehicleType={scheduledRide.vehicleType || vehicleType}
+                onDone={() => { setScheduledRide(null); navigate('/home', { replace: true }) }}
+                onViewTrips={() => { setScheduledRide(null); navigate('/history', { replace: true }) }}
+            />
+        )
+    }
+
     return (
         <div className={`relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary${notificationsOpen ? ' overflow-hidden' : ''}`}>
             <div className="relative z-20 mx-auto flex min-h-full w-full max-w-[430px] flex-col pb-8">
                 <RideEasyHeader
                     onBack={() => navigate('/location', { replace: true })}
                     onNotifications={() => setNotificationsOpen(true)}
+                    notificationCount={unreadNotificationCount}
                     onSchedule={() => setScheduleOpen(true)}
                 />
 
@@ -1446,6 +1606,9 @@ const Home = () => {
             <NotificationSheet
                 open={notificationsOpen}
                 onClose={() => setNotificationsOpen(false)}
+                notifications={notifications}
+                loading={notificationsLoading}
+                onSelect={openNotification}
             />
         </div>
     )

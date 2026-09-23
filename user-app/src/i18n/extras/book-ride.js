@@ -66,9 +66,15 @@ const en = {
   minute: 'Minute',
   am_pm: 'AM/PM',
   choose_future_date_time: 'Please choose a future date and time.',
+  schedule_too_soon: 'That time is too soon. Earliest available: {{time}}.',
   schedule_info_line: 'Your ride will be booked at the chosen time through the existing booking flow.',
   booking_your_ride: 'Booking your ride...',
   continue_to_booking: 'Continue to Booking',
+
+  // Scheduled ride confirmation
+  ride_scheduled: 'Ride scheduled',
+  ride_scheduled_hint: "We'll start looking for a driver shortly before your pickup time. You can close the app.",
+  view_my_trips: 'View my trips',
 
   // OutstationModal
   outstation: 'Outstation',
@@ -145,9 +151,15 @@ const hi = {
   minute: 'मिनट',
   am_pm: 'AM/PM',
   choose_future_date_time: 'कृपया भविष्य की तारीख और समय चुनें।',
+  schedule_too_soon: 'यह समय बहुत नज़दीक है। सबसे पहले उपलब्ध: {{time}}।',
   schedule_info_line: 'आपकी राइड चुने गए समय पर मौजूदा बुकिंग प्रक्रिया से बुक की जाएगी।',
   booking_your_ride: 'आपकी राइड बुक हो रही है…',
   continue_to_booking: 'बुकिंग के लिए आगे बढ़ें',
+
+  // Scheduled ride confirmation
+  ride_scheduled: 'राइड शेड्यूल हो गई',
+  ride_scheduled_hint: 'आपके पिकअप समय से कुछ समय पहले हम ड्राइवर खोजना शुरू करेंगे। आप ऐप बंद कर सकते हैं।',
+  view_my_trips: 'मेरी यात्राएं देखें',
   outstation: 'आउटस्टेशन',
   outstation_sub: 'आपके सेवा क्षेत्र से आस-पास के शहरों के लिए वन-वे और राउंड ट्रिप।',
   coming_soon: 'जल्द आ रहा है',
@@ -222,9 +234,15 @@ const mr = {
   minute: 'मिनिट',
   am_pm: 'AM/PM',
   choose_future_date_time: 'कृपया भविष्यातील तारीख आणि वेळ निवडा.',
+  schedule_too_soon: 'ही वेळ खूप जवळ आहे. सर्वात लवकर उपलब्ध: {{time}}.',
   schedule_info_line: 'तुमची राइड निवडलेल्या वेळी सध्याच्या बुकिंग प्रक्रियेद्वारे बुक केली जाईल.',
   booking_your_ride: 'तुमची राइड बुक होत आहे…',
   continue_to_booking: 'बुकिंगसाठी पुढे जा',
+
+  // Scheduled ride confirmation
+  ride_scheduled: 'राइड शेड्यूल झाली',
+  ride_scheduled_hint: 'तुमच्या पिकअप वेळेच्या थोडे आधी आम्ही ड्रायव्हर शोधायला सुरुवात करू. तुम्ही ॲप बंद करू शकता.',
+  view_my_trips: 'माझ्या ट्रिप पहा',
   outstation: 'आउटस्टेशन',
   outstation_sub: 'तुमच्या सेवा क्षेत्रातून जवळच्या शहरांसाठी वन-वे आणि राउंड ट्रिप.',
   coming_soon: 'लवकरच येत आहे',
