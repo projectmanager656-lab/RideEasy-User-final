@@ -18,9 +18,6 @@ import luxuryImg from '../assets/luxury-img-ride.png'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 const LOOKING_TIMEOUT_SECONDS = 120
 
-/** Meters per degree latitude — used to spread nearby-vehicle markers around pickup. */
-const M_PER_DEG_LAT = 111320
-
 function normalizeStatus (s) {
   return String(s || '').trim().toLowerCase()
 }
@@ -88,15 +85,6 @@ const CANCEL_REASONS = [
   { key: 'other', label: 'Other', icon: 'ri-more-2-fill' },
 ]
 
-function seedingFromString (str) {
-  let h = 2166136261
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i)
-    h = Math.imul(h, 16777619)
-  }
-  return h >>> 0
-}
-
 /**
  * Normalize a vehicle type/tier to the marker asset group: BIKE / AUTO / CAR / PREMIUM.
  * Accepts tier ids (ECONOMY → AUTO, COMFORT → CAR, PREMIUM/XL → PREMIUM) and
@@ -109,33 +97,6 @@ function normalizeVehicleTypeForMarkers (value) {
   if (t === 'COMFORT' || t === 'CAR') return 'CAR'
   if (t === 'PREMIUM' || t === 'LUXURY' || t === 'PREMIUM_CAR' || t === 'XL') return 'PREMIUM'
   return null
-}
-
-/**
- * Deterministic pseudo-random offsets around a point, so each ride shows the
- * same nearby vehicles while searching (no fake driver identities — purely
- * cosmetic map markers around the pickup area). Every marker is the same
- * vehicle type the user selected, so Bike riders only see Bikes, Auto riders
- * only Autos, etc.
- */
-const NEARBY_VEHICLE_TYPES = [ 'BIKE', 'AUTO', 'CAR', 'PREMIUM' ]
-function buildNearbyVehicles (lat, lng, seed, selectedType) {
-  const count = 7
-  const out = []
-  for (let i = 0; i < count; i += 1) {
-    const s = seedingFromString(`${seed}:${i}`)
-    const angle = ((s % 3600) / 10) * (Math.PI / 180)
-    const dist = 120 + (s % 380)
-    const dLat = (dist / M_PER_DEG_LAT) * Math.sin(angle)
-    const dLng = (dist / (M_PER_DEG_LAT * Math.cos(lat * (Math.PI / 180)))) * Math.cos(angle)
-    out.push({
-      id: `nearby-${seed}-${i}`,
-      lat: lat + dLat,
-      lng: lng + dLng,
-      vehicleType: selectedType || NEARBY_VEHICLE_TYPES[i % NEARBY_VEHICLE_TYPES.length],
-    })
-  }
-  return out
 }
 
 /**
@@ -595,32 +556,16 @@ const SearchingForDriver = () => {
     }
   }, [rideId, payingAdvance, advancePaid, ride?.paymentMethod])
 
-  /** Nearby vehicle markers only while still searching — cosmetic map markers, cleared on assignment. */
-  const [nearbyVehicles, setNearbyVehicles] = useState([])
-  const nearbyTimerRef = useRef(null)
+  /** Only the vehicle type the passenger selected is relevant to the map marker. */
+  const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
   const distanceTimeRequestRef = useRef('')
+
   const hasValidPickup = pickupCoords?.lat != null && pickupCoords?.lng != null
     && String(pickupCoords.lat).trim() !== '' && String(pickupCoords.lng).trim() !== ''
     && Number.isFinite(Number(pickupCoords.lat)) && Number.isFinite(Number(pickupCoords.lng))
   const hasValidDestination = dropCoords?.lat != null && dropCoords?.lng != null
     && String(dropCoords.lat).trim() !== '' && String(dropCoords.lng).trim() !== ''
     && Number.isFinite(Number(dropCoords.lat)) && Number.isFinite(Number(dropCoords.lng))
-  /** Only show markers matching the ride type the user selected. */
-  const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
-  useEffect(() => {
-    if (!isSearching || !hasValidPickup) {
-      setNearbyVehicles([])
-      return () => clearInterval(nearbyTimerRef.current)
-    }
-    const seed = String(rideId || 'ride')
-    const build = () => setNearbyVehicles(buildNearbyVehicles(pickupCoords.lat, pickupCoords.lng, seed, selectedMarkerType))
-    build()
-    nearbyTimerRef.current = setInterval(build, 4000)
-    return () => {
-      clearInterval(nearbyTimerRef.current)
-      nearbyTimerRef.current = null
-    }
-  }, [isSearching, hasValidPickup, pickupCoords?.lat, pickupCoords?.lng, rideId, selectedMarkerType])
 
   /** Estimated connection time while searching (best-effort, non-blocking). */
   const [etaText, setEtaText] = useState('')
@@ -657,6 +602,23 @@ const SearchingForDriver = () => {
   /** Live driver pin used once a driver is assigned/arrived (socket + polling feed it). */
   const liveDriverCoords = confirmation?.liveLocation || null
 
+  /**
+   * Nearby vehicles around the pickup while searching.
+   *
+   * The backend publishes no nearby-driver coordinates, so these are a purely
+   * cosmetic searching indicator of the ride type the passenger picked. They are
+   * dropped the moment a driver is assigned (or a live location arrives), so a
+   * simulated marker can never be read as the assigned driver.
+   */
+  const nearbySearch = isSearching && !liveDriverCoords && hasValidPickup
+    ? {
+        lat: Number(pickupCoords.lat),
+        lng: Number(pickupCoords.lng),
+        vehicleType: selectedMarkerType || 'AUTO',
+        seed: String(rideId || 'searching'),
+      }
+    : null
+
   const sheetHeading = isSearching
     ? t('looking_for_driver')
     : (isArrived ? t('driver_has_arrived') : t('your_driver_is_coming'))
@@ -675,7 +637,8 @@ const SearchingForDriver = () => {
             pickupCoords={pickupCoords}
             dropCoords={dropCoords}
             driverCoords={liveDriverCoords}
-            nearbyVehicles={nearbyVehicles}
+            driverVehicleType={selectedMarkerType}
+            nearbySearch={nearbySearch}
             showRoute={!!(pickupCoords && dropCoords)}
             showRouteStatsChip={false}
             showTrackingEta={false}

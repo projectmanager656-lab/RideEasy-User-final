@@ -14,8 +14,12 @@ function pad2(n) {
     return String(n).padStart(2, '0')
 }
 
-/** Minute grid step, derived from the grid itself so there is ONE source of truth. */
-const SLOT_MINUTES = Number(MINUTES[1]) - Number(MINUTES[0])
+/**
+ * Last minute of an hour. The quick-select grid only goes up to 55, so this is
+ * not derivable from it — it is needed to decide whether a whole hour or
+ * half-day has already passed now that any minute 00–59 can be chosen.
+ */
+const LAST_MINUTE_OF_HOUR = '59'
 
 /**
  * Conservative fallback for the dispatch lead, used only until (or if) the backend
@@ -54,19 +58,6 @@ function loadDispatchLeadMinutes() {
     return dispatchLeadPromise
 }
 
-/**
- * Earliest instant the backend will accept: `now` rounded UP to the next slot on
- * the picker's own minute grid. It never rounds down into the past, and
- * `Date` normalisation handles hour / day / month / year rollover for free.
- */
-function nextValidSlot(from = new Date()) {
-    const d = new Date(from)
-    d.setSeconds(0, 0)
-    const remainder = d.getMinutes() % SLOT_MINUTES
-    d.setMinutes(d.getMinutes() + (SLOT_MINUTES - remainder))
-    return d
-}
-
 function datePartsFrom(d) {
     return { day: d.getDate(), month: d.getMonth(), year: d.getFullYear() }
 }
@@ -94,26 +85,23 @@ function keepsScheduled(pickupMs, leadMinutes, nowMs = Date.now()) {
 }
 
 /**
- * Earliest grid slot the backend will still keep `scheduled` — the first slot whose
- * dispatch instant is strictly in the future. Never rounds down into the past.
+ * Earliest instant the backend will still keep `scheduled`, dispatch lead
+ * included, rounded UP to the next whole minute so the value shown is always
+ * submittable. Feeds the validation message only — the picker never moves the
+ * user's own selection.
  */
-function earliestSchedulableSlot(leadMinutes, from = new Date()) {
-    const d = nextValidSlot(from)
-    const maxSteps = Math.ceil((leadMinutes + 60) / SLOT_MINUTES) + 1
-    for (let i = 0; i < maxSteps; i += 1) {
-        if (keepsScheduled(d.getTime(), leadMinutes, from.getTime())) return d
-        d.setMinutes(d.getMinutes() + SLOT_MINUTES)
-    }
-    return d
+function earliestValidInstant(leadMinutes, fromMs = Date.now()) {
+    const earliest = fromMs + leadMinutes * 60 * 1000
+    return new Date(Math.ceil(earliest / 60_000) * 60_000)
 }
 
-/** Defaults represent NOW (today at the earliest slot the backend will keep). */
-function defaultDateParts(leadMinutes = FALLBACK_LEAD_MINUTES) {
-    return datePartsFrom(earliestSchedulableSlot(leadMinutes))
+/** Defaults represent NOW: today at the device's actual current minute. */
+function defaultDateParts() {
+    return datePartsFrom(new Date())
 }
 
-function defaultTimeParts(leadMinutes = FALLBACK_LEAD_MINUTES) {
-    return timePartsFrom(earliestSchedulableSlot(leadMinutes))
+function defaultTimeParts() {
+    return timePartsFrom(new Date())
 }
 
 /** Convert 12-hour (hour 1-12 + AM/PM) to a 24-hour number. Handles 12 AM → 0, 12 PM → 12. */
@@ -162,19 +150,6 @@ function dayDisabled(day, month, year, today) {
     return day < today.date
 }
 
-/**
- * Snap a selection back to the earliest schedulable slot whenever the backend would
- * NOT keep it as a scheduled ride — used after every date/time edit, so the picker
- * can never submit a time that would silently become an instant search.
- */
-function ensureValidSelection(dateParts, parts, leadMinutes) {
-    if (keepsScheduled(composeLocal(dateParts, parts).getTime(), leadMinutes)) {
-        return { dateParts, parts }
-    }
-    const slot = earliestSchedulableSlot(leadMinutes)
-    return { dateParts: datePartsFrom(slot), parts: timePartsFrom(slot) }
-}
-
 function gridCellClass(selected, disabled) {
     return [
         'flex h-9 items-center justify-center rounded-lg border text-sm font-semibold transition active:scale-95',
@@ -216,6 +191,13 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     const [parts, setParts] = useState(defaultTimeParts)
     const [error, setError] = useState('')
     const [openPicker, setOpenPicker] = useState(null) // 'day' | 'month' | 'year' | 'hour' | 'minute' | 'period'
+    /**
+     * In-progress typed minute, or null when the field should simply show the
+     * committed value. Held apart from `parts.minute` so the second digit can be
+     * typed without the first one being rewritten underneath the passenger
+     * ("3" must not snap to "03" while they are still typing "7").
+     */
+    const [minuteDraft, setMinuteDraft] = useState(null)
     const sheetRef = useRef(null)
 
     /**
@@ -243,11 +225,8 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
         return () => { cancelled = true }
     }, [])
 
-    /** Years selectable in the grid — current year, plus next year when a slot rolls over. */
-    const years = useMemo(
-        () => Array.from(new Set([ today.year, nextValidSlot().getFullYear() ])).sort(),
-        [today.year],
-    )
+    /** Years selectable in the grid — the picker is locked to the current year. */
+    const years = useMemo(() => [ today.year ], [today.year])
 
     const dayCount = daysInMonth(dateParts.year, dateParts.month)
 
@@ -269,73 +248,124 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
             return undefined
         }
         wasOpenRef.current = open
-        /** Re-read the clock so reopening never shows a stale day/time. */
+        /**
+         * Re-read the clock so reopening never shows a stale day/time. The sheet
+         * opens on the device's ACTUAL current minute — it is never rounded to a
+         * slot or pushed forward by the dispatch lead.
+         */
         const n = new Date()
         setToday({ year: n.getFullYear(), month: n.getMonth(), date: n.getDate() })
+        setDateParts(datePartsFrom(n))
+        setParts(timePartsFrom(n))
+        setMinuteDraft(null)
         setError('')
         setOpenPicker(null)
         /**
-         * Seed from the backend's current rule. The lead is cached after the first
-         * fetch, so this settles within a microtask and the seed is exact.
+         * Only the submit-time check needs the lead, so it settles in the
+         * background without touching what the passenger already sees.
          */
         let cancelled = false
         void loadDispatchLeadMinutes().then((lead) => {
-            if (cancelled) return
-            setLeadMinutes(lead)
-            setDateParts(defaultDateParts(lead))
-            setParts(defaultTimeParts(lead))
+            if (!cancelled) setLeadMinutes(lead)
         })
         return () => { cancelled = true }
     }, [open])
 
-    /** Escape closes the open selector first, then the whole modal. */
+    /**
+     * Escape closes the open selector first, then the whole modal. A minute being
+     * typed is committed before the panel goes away, so leaving the selector never
+     * loses a valid value.
+     */
     const openPickerRef = useRef(null)
     openPickerRef.current = openPicker
+    const commitMinuteRef = useRef(() => false)
     useEffect(() => {
         if (!open) return
         const onKey = (e) => {
             if (e.key !== 'Escape') return
-            if (openPickerRef.current) setOpenPicker(null)
-            else onClose()
+            if (openPickerRef.current) {
+                if (openPickerRef.current === 'minute') commitMinuteRef.current()
+                setOpenPicker(null)
+            } else onClose()
         }
         window.addEventListener('keydown', onKey)
         return () => window.removeEventListener('keydown', onKey)
     }, [open, onClose])
 
     /**
-     * Unavailable when the backend would NOT keep this slot as a scheduled ride —
-     * i.e. the whole dispatch lead must still be in the future. One rule, mirrored
-     * from the server, so the picker and the backend always agree.
+     * A grid option is unavailable once its own instant is no longer in the
+     * future — the same "must be in the future" rule the backend enforces.
+     * Whether a future time is ALSO far enough ahead to stay `scheduled` (the
+     * dispatch lead) is checked when the passenger submits, so every minute
+     * 00–59 stays selectable and the 5-minute cards stay mere shortcuts.
      */
-    const slotUnavailable = (hour, minute, period) =>
-        !keepsScheduled(composeLocal(dateParts, { hour, minute, period }).getTime(), leadMinutes)
-    const LAST_MINUTE = MINUTES[MINUTES.length - 1]
+    const slotPassed = (hour, minute, period) =>
+        composeLocal(dateParts, { hour, minute, period }).getTime() <= Date.now()
+
+    /** Apply a date/time edit exactly as chosen — the selection is never retimed. */
+    const applySelection = (nextDateParts, nextParts) => {
+        setDateParts(nextDateParts)
+        setParts(nextParts)
+        setError('')
+        return nextDateParts
+    }
+
+    /** Digits only, never longer than two — the range check happens on commit. */
+    const onChangeMinute = (raw) =>
+        setMinuteDraft(String(raw ?? '').replace(/\D+/g, '').slice(0, 2))
+
+    const minuteDraftRef = useRef(null)
+    minuteDraftRef.current = minuteDraft
 
     /**
-     * Apply a date/time edit, then snap the whole selection forward if the backend
-     * would no longer keep it scheduled (e.g. switching back to today).
+     * Commit a typed minute, but only when it really is a minute (00–59).
+     * Anything else — empty, "60", "75", stray characters — is discarded and the
+     * last valid value stands. Safe to call repeatedly: blur, Enter and Escape all
+     * flush the same draft. Returns the committed selection, or null when there was
+     * nothing to commit (or the draft was not a minute), so the caller can act on
+     * the value without waiting for a re-render.
      */
-    const applySelection = (nextDateParts, nextParts) => {
-        const { dateParts: dp, parts: p } = ensureValidSelection(nextDateParts, nextParts, leadMinutes)
-        setDateParts(dp)
-        setParts(p)
-        setError('')
-        return dp
+    const commitMinute = (nextDateParts = dateParts, nextParts = parts) => {
+        const draft = minuteDraftRef.current
+        if (draft == null) return null
+        setMinuteDraft(null)
+        const n = Number(draft)
+        if (draft === '' || !Number.isInteger(n) || n < 0 || n > 59) return null
+        const committed = { ...nextParts, minute: pad2(n) }
+        applySelection(nextDateParts, committed)
+        return { dateParts: nextDateParts, parts: committed }
+    }
+    commitMinuteRef.current = commitMinute
+
+    /** The chevron still opens/closes the quick grid; typing commits on the way out. */
+    const toggleMinutePicker = () => {
+        if (openPicker === 'minute') {
+            commitMinute()
+            setOpenPicker(null)
+            return
+        }
+        setOpenPicker('minute')
     }
 
     const handleContinue = () => {
-        const { day, month, year } = dateParts
-        /** Backend is authoritative; this mirrors its rule before we submit. */
-        if (!keepsScheduled(composeLocal(dateParts, parts).getTime(), leadMinutes)) {
-            applySelection(dateParts, parts)
-            const earliest = earliestSchedulableSlot(leadMinutes)
-            setError(t('schedule_too_soon', {
-                time: `${pad2(earliest.getHours() % 12 === 0 ? 12 : earliest.getHours() % 12)}:${pad2(earliest.getMinutes())} ${earliest.getHours() >= 12 ? 'PM' : 'AM'}`,
-            }))
+        /** A minute still being typed counts as chosen — commit it before validating. */
+        const committed = commitMinute()
+        const selection = committed?.parts ?? parts
+        const selectionDate = committed?.dateParts ?? dateParts
+        const { day, month, year } = selectionDate
+        /**
+         * Backend is authoritative. Mirrored here only as a gate: a time inside
+         * the dispatch lead would be turned into an instant search, so the
+         * passenger is asked to pick a later one instead — the selection is left
+         * untouched and nothing is converted to Book Now behind their back.
+         */
+        if (!keepsScheduled(composeLocal(selectionDate, selection).getTime(), leadMinutes)) {
+            const { hour, minute, period } = timePartsFrom(earliestValidInstant(leadMinutes))
+            setError(t('schedule_too_soon', { time: `${hour}:${minute} ${period}` }))
             return
         }
         setError('')
-        onContinue(toIsoLocal(day, month, year, parts.hour, parts.minute, parts.period))
+        onContinue(toIsoLocal(day, month, year, selection.hour, selection.minute, selection.period))
     }
 
     if (!open) return null
@@ -403,7 +433,12 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                 <label className="mb-2 mt-4 block text-xs font-medium uppercase tracking-wide text-theme-secondary">
                     {t('pickup_time')}
                 </label>
-                <div className="grid grid-cols-[1fr_auto_1fr_1fr] items-center gap-1">
+                {/**
+                 * `minmax(0, 1fr)` on the three field tracks: a bare `1fr` keeps its
+                 * `auto` minimum, so the minute input's intrinsic width would stretch
+                 * its track and squeeze the hour/AM-PM fields. All three stay equal.
+                 */}
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1">
                     <button
                         type="button"
                         aria-label={t('hour')}
@@ -417,18 +452,50 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                         <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
                     </button>
                     <span className="text-base font-bold text-theme-primary" aria-hidden>:</span>
-                    <button
-                        type="button"
-                        aria-label={t('minute')}
-                        onClick={() => setOpenPicker('minute')}
+                    {/**
+                     * Minute field: the value itself is typeable (any 00–59) while the
+                     * chevron keeps the original quick-select grid — two ways in, one
+                     * value out. The draft is held apart from the committed minute so
+                     * typing "3" on the way to "37" is never rewritten underneath.
+                     */}
+                    <div
                         className={[
-                            'flex h-10 items-center justify-between rounded-xl border bg-theme-card px-3 text-sm font-semibold text-theme-primary transition active:scale-[0.98]',
+                            'flex h-10 min-w-0 items-center rounded-xl border bg-theme-card pl-3 pr-2 text-sm font-semibold text-theme-primary transition',
                             openPicker === 'minute' ? 'border-brand-yellow' : 'border-theme',
                         ].join(' ')}
                     >
-                        {parts.minute}
-                        <i className="ri-arrow-down-s-line text-xs text-brand-yellow" />
-                    </button>
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={2}
+                            autoComplete="off"
+                            aria-label={t('minute')}
+                            value={minuteDraft ?? parts.minute}
+                            onFocus={(e) => {
+                                e.target.select()
+                                setOpenPicker('minute')
+                            }}
+                            onChange={(e) => onChangeMinute(e.target.value)}
+                            onBlur={() => commitMinute()}
+                            onKeyDown={(e) => {
+                                if (e.key !== 'Enter') return
+                                e.preventDefault()
+                                commitMinute()
+                                setOpenPicker(null)
+                            }}
+                            className="min-w-0 flex-1 bg-transparent text-sm font-semibold tabular-nums text-theme-primary outline-none"
+                        />
+                        <button
+                            type="button"
+                            aria-label={t('minute')}
+                            aria-expanded={openPicker === 'minute'}
+                            onClick={toggleMinutePicker}
+                            className="flex h-8 w-5 shrink-0 items-center justify-center active:scale-95"
+                        >
+                            <i className="ri-arrow-down-s-line text-xs text-brand-yellow" aria-hidden />
+                        </button>
+                    </div>
                     <button
                         type="button"
                         aria-label={t('am_pm')}
@@ -508,8 +575,8 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                             <OptionGrid
                                 options={HOURS}
                                 selected={(h) => h === parts.hour}
-                                /** A whole hour is unavailable once even its last slot has passed. */
-                                disabled={(h) => slotUnavailable(h, LAST_MINUTE, parts.period)}
+                                /** A whole hour is unavailable once even its last minute has passed. */
+                                disabled={(h) => slotPassed(h, LAST_MINUTE_OF_HOUR, parts.period)}
                                 onSelect={(h) => {
                                     applySelection(dateParts, { ...parts, hour: h })
                                     setOpenPicker(null)
@@ -520,8 +587,9 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                             <OptionGrid
                                 options={MINUTES}
                                 selected={(m) => m === parts.minute}
-                                disabled={(m) => slotUnavailable(parts.hour, m, parts.period)}
+                                disabled={(m) => slotPassed(parts.hour, m, parts.period)}
                                 onSelect={(m) => {
+                                    setMinuteDraft(null)
                                     applySelection(dateParts, { ...parts, minute: m })
                                     setOpenPicker(null)
                                 }}
@@ -530,7 +598,7 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                         {openPicker === 'period' && (
                             <div className="flex gap-2 p-1">
                                 {['AM', 'PM'].map((p) => {
-                                    const disabled = slotUnavailable(parts.hour, LAST_MINUTE, p)
+                                    const disabled = slotPassed(parts.hour, LAST_MINUTE_OF_HOUR, p)
                                     return (
                                         <button
                                             key={p}

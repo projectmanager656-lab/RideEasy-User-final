@@ -446,6 +446,7 @@ const Riding = () => {
                         pickupCoords={pickupCoords}
                         dropCoords={dropCoords}
                         driverCoords={driverCoords}
+                        driverVehicleType={ride?.captain?.vehicleType || ride?.vehicleType}
                         passengerLiveCoords={passengerLiveCoords}
                         showRoute
                         trackingFrom={trackingDriverToDrop ? driverCoords : null}

@@ -606,6 +606,7 @@ const DriverDetails = () => {
               pickupCoords={pickupCoords}
               dropCoords={dropCoords}
               driverCoords={liveDriverCoords}
+              driverVehicleType={vehicleType}
               showRoute={Boolean(pickupCoords && dropCoords)}
               showRouteStatsChip={false}
               showTrackingEta={false}

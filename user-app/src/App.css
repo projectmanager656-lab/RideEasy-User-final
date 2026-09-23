@@ -33,24 +33,17 @@
   }
 }
 
-/* Nearby vehicle markers shown on the Searching for Driver map */
-@keyframes rideeasy-nearby-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-2px);
-  }
-}
-
+/* Vehicle markers — the assigned driver's, plus the smaller simulated
+   neighbours shown while searching. Leaflet owns the marker root's transform
+   (that is what positions it), so this only opts the artwork out of hit-testing. */
+.rideeasy-vehicle-marker,
 .nearby-vehicle-marker {
   pointer-events: none;
 }
 
-/* Animate the inner wrapper only — Leaflet owns the marker root's transform. */
-.nearby-vehicle-marker > div {
-  animation: rideeasy-nearby-float 3.2s ease-in-out infinite;
+.rideeasy-vehicle-marker img,
+.nearby-vehicle-marker img {
+  display: block;
 }
 
 .card {

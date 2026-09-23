@@ -70,11 +70,15 @@ function isValidVpa (value) {
 }
 
 /**
- * One shared style for every button in the "Pay by any UPI App" grid, so PhonePe,
- * Google Pay, View All and Enter UPI ID stay pixel-identical (`disabled:` only ever
- * applies to the two app buttons, which need a live payee).
+ * One shared style for EVERY button in the "Pay by any UPI App" grid (PhonePe, Google
+ * Pay, View All, Enter UPI ID and the View-All drawer), so they all sit on the same
+ * theme surface instead of drifting apart.
+ *
+ * The unavailable state is signalled with a muted label and a not-allowed cursor rather
+ * than `opacity`, because an element-level fade also dims the button's own background —
+ * which made the app buttons look darker than the rest of the grid.
  */
-const UPI_APP_BUTTON_CLASS = 'rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-primary transition hover:bg-theme-card active:scale-[0.98] disabled:opacity-50'
+const UPI_APP_BUTTON_CLASS = 'rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-primary transition hover:bg-theme-card active:scale-[0.98] disabled:cursor-not-allowed disabled:text-theme-muted'
 
 /**
  * Passenger trip-complete UX: summary, pay (if needed), rating, receipt, book again + auto home.
@@ -335,7 +339,7 @@ export default function RideCompletionFlow ({
                                             type="button"
                                             disabled={paying || !payeeVpa}
                                             onClick={() => openUpiApp('paytmmp://pay')}
-                                            className="rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                            className={UPI_APP_BUTTON_CLASS}
                                         >
                                             Paytm
                                         </button>
@@ -343,7 +347,7 @@ export default function RideCompletionFlow ({
                                             type="button"
                                             disabled={paying || !payeeVpa}
                                             onClick={() => openUpiApp('bhim://pay')}
-                                            className="rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                            className={UPI_APP_BUTTON_CLASS}
                                         >
                                             BHIM
                                         </button>
@@ -351,7 +355,7 @@ export default function RideCompletionFlow ({
                                             type="button"
                                             disabled={paying || !payeeVpa}
                                             onClick={() => openUpiApp('upi://pay')}
-                                            className="col-span-2 rounded-xl border border-theme bg-theme-card py-2.5 text-sm font-medium text-theme-secondary transition active:scale-[0.98] disabled:opacity-50"
+                                            className={`col-span-2 ${UPI_APP_BUTTON_CLASS}`}
                                         >
                                             Other UPI app
                                         </button>

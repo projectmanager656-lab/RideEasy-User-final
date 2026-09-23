@@ -56,6 +56,21 @@ function normalizeRideStatus(s) {
     return String(s || '').trim().toLowerCase()
 }
 
+/**
+ * THE canonical ride status → screen mapping, shared by the Home active-ride banner and
+ * notification clicks. `null` means there is no screen to open (nothing live).
+ */
+function rideRouteForStatus(s) {
+    const st = normalizeRideStatus(s)
+    if (st === 'searching') return '/searching-for-driver'
+    if (st === 'accepted') return '/driver-details'
+    if (st === 'arrived') return '/user-otp'
+    if (st === 'started' || st === 'completed') return '/riding'
+    /* Reserved or finished: the upcoming/history list owns it. */
+    if (st === 'scheduled' || st === 'cancelled') return '/history'
+    return null
+}
+
 /** Merge deterministic local results first, then de-duped live API results. */
 function mergeServicePlaces(localList, apiList) {
     const seen = new Set()
@@ -133,6 +148,16 @@ const Home = () => {
 
     const navigate = useNavigate()
     const location = useLocation()
+    /**
+     * True when this Home visit came from a deliberate in-app navigation (the bottom-nav
+     * Home tab, the Home icon on the ride screen, a post-ride "Done", …).
+     *
+     * `location.key` is `'default'` only for the very first location of a page load, so a
+     * `true` here means the passenger explicitly asked for Home and must be left there —
+     * a live ride is never allowed to bounce them back to the ride screen. Recovery of a
+     * live ride still runs on a genuine app entry (reload / reopen / deep link to Home).
+     */
+    const arrivedByUserActionRef = useRef(location.key !== 'default')
     const chooseRideResult = location.state?.chooseRideResult
 
     useEffect(() => {
@@ -267,13 +292,29 @@ const Home = () => {
                 return
             }
             const st = normalizeRideStatus(data.status)
+            /**
+             * Live / completed ride. Only a genuine app entry (reload, reopen, deep link
+             * straight to Home) may open the ride screen; a passenger who deliberately
+             * navigated to Home mid-ride stays here and re-enters through the active-ride
+             * banner. Either way the ride itself is untouched — it keeps running.
+             */
             if (st === 'started' || st === 'completed') {
-                /* Refresh during a live/completed ride — take the passenger back
-                   to the ride screen with the fresh server ride. */
-                navigate('/riding', {
-                    replace: true,
-                    state: { ride: { ...data, status: st } },
-                })
+                if (!arrivedByUserActionRef.current) {
+                    navigate('/riding', {
+                        replace: true,
+                        state: { ride: { ...data, status: st } },
+                    })
+                    return
+                }
+                if (st === 'completed') {
+                    /* Nothing left to resume — drop the stale session pointer. */
+                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    return
+                }
+                /* Live ride, passenger chose Home: keep it loaded for the banner. */
+                resumedRideFromSessionRef.current = true
+                setVehicleFound(false)
+                setWaitingForDriver(false)
                 return
             }
             /* A search that already ran past the window is dead. Resurrecting it makes
@@ -425,8 +466,11 @@ const Home = () => {
                        in this booking flow (created here) or resumed it from the
                        session key (refresh / re-entry mid-ride). An idle Home
                        tab never hijacks navigation — the ride stays recoverable
-                       from the Live tab via the session key. */
-                    if (!keepSearchFirstRef.current || resumedRideFromSessionRef.current) {
+                       from the Live tab via the session key. A passenger who
+                       deliberately opened Home mid-ride is likewise left alone;
+                       the active-ride banner is the way back in. */
+                    if (!arrivedByUserActionRef.current
+                        && (!keepSearchFirstRef.current || resumedRideFromSessionRef.current)) {
                         const r = data.ride || rideRef.current
                         navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
                     }
@@ -580,15 +624,45 @@ const Home = () => {
         if (!rideId) return
         const data = await syncRideFromServer(rideId)
         const st = normalizeRideStatus(data?.status)
-        const navState = { ride: { ...(data || { _id: rideId }), status: st || data?.status } }
-        if (st === 'searching') return navigate('/searching-for-driver', { state: navState })
-        if (st === 'accepted') return navigate('/driver-details', { state: navState })
-        if (st === 'arrived') return navigate('/user-otp', { state: navState })
-        if (st === 'started' || st === 'completed') return navigate('/riding', { state: navState })
-        /* Still reserved (or finished): the upcoming/history list is the right destination. */
-        if (st === 'scheduled' || st === 'cancelled') return navigate('/history', { state: navState })
-        return undefined
+        const dest = rideRouteForStatus(st)
+        if (!dest) return undefined
+        return navigate(dest, { state: { ride: { ...(data || { _id: rideId }), status: st || data?.status } } })
     }, [markNotificationRead, navigate, syncRideFromServer]);
+
+    /**
+     * Active-ride banner → recover the CURRENT ride and open the screen that owns its
+     * live status. State may have advanced since the last render, so the status is
+     * re-read from the backend first. This is the passenger's deliberate way back into
+     * a ride from Home.
+     */
+    const openActiveRide = useCallback(async () => {
+        const rideId = ride?._id
+        if (!rideId) return
+        const data = await syncRideFromServer(rideId)
+        const st = normalizeRideStatus(data?.status || ride?.status)
+        /* Cancelled mid-flight: there is nothing live left to open. */
+        if (st === 'cancelled') {
+            setRide(null)
+            return
+        }
+        const dest = rideRouteForStatus(st)
+        if (!dest) return
+        navigate(dest, {
+            state: {
+                ride: { ...(data || ride || {}), status: st },
+                pickupCoords,
+                dropCoords,
+                pickup,
+                destination,
+                passengerOtp,
+                confirmation: rideConfirmation,
+                vehicleType: ride?.vehicleType,
+                tierId: ride?.tierId,
+                price: ride?.price,
+                paymentMethod: ride?.paymentMethod,
+            },
+        })
+    }, [ ride, pickupCoords, dropCoords, pickup, destination, passengerOtp, rideConfirmation, syncRideFromServer, navigate ]);
 
     const fetchPassengerOtp = useCallback(() => {
         if (!ride?._id) return
@@ -1450,29 +1524,7 @@ const Home = () => {
                         </div>
                         <button
                             type="button"
-                            onClick={() => {
-                                /* Ongoing ride → straight back to the live screen; anything
-                                   earlier → the tracking screen that owns it. */
-                                if (activeRideStatus === 'started') {
-                                    navigate('/riding', { state: { ride: { ...(ride || {}), status: 'started' } } })
-                                    return
-                                }
-                                navigate('/searching-for-driver', {
-                                    state: {
-                                        ride,
-                                        pickupCoords,
-                                        dropCoords,
-                                        pickup,
-                                        destination,
-                                        passengerOtp,
-                                        confirmation: rideConfirmation,
-                                        vehicleType: ride?.vehicleType,
-                                        tierId: ride?.tierId,
-                                        price: ride?.price,
-                                        paymentMethod: ride?.paymentMethod,
-                                    },
-                                })
-                            }}
+                            onClick={() => { void openActiveRide() }}
                             className="flex items-center gap-1 rounded-xl bg-brand-yellow px-3 py-1.5 text-xs font-bold text-black transition active:scale-95 shadow"
                         >
                             <span>{t('tracking') || 'Track'}</span>

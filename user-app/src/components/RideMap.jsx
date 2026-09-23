@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
+import { nearbyVehiclePoints } from '../utils/nearbyVehicles'
 import { getMapTileUrlTemplate, getOsrmPublicBase } from '../config/externalEndpoints'
 import bikeVehicleImg from '../assets/Bike-img-ride.png'
 import autoVehicleImg from '../assets/Auto-img-ride.png'
@@ -59,33 +60,224 @@ const passengerDivIcon = L.divIcon({
     iconAnchor: [9, 9],
 })
 
-/** Exact asset per backend vehicle type — BIKE / AUTO / CAR / PREMIUM(LUXURY). */
-const NEARBY_VEHICLE_IMAGES = {
+/**
+ * Exact asset per vehicle type. Accepts either the backend vehicle type
+ * (BIKE / AUTO / CAR / PREMIUM) or a booked tier (ECONOMY / COMFORT / XL) so
+ * callers can pass whichever they already hold.
+ */
+const VEHICLE_IMAGE_BY_KEY = {
     BIKE: bikeVehicleImg,
     AUTO: autoVehicleImg,
+    RICKSHAW: autoVehicleImg,
+    ECONOMY: autoVehicleImg,
     CAR: carVehicleImg,
+    COMFORT: carVehicleImg,
     PREMIUM: luxuryVehicleImg,
+    XL: luxuryVehicleImg,
     LUXURY: luxuryVehicleImg,
     PREMIUM_CAR: luxuryVehicleImg,
 }
 
+const MARKER_BOX_PX = 40
+
 /**
- * Floating map-vehicle marker: the real transparent vehicle photo directly on
- * the map (no circular badge), anchored bottom-center to its map coordinate,
- * with a subtle drop shadow for visibility against the tiles.
+ * Searching-stage neighbours use a smaller box than the assigned driver, so a
+ * simulated vehicle can never read as "my driver".
  */
-const nearbyVehicleDivIcon = (vehicleType) => {
-    const type = String(vehicleType || 'AUTO').toUpperCase()
-    const img = NEARBY_VEHICLE_IMAGES[type] || autoVehicleImg
-    const alt = type === 'PREMIUM' || type === 'LUXURY' || type === 'PREMIUM_CAR' ? 'Premium Car' : String(type || 'Auto')
+const NEARBY_MARKER_BOX_PX = 26
+
+/**
+ * Floating map-vehicle marker: the vehicle photo directly on the map (no circular
+ * badge), contained in a fixed box and anchored bottom-centre so the coordinate
+ * lands where the vehicle meets the road. One vehicle per marker — the assets each
+ * hold a single vehicle, so the image is never scaled from a multi-vehicle sprite.
+ */
+const vehicleMarkerIcon = (vehicleType, { boxPx = MARKER_BOX_PX, className = 'rideeasy-vehicle-marker' } = {}) => {
+    const key = String(vehicleType || '').trim().toUpperCase()
+    const img = VEHICLE_IMAGE_BY_KEY[key] || autoVehicleImg
     return L.divIcon({
-        className: 'nearby-vehicle-marker',
-        html: `<div style="display:flex;align-items:flex-end;justify-content:center;width:44px;height:44px">
-            <img src="${img}" alt="${alt}" style="width:42px;max-height:42px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 3px 4px rgba(0,0,0,.35))" draggable="false" />
-        </div>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 42],
+        className,
+        html: `<img src="${img}" alt="" draggable="false" style="width:${boxPx}px;height:${boxPx}px;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))" />`,
+        iconSize: [boxPx, boxPx],
+        iconAnchor: [boxPx / 2, boxPx - 2],
     })
+}
+
+/**
+ * The assigned driver's vehicle at its authoritative coordinate.
+ *
+ * Built imperatively rather than through <Marker>: the Leaflet layer is created
+ * once per ride and then only moved, so a stream of location updates can never
+ * stack up duplicate markers or remount the icon, and the animation runs on the
+ * map instead of through a React render every frame.
+ */
+function DriverVehicleMarker({ lat, lng, vehicleType, durationMs = 900 }) {
+    const map = useMap()
+    const markerRef = useRef(null)
+    const iconKeyRef = useRef(null)
+    const renderedRef = useRef(null)
+    const rafRef = useRef(null)
+
+    useEffect(() => {
+        const startLat = Number(lat)
+        const startLng = Number(lng)
+        if (!Number.isFinite(startLat) || !Number.isFinite(startLng)) return undefined
+        const marker = L.marker([startLat, startLng], {
+            icon: vehicleMarkerIcon(vehicleType),
+            interactive: false,
+            zIndexOffset: 900,
+        }).addTo(map)
+        markerRef.current = marker
+        iconKeyRef.current = String(vehicleType || '')
+        renderedRef.current = { lat: startLat, lng: startLng }
+        return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current)
+            rafRef.current = null
+            marker.remove()
+            markerRef.current = null
+            renderedRef.current = null
+        }
+        // Mount-only on purpose: later coordinates are applied to this same marker.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [map])
+
+    /** Swap the artwork only when the vehicle type itself changes. */
+    useEffect(() => {
+        const key = String(vehicleType || '')
+        if (!markerRef.current || key === iconKeyRef.current) return
+        iconKeyRef.current = key
+        markerRef.current.setIcon(vehicleMarkerIcon(vehicleType))
+    }, [vehicleType])
+
+    /** Ease from the last rendered position to each new authoritative one. */
+    useEffect(() => {
+        const targetLat = Number(lat)
+        const targetLng = Number(lng)
+        if (!Number.isFinite(targetLat) || !Number.isFinite(targetLng)) return undefined
+        const from = renderedRef.current
+        if (!from) return undefined
+        if (from.lat === targetLat && from.lng === targetLng) return undefined
+        if (rafRef.current) cancelAnimationFrame(rafRef.current)
+        const startedAt = performance.now()
+        const step = (now) => {
+            const t = Math.min(1, (now - startedAt) / durationMs)
+            const eased = t * t * (3 - 2 * t)
+            const next = {
+                lat: from.lat + (targetLat - from.lat) * eased,
+                lng: from.lng + (targetLng - from.lng) * eased,
+            }
+            renderedRef.current = next
+            markerRef.current?.setLatLng(next)
+            rafRef.current = t < 1 ? requestAnimationFrame(step) : null
+        }
+        rafRef.current = requestAnimationFrame(step)
+        return () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current)
+            rafRef.current = null
+        }
+    }, [lat, lng, durationMs])
+
+    return null
+}
+
+/**
+ * Ring radius in screen pixels, eased a little with zoom so the neighbours still
+ * read as "nearby" when looking at a long route without ever bunching up.
+ */
+function nearbyRingRadiusPx(zoom) {
+    const z = Number(zoom)
+    const base = Number.isFinite(z) ? 56 + (z - 14) * 7 : 56
+    return Math.min(96, Math.max(56, base))
+}
+
+/**
+ * Simulated nearby vehicles shown while the passenger is still searching.
+ *
+ * Offsets are computed in screen pixels around the pickup and converted back to
+ * coordinates every animation frame, so the spacing stays identical at every zoom
+ * level — the failure mode of the previous fixed-metre ring, which collapsed into
+ * one oversized blob once the route zoomed out. Nothing here is a real driver:
+ * the component is mounted only for the searching stage and is torn down (markers
+ * and animation frame together) the moment an assigned driver exists.
+ */
+function NearbyVehicleSearch({ origin, seed }) {
+    const map = useMap()
+    const markersRef = useRef(new Map())
+    const rafRef = useRef(0)
+    const vehicleTypeRef = useRef(origin?.vehicleType)
+    vehicleTypeRef.current = origin?.vehicleType
+
+    const lat = Number(origin?.lat)
+    const lng = Number(origin?.lng)
+    const hasOrigin = origin != null && Number.isFinite(lat) && Number.isFinite(lng)
+
+    useEffect(() => {
+        if (!hasOrigin) return undefined
+        const seedKey = String(seed ?? 'nearby')
+        const originLatLng = L.latLng(lat, lng)
+        const startedAt = performance.now()
+        /** One Map of markers for the whole mounted life of the simulation. */
+        const markers = markersRef.current
+
+        const step = (now) => {
+            rafRef.current = requestAnimationFrame(step)
+            /** The container has no size until layout runs — nothing to place yet. */
+            const size = map.getSize()
+            if (size.x <= 0 || size.y <= 0) return
+            const radiusPx = nearbyRingRadiusPx(map.getZoom())
+            const originPoint = map.latLngToContainerPoint(originLatLng)
+            const points = nearbyVehiclePoints(seedKey, (now - startedAt) / 1000, radiusPx)
+            const alive = new Set()
+
+            points.forEach((point) => {
+                alive.add(point.id)
+                const nextPoint = L.point(originPoint.x + point.dx, originPoint.y + point.dy)
+                let entry = markers.get(point.id)
+                if (!entry) {
+                    const marker = L.marker(map.containerPointToLatLng(nextPoint), {
+                        icon: vehicleMarkerIcon(vehicleTypeRef.current, {
+                            boxPx: NEARBY_MARKER_BOX_PX,
+                            className: 'nearby-vehicle-marker',
+                        }),
+                        interactive: false,
+                        keyboard: false,
+                        zIndexOffset: 300,
+                    }).addTo(map)
+                    entry = { marker, type: vehicleTypeRef.current, point: nextPoint }
+                    markers.set(point.id, entry)
+                    return
+                }
+                /** Swap the artwork only when the selected ride type changes. */
+                if (entry.type !== vehicleTypeRef.current) {
+                    entry.type = vehicleTypeRef.current
+                    entry.marker.setIcon(vehicleMarkerIcon(entry.type, {
+                        boxPx: NEARBY_MARKER_BOX_PX,
+                        className: 'nearby-vehicle-marker',
+                    }))
+                }
+                /** Sub-pixel moves are skipped — the drift is far too slow to show them. */
+                if (entry.point.distanceTo(nextPoint) < 0.35) return
+                entry.point = nextPoint
+                entry.marker.setLatLng(map.containerPointToLatLng(nextPoint))
+            })
+
+            markers.forEach((entry, id) => {
+                if (alive.has(id)) return
+                entry.marker.remove()
+                markers.delete(id)
+            })
+        }
+
+        rafRef.current = requestAnimationFrame(step)
+        return () => {
+            cancelAnimationFrame(rafRef.current)
+            rafRef.current = 0
+            markers.forEach((entry) => entry.marker.remove())
+            markers.clear()
+        }
+    }, [map, hasOrigin, lat, lng, seed])
+
+    return null
 }
 
 function roundCoordKey(lat, lng) {
@@ -158,10 +350,21 @@ const RideMap = ({
     pickupCoords = null,
     dropCoords = null,
     driverCoords = null,
+    /**
+     * Vehicle type for the driver marker (backend type or booked tier). When set,
+     * the driver is drawn as their real vehicle; when omitted the plain dot is
+     * used, so captain/self-location screens are unaffected.
+     */
+    driverVehicleType = null,
+    /**
+     * Searching-stage neighbours: `{ lat, lng, vehicleType, seed }` around the
+     * pickup. Simulated visual indicator only — the caller keeps it null unless a
+     * search is actually running, and the map never draws it next to an
+     * authoritative driver position.
+     */
+    nearbySearch = null,
     passengerLiveCoords = null,
     currentLocation = null,
-    /** Optional nearby-vehicle markers (e.g. Autos around pickup while searching). */
-    nearbyVehicles = [],
     showRoute = true,
     zoom = 14,
     routeFromCurrent = false,
@@ -361,25 +564,22 @@ const RideMap = ({
                     <Marker position={[dropCoords.lat, dropCoords.lng]} icon={dropDivIcon} />
                 )}
                 {driverCoords?.lat != null && driverCoords?.lng != null && (
-                    <Marker position={[driverCoords.lat, driverCoords.lng]} icon={driverDivIcon} />
+                    driverVehicleType ? (
+                        <DriverVehicleMarker
+                            lat={driverCoords.lat}
+                            lng={driverCoords.lng}
+                            vehicleType={driverVehicleType}
+                        />
+                    ) : (
+                        <Marker position={[driverCoords.lat, driverCoords.lng]} icon={driverDivIcon} />
+                    )
                 )}
                 {passengerLiveCoords?.lat != null && passengerLiveCoords?.lng != null && (
                     <Marker position={[passengerLiveCoords.lat, passengerLiveCoords.lng]} icon={passengerDivIcon} />
                 )}
-
-                {!fixedPickupPin && Array.isArray(nearbyVehicles) && nearbyVehicles.map((v) => {
-                    const lat = Number(v?.lat)
-                    const lng = Number(v?.lng)
-                    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
-                    return (
-                        <Marker
-                            key={v?.id || `${lat},${lng}`}
-                            position={[lat, lng]}
-                            icon={nearbyVehicleDivIcon(v?.vehicleType)}
-                            zIndexOffset={500}
-                        />
-                    )
-                })}
+                {nearbySearch && !(driverCoords?.lat != null && driverCoords?.lng != null) && (
+                    <NearbyVehicleSearch origin={nearbySearch} seed={nearbySearch.seed} />
+                )}
 
                 {routeLine.length > 1 && (
                     <Polyline positions={routeLine} pathOptions={{ color: '#FFC800', weight: 5, opacity: 0.95 }} />
