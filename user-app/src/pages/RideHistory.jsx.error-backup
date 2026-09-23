@@ -24,8 +24,6 @@ function normalizeRide(r) {
     status,
     fare: r?.price ?? r?.fare ?? 0,
     discountAmount: Number(r?.discountAmount || 0),
-    couponName: r?.couponName || r?.discountReason || '',
-    couponCode: r?.couponCode || '',
     finalFare: Math.max(
       0,
       Number(r?.price ?? r?.fare ?? 0) - Number(r?.discountAmount || 0)
@@ -214,21 +212,6 @@ const RideDetailModal = ({ ride, t, onClose }) => {
   const v = vehicleMeta(ride.vehicleType)
   const dt = rideDate(ride)
   const cancelled = ride.status === 'cancelled'
-  const originalFare = Number(ride.fare) || 0
-  const discountAmount = Number(ride.discountAmount) || 0
-  const couponCode = String(
-    ride.couponCode ||
-    ride.discountReason ||
-    ride.coupon?.code ||
-    ''
-  ).trim()
-  const couponName = String(
-    ride.couponName ||
-    ride.coupon?.title ||
-    couponCode ||
-    ''
-  ).trim()
-  const finalFare = Math.max(0, originalFare - discountAmount)
   const baseAmount = `₹${finalFare}`
   const amount = cancelled ? `₹${Number(ride.cancellationFee) || 0}` : baseAmount
 
@@ -313,25 +296,6 @@ const RideDetailModal = ({ ride, t, onClose }) => {
               <span className="text-theme-primary">{ride.paymentMethod}</span>
             </div>
           ) : null}
-          {discountAmount > 0 && couponName ? (
-            <div className="flex justify-between">
-              <span className="text-theme-secondary">Coupon</span>
-              <span className="text-theme-primary">{couponName}</span>
-            </div>
-          ) : null}
-          {discountAmount > 0 ? (
-            <div className="flex justify-between">
-              <span className="text-theme-secondary">Discount</span>
-              <span className="text-emerald-400">−₹{discountAmount.toFixed(2)}</span>
-            </div>
-          ) : null}
-          {couponCode && discountAmount > 0 ? (
-            <div className="flex justify-between">
-              <span className="text-theme-secondary">Coupon code</span>
-              <span className="text-theme-primary">{couponCode}</span>
-            </div>
-          ) : null}
-
           {ride.rating != null ? (
             <div className="flex justify-between">
               <span className="text-theme-secondary">{t('rating')}</span>

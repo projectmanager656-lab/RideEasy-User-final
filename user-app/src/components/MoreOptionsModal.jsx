@@ -74,33 +74,11 @@ const NAV_OPTIONS = [
         icon: 'ri-wallet-3-line',
     },
     {
-        // "My Ride" tab — previously had no entry point anywhere in the app.
-        id: 'ride',
-        labelKey: 'ride',
-        detailKey: 'current_ride',
-        to: '/ride',
-        icon: 'ri-roadster-line',
-    },
-    {
         id: 'chat',
         labelKey: 'live_chat',
         detailKey: 'contact_support',
         to: '/support/chat',
         icon: 'ri-chat-3-line',
-    },
-    {
-        id: 'emergency-contact',
-        labelKey: 'emergency_contact',
-        detailKey: 'emergency_contact_sub',
-        to: '/emergency-contact',
-        icon: 'ri-contacts-book-2-line',
-    },
-    {
-        id: 'logout',
-        labelKey: 'log_out',
-        to: '/user/logout',
-        icon: 'ri-logout-box-r-line',
-        replace: true,
     },
 ]
 
@@ -144,11 +122,17 @@ const MoreOptionsModal = ({ open, onClose }) => {
                             onClick={() => go(o)}
                             className="flex w-full items-center gap-3 rounded-xl border border-theme bg-theme-card px-3.5 py-3 text-left transition hover:border-brand-yellow/40 active:scale-[0.99]"
                         >
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                                o.id === 'logout'
+                                    ? 'bg-red-500/15 text-red-500'
+                                    : 'bg-brand-yellow/15 text-brand-yellow'
+                            }`}>
                                 <i className={`${o.icon} text-lg`} aria-hidden />
                             </span>
                             <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-semibold text-theme-primary">{t(o.labelKey)}</span>
+                                <span className={`block text-sm font-semibold ${
+                                    o.id === 'logout' ? 'text-red-500' : 'text-theme-primary'
+                                }`}>{t(o.labelKey)}</span>
                                 {o.detailKey ? (
                                     <span className="block text-xs text-theme-secondary">{t(o.detailKey)}</span>
                                 ) : null}

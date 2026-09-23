@@ -166,13 +166,29 @@ module.exports.updateProfile = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return fail(res, req, 400, 'Validation failed', { errors: errors.array() });
 
-    const { name, savedAddresses } = req.body || {};
+    const { name, gender, dateOfBirth, savedAddresses } = req.body || {};
     const $set = {};
 
     if (name != null && String(name).trim() !== '') {
         const n = String(name).trim();
         if (n.length < 2 || n.length > 80) return fail(res, req, 400, 'Name must be 2–80 characters');
         $set.name = n;
+    }
+
+    if (gender !== undefined) {
+        const g = String(gender || '').trim().toLowerCase();
+        if (g && !['male', 'female', 'other'].includes(g)) {
+            return fail(res, req, 400, 'Gender must be male, female or other');
+        }
+        $set.gender = g;
+    }
+
+    if (dateOfBirth !== undefined) {
+        const d = String(dateOfBirth || '').trim();
+        if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+            return fail(res, req, 400, 'Date of birth must be YYYY-MM-DD');
+        }
+        $set.dateOfBirth = d;
     }
 
     if (savedAddresses != null) {
@@ -188,7 +204,7 @@ module.exports.updateProfile = async (req, res) => {
     }
 
     if (Object.keys($set).length === 0) {
-        return fail(res, req, 400, 'Provide name and/or savedAddresses to update');
+        return fail(res, req, 400, 'Provide name, gender, dateOfBirth and/or savedAddresses to update');
     }
 
     try {
@@ -198,6 +214,8 @@ module.exports.updateProfile = async (req, res) => {
             return fail(res, req, 404, 'User not found');
         }
         if ($set.name != null) user.name = $set.name;
+        if ($set.gender !== undefined) user.gender = $set.gender;
+        if ($set.dateOfBirth !== undefined) user.dateOfBirth = $set.dateOfBirth;
         if ($set['savedAddresses.home'] !== undefined) {
             user.savedAddresses = user.savedAddresses || {};
             user.savedAddresses.home = $set['savedAddresses.home'];
@@ -211,6 +229,27 @@ module.exports.updateProfile = async (req, res) => {
     } catch (err) {
         console.error('[users/profile PATCH]', err?.message || err, err?.stack);
         return fail(res, req, 500, 'Could not update profile');
+    }
+};
+
+/** Persist an uploaded profile photo and return the updated user. */
+module.exports.uploadProfilePhoto = async (req, res) => {
+    const oid = toUserObjectId(req.userId || req.user?._id);
+    if (!oid) return fail(res, req, 401, 'Unauthorized');
+    if (!req.file) return fail(res, req, 400, 'Profile photo is required');
+
+    try {
+        const user = await userModel.findById(oid);
+        if (!user) return fail(res, req, 404, 'User not found');
+
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        user.profilePhoto = `${baseUrl}/uploads/profile/${req.file.filename}`;
+        await user.save({ validateModifiedOnly: true });
+
+        return ok(res, req, 200, 'Profile photo updated', { user: toPublicDoc(user) });
+    } catch (err) {
+        console.error('[users/profile/photo]', err?.message || err);
+        return fail(res, req, 500, 'Could not update profile photo');
     }
 };
 

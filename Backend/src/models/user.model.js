@@ -6,6 +6,10 @@ const userSchema = new mongoose.Schema({
     name: { type: String, required: true, minlength: 2 },
     phone: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
+    /** '', 'male', 'female' or 'other'. */
+    gender: { type: String, default: '' },
+    /** Date-only string (YYYY-MM-DD) — avoids timezone shifts on a birth date. */
+    dateOfBirth: { type: String, default: '' },
     /** Quick picks on the booking screen (home / work). */
     savedAddresses: {
         home: { type: String, default: '' },
@@ -24,6 +28,7 @@ const userSchema = new mongoose.Schema({
     },
     password: { type: String, required: true, select: false },
     socketId: { type: String },
+    profilePhoto: { type: String, default: '' },
     walletBalance: { type: Number, default: 0 },
     referralCode: { type: String, unique: true, sparse: true, uppercase: true, trim: true },
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'user', default: null },

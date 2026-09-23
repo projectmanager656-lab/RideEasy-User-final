@@ -1,9 +1,13 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { body } = require('express-validator');
 const userController = require('../controllers/user.controller');
 const rideController = require('../controllers/ride.controller');
 const auth = require('../middlewares/auth.middleware');
 const { loginRateLimit } = require('../middlewares/loginRateLimit.middleware');
+const { fail } = require('../utils/apiResponse');
 const {
     registerUserValidators,
     loginValidators,
@@ -12,6 +16,46 @@ const {
 } = require('../validators/auth.validators');
 
 const router = express.Router();
+
+/** Profile photos live on disk under Backend/uploads/profile and are served at /uploads. */
+const PROFILE_PHOTO_DIR = path.join(__dirname, '..', '..', 'uploads', 'profile');
+fs.mkdirSync(PROFILE_PHOTO_DIR, { recursive: true });
+
+const PROFILE_PHOTO_EXTENSIONS = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+};
+
+const profilePhotoUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, PROFILE_PHOTO_DIR),
+        // Never trust the original filename — build a unique one from the user id.
+        filename: (req, file, cb) => {
+            const ext = PROFILE_PHOTO_EXTENSIONS[file.mimetype] || 'jpg';
+            const userId = req.user?._id ? String(req.user._id) : 'user';
+            cb(null, `profile-${userId}-${Date.now()}.${ext}`);
+        },
+    }),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (PROFILE_PHOTO_EXTENSIONS[file.mimetype]) return cb(null, true);
+        const err = new Error('Only JPEG, PNG or WebP images are allowed');
+        err.status = 400;
+        return cb(err);
+    },
+});
+
+/** Wrap multer so its errors use the standard JSON error envelope. */
+function handleProfilePhotoUpload(req, res, next) {
+    profilePhotoUpload.single('profilePhoto')(req, res, (err) => {
+        if (!err) return next();
+        if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+            return fail(res, req, 400, 'Profile photo must be 2 MB or smaller');
+        }
+        return fail(res, req, err.status || 400, err.message || 'Invalid profile photo');
+    });
+}
 
 router.post('/register', registerUserValidators, userController.registerUser);
 
@@ -26,6 +70,7 @@ router.post('/phone/verify-otp',
 router.post('/google', userController.googleLogin);
 
 router.get('/profile', auth.authUser, userController.getProfile);
+router.post('/profile/photo', auth.authUser, handleProfilePhotoUpload, userController.uploadProfilePhoto);
 router.get('/wallet', auth.authUser, userController.getWallet);
 router.get('/coupons', auth.authUser, userController.getCoupons);
 router.post('/coupons/validate', auth.authUser, body('code').isString().isLength({ min: 1, max: 40 }), body('fare').isNumeric(), userController.validateCoupon);

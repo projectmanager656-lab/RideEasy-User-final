@@ -1,5 +1,7 @@
-import React, { useCallback, useContext, useEffect, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Capacitor } from '@capacitor/core'
 import { UserDataContext } from '../context/UserContext'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
@@ -93,9 +95,11 @@ const UserProfile = () => {
   const [ editingPlaces, setEditingPlaces ] = useState(false)
   const [ home, setHome ] = useState('')
   const [ work, setWork ] = useState('')
-  // name inline edit (personal info)
+  // account-details inline edit (personal info)
   const [ editingName, setEditingName ] = useState(false)
   const [ name, setName ] = useState('')
+  const [ gender, setGender ] = useState('')
+  const [ dateOfBirth, setDateOfBirth ] = useState('')
   // change password
   const [ currentPassword, setCurrentPassword ] = useState('')
   const [ newPassword, setNewPassword ] = useState('')
@@ -104,6 +108,9 @@ const UserProfile = () => {
   const [ pwMessage, setPwMessage ] = useState('')
   const [ pwSaving, setPwSaving ] = useState(false)
   const [ saving, setSaving ] = useState(false)
+  const [ uploadingPhoto, setUploadingPhoto ] = useState(false)
+  const photoInputRef = useRef(null)
+  const isNative = Capacitor.isNativePlatform()
   const [ message, setMessage ] = useState('')
   const [ error, setError ] = useState('')
   const [ rideCount, setRideCount ] = useState(0)
@@ -111,9 +118,11 @@ const UserProfile = () => {
 
   useEffect(() => {
     setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
     setHome(user?.savedAddresses?.home || '')
     setWork(user?.savedAddresses?.work || '')
-  }, [ user?._id, user?.name, user?.savedAddresses?.home, user?.savedAddresses?.work ])
+  }, [ user?._id, user?.name, user?.gender, user?.dateOfBirth, user?.savedAddresses?.home, user?.savedAddresses?.work ])
 
   const loadRideSummary = useCallback(async () => {
     try {
@@ -157,8 +166,8 @@ const UserProfile = () => {
     }
   }
 
-  // Save display name (Personal Information).
-  const saveName = async (e) => {
+  // Save account details (name, gender, date of birth).
+  const saveAccountDetails = async (e) => {
     e.preventDefault()
     if (String(name || '').trim().length < 2) {
       setError(t('valid_name_error'))
@@ -170,6 +179,8 @@ const UserProfile = () => {
     try {
       const { data } = await apiClient.patch('/users/profile', {
         name: String(name).trim(),
+        gender,
+        dateOfBirth,
       }, withAuth())
       const body = stripApiEnvelope(data)
       const u = body?.user ?? body
@@ -181,6 +192,97 @@ const UserProfile = () => {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Upload a chosen/captured image and refresh the signed-in user.
+  const uploadProfilePhotoBlob = async (blob, format) => {
+    setUploadingPhoto(true)
+    setError('')
+    setMessage('')
+    try {
+      const formData = new FormData()
+      formData.append('profilePhoto', blob, `profile-${Date.now()}.${format || 'jpg'}`)
+
+      // No manual Content-Type — axios lets the browser set the multipart boundary.
+      const { data } = await apiClient.post('/users/profile/photo', formData, withAuth())
+      const body = stripApiEnvelope(data)
+      const u = body?.user || body
+      if (u && typeof u === 'object') setUser(u)
+      setMessage(t('saved'))
+    } catch (err) {
+      setError(formatApiError(err))
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  // Change the profile photo via Camera/Gallery, then upload it to the backend.
+  const pickProfilePhoto = async (source = CameraSource.Prompt) => {
+    if (uploadingPhoto) return
+
+    // Web/PWA has no native camera plugin — fall back to the browser file picker.
+    if (!isNative) {
+      const input = photoInputRef.current
+      if (!input) return
+      input.value = ''
+      input.capture = source === CameraSource.Camera ? 'environment' : ''
+      input.click()
+      return
+    }
+
+    let photo
+    try {
+      photo = await Camera.getPhoto({
+        quality: 80,
+        width: 512,
+        height: 512,
+        resultType: CameraResultType.Uri,
+        source,
+      })
+    } catch {
+      // Camera/Gallery cancelled or unavailable — don't surface an error.
+      return
+    }
+
+    const blob = await (await fetch(photo.webPath)).blob()
+    await uploadProfilePhotoBlob(blob, photo.format)
+  }
+
+  const onPhotoInputChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const ext = String(file.name.split('.').pop() || 'jpg').toLowerCase()
+    await uploadProfilePhotoBlob(file, ext === 'jpeg' ? 'jpg' : ext)
+  }
+
+  // Reset the account-details fields back to the saved user.
+  const cancelAccountEdit = () => {
+    setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
+    setEditingName(false)
+    setError('')
+  }
+
+  const toggleAccountEdit = () => {
+    if (editingName) {
+      cancelAccountEdit()
+      return
+    }
+    setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
+    setEditingName(true)
+    setError('')
+    setMessage('')
+  }
+
+  // Render a stored YYYY-MM-DD birth date as "D MMM YYYY".
+  const formatDob = (value) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''))
+    if (!m) return ''
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    return `${Number(m[3])} ${t(months[Number(m[2]) - 1])} ${m[1]}`
   }
 
   const changePassword = async (e) => {
@@ -252,6 +354,13 @@ const UserProfile = () => {
     const username = user?.username
     return (
       <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onPhotoInputChange}
+        />
         {/* header */}
         <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -282,13 +391,54 @@ const UserProfile = () => {
             </div>
           ) : null}
 
+          {/* profile photo */}
+          <section className="rounded-2xl border border-theme bg-theme-card p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-theme-secondary">{t('profile_photo')}</h2>
+            <div className="mt-4 flex items-center gap-4">
+              <div className="relative h-20 w-20 shrink-0">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted">
+                  {user?.profilePhoto ? (
+                    <img src={user.profilePhoto} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <i className="ri-user-3-fill text-4xl" />
+                  )}
+                </div>
+                {uploadingPhoto ? (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white">
+                    <i className="ri-loader-4-line animate-spin text-xl" />
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => pickProfilePhoto(CameraSource.Photos)}
+                  disabled={uploadingPhoto}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-secondary transition hover:text-theme-primary disabled:opacity-60"
+                >
+                  <i className="ri-image-line text-base" />
+                  {t('choose_photo')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => pickProfilePhoto(CameraSource.Camera)}
+                  disabled={uploadingPhoto}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-brand-ink transition hover:bg-brand-light disabled:opacity-60"
+                >
+                  <i className="ri-camera-line text-base" />
+                  {t('take_photo')}
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* account details */}
           <section className="rounded-2xl border border-theme bg-theme-card p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wide text-theme-secondary">{t('account_details')}</h2>
               <button
                 type="button"
-                onClick={() => { setEditingName((v) => !v); setError(''); setMessage('') }}
+                onClick={toggleAccountEdit}
                 className="flex shrink-0 items-center gap-1.5 rounded-full border border-theme bg-theme-card-muted px-3 py-1.5 text-xs font-semibold text-theme-secondary transition hover:text-theme-primary"
               >
                 <i className="ri-edit-line text-sm" />
@@ -297,7 +447,7 @@ const UserProfile = () => {
             </div>
 
             {editingName ? (
-              <form onSubmit={saveName} className="mt-4 space-y-4">
+              <form onSubmit={saveAccountDetails} className="mt-4 space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('full_name')}</label>
                   <input
@@ -307,6 +457,29 @@ const UserProfile = () => {
                     placeholder={t('your_name')}
                     minLength={2}
                     required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('gender')}</label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full rounded-xl border border-theme bg-theme-input px-4 py-3 text-base text-theme-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60"
+                  >
+                    <option value="">{t('select_gender')}</option>
+                    <option value="male">{t('male')}</option>
+                    <option value="female">{t('female')}</option>
+                    <option value="other">{t('other')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('date_of_birth')}</label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full rounded-xl border border-theme bg-theme-input px-4 py-3 text-base text-theme-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -319,7 +492,7 @@ const UserProfile = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setEditingName(false)}
+                    onClick={cancelAccountEdit}
                     className="rounded-xl border border-theme bg-theme-card px-4 py-3 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted"
                   >
                     {t('close')}
@@ -329,6 +502,8 @@ const UserProfile = () => {
             ) : (
               <div className="mt-2 divide-y divide-theme">
                 <InfoRow icon="ri-user-3-line" label={t('full_name')} value={user?.name} />
+                <InfoRow icon="ri-venus-mars-line" label={t('gender')} value={user?.gender ? t(user.gender) : null} />
+                <InfoRow icon="ri-calendar-line" label={t('date_of_birth')} value={formatDob(user?.dateOfBirth)} />
                 <InfoRow icon="ri-phone-line" label={t('phone_number')} value={user?.phone ? `+91 ${user.phone}` : null} />
                 <InfoRow icon="ri-mail-line" label={t('email')} value={user?.email} />
                 {username ? (
@@ -395,6 +570,13 @@ const UserProfile = () => {
   // ---- Overview (account menu) ----
   return (
     <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onPhotoInputChange}
+      />
       {/* header */}
       <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -420,9 +602,24 @@ const UserProfile = () => {
         <section className="rounded-2xl border border-theme bg-theme-card p-4">
           <div className="flex items-start gap-3">
             <div className="relative">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-theme-card-muted text-theme-muted">
-                <i className="ri-user-3-fill text-3xl" />
-              </div>
+              <button
+                type="button"
+                onClick={() => pickProfilePhoto()}
+                disabled={uploadingPhoto}
+                aria-label={t('edit')}
+                className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted disabled:opacity-60"
+              >
+                {user?.profilePhoto ? (
+                  <img src={user.profilePhoto} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <i className="ri-user-3-fill text-3xl" />
+                )}
+                {uploadingPhoto ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                    <i className="ri-loader-4-line animate-spin text-xl" />
+                  </span>
+                ) : null}
+              </button>
               <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-theme-card bg-emerald-500" />
             </div>
             <div className="min-w-0 flex-1">
@@ -579,7 +776,7 @@ const UserProfile = () => {
         <button
           type="button"
           onClick={logout}
-          className="w-full rounded-2xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted"
+          className="w-full rounded-2xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/15"
         >
           {t('log_out')}
         </button>

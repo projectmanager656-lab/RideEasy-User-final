@@ -245,6 +245,33 @@ const Invoice = () => {
                   <dt className="text-theme-muted print:text-slate-500">{t('payment_method')}</dt>
                   <dd className="text-right font-medium text-theme-primary print:text-slate-900">{paymentLabel(invoice.paymentMethod, t)}</dd>
                 </div>
+
+                {discount > 0 && (invoice.couponName || invoice.couponCode) ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2.5">
+                    <dt className="text-theme-muted print:text-slate-500">Coupon</dt>
+                    <dd className="text-right font-medium text-theme-primary print:text-slate-900">
+                      {invoice.couponName || invoice.couponCode}
+                    </dd>
+                  </div>
+                ) : null}
+
+                {discount > 0 ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2.5">
+                    <dt className="text-theme-muted print:text-slate-500">Discount</dt>
+                    <dd className="text-right font-medium text-emerald-700 dark:text-emerald-300 print:text-slate-900">
+                      −{formatINR(discount)}
+                    </dd>
+                  </div>
+                ) : null}
+
+                {discount > 0 && invoice.couponCode ? (
+                  <div className="flex items-baseline justify-between gap-4 py-2.5">
+                    <dt className="text-theme-muted print:text-slate-500">Coupon code</dt>
+                    <dd className="text-right font-medium text-theme-primary print:text-slate-900">
+                      {invoice.couponCode}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </div>
 

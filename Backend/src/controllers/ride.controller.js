@@ -615,6 +615,7 @@ module.exports.createRide = async (req, res) => {
       discountAmount: couponResult.discountAmount,
       discountReason: couponResult.coupon?.code || '',
       couponCode: couponResult.coupon?.code || '',
+      couponName: couponResult.coupon?.title || couponResult.coupon?.code || '',
       distanceKm: computedDistanceKm,
       customerName: customerName || req.user.name,
       customerPhone: customerPhone || req.user.phone,

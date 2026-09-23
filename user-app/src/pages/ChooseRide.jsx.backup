@@ -1,0 +1,827 @@
+
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import RideMap from '../components/RideMap'
+import ScheduleModal from '../components/ScheduleModal'
+import { RIDE_TIERS, findRideTier } from '../constants/rideTiers'
+import { apiClient, withAuth } from '../services/http'
+import { stripApiEnvelope } from '../utils/apiBody'
+import { formatApiError } from '../utils/apiError'
+import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
+import { useLanguage } from '../i18n'
+import logoAuto from '../assets/logo-auto.png'
+import logoCar from '../assets/logo-car.png'
+import logoPremium from '../assets/premium.png'
+import logoBike from '../assets/logo-bike.png'
+
+function formatDistance (meters) {
+    if (!Number.isFinite(meters) || meters < 0) return ''
+    if (meters < 1000) return `${Math.max(1, Math.round(meters))} m`
+    return `${(meters / 1000).toFixed(1)} km`
+}
+
+function formatDuration (seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return ''
+    const totalMin = Math.max(1, Math.round(seconds / 60))
+    if (totalMin < 60) return `${totalMin} min`
+    const h = Math.floor(totalMin / 60)
+    const m = totalMin % 60
+    return m ? `${h} hr ${m} min` : `${h} hr`
+}
+
+function formatPrice (n) {
+    const v = Number(n)
+    if (!Number.isFinite(v) || v <= 0) return null
+    return `₹${v.toFixed(2)}`
+}
+
+function formatArrival (minutes) {
+    return new Date(Date.now() + minutes * 60_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/**
+ * Fare failures must read as guidance, never as a raw status code or upstream text.
+ * Network errors and 5xx get the generic message; actionable 4xx messages are kept.
+ */
+function fareErrorMessage (err, fallbackMessage) {
+    const status = err?.response?.status
+    if (!status || status >= 500) return fallbackMessage
+    return formatApiError(err) || fallbackMessage
+}
+
+function normalizeCoordinates (value) {
+    if (!value || typeof value !== 'object') return null
+    const lat = Number(value.lat ?? value.latitude)
+    const lng = Number(value.lng ?? value.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+    return { lat, lng }
+}
+
+const PAYMENT_METHODS = [ 'Cash', 'UPI' ]
+
+/** Ride facilities shown on Choose Ride, each with its branded logo. */
+const RIDE_OPTIONS = [
+    { tier: findRideTier('BIKE'), logo: logoBike },
+    { tier: findRideTier('ECONOMY'), logo: logoAuto },
+    { tier: findRideTier('COMFORT'), logo: logoCar },
+    { tier: findRideTier('PREMIUM'), logo: logoPremium },
+].filter((o) => o.tier)
+
+/** Ride-sheet snap heights as a fraction of the page (collapsed → half → expanded). */
+const SNAP_FRACTIONS = [ 0.56, 0.76, 0.92 ]
+
+const ChooseRide = () => {
+    const navigate = useNavigate()
+    const location = useLocation()
+    const { t } = useLanguage()
+    const state = location.state || {}
+
+    const pickupCoords = normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
+    const [ dropCoords ] = useState(() => (
+        normalizeCoordinates(state.dropCoords || state.dropCoordinate || state.dropSelection)
+    ))
+    const pickup = state.pickup || ''
+    const destination = state.drop || state.destination || ''
+    const rideFor = state.rideFor || 'Me'
+
+    const [ fare, setFare ] = useState(state.fare || null)
+    const [ fareLoading, setFareLoading ] = useState(!state.fare)
+    const [ fareError, setFareError ] = useState('')
+
+    const [ routeStats, setRouteStats ] = useState(null)
+    const [ routeLoading, setRouteLoading ] = useState(true)
+    const [ routeError, setRouteError ] = useState(false)
+
+    const [ selectedTier, setSelectedTier ] = useState(() => RIDE_OPTIONS[0]?.tier || RIDE_TIERS[0] || null)
+    const [ paymentOpen, setPaymentOpen ] = useState(false)
+    const [ paymentMethod, setPaymentMethod ] = useState('Cash')
+    const [ couponCode, setCouponCode ] = useState('')
+    const [ couponState, setCouponState ] = useState(null)
+    const [ couponLoading, setCouponLoading ] = useState(false)
+    const [ offers, setOffers ] = useState([])
+    const [ offersOpen, setOffersOpen ] = useState(false)
+    const [ offersLoading, setOffersLoading ] = useState(false)
+    const [ scheduleOpen, setScheduleOpen ] = useState(false)
+    const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
+    const [ bookingError, setBookingError ] = useState('')
+
+    const hasRoute = !!(
+        pickupCoords?.lat != null && pickupCoords?.lng != null
+        && dropCoords?.lat != null && dropCoords?.lng != null
+    )
+
+    /* ── Bottom sheet: collapsed → half → expanded ─────────────────────────────
+     * The sheet is anchored to the bottom of the page and its HEIGHT is the drag
+     * axis, so the map, the footer (payment + actions) and the bottom nav never
+     * move — only the panel grows over the map. Snap heights are fractions of the
+     * page, so 0.56 keeps the resting layout identical to the original design. */
+    const pageRef = useRef(null)
+    const sheetRef = useRef(null)
+    const handleRef = useRef(null)
+
+    const [ pageHeight, setPageHeight ] = useState(0)
+    const [ sheetSnap, setSheetSnap ] = useState(0)
+    const [ sheetDragPx, setSheetDragPx ] = useState(null)
+    const [ sheetAnimating, setSheetAnimating ] = useState(false)
+
+    const snapHeights = useMemo(
+        () => (pageHeight ? SNAP_FRACTIONS.map((fraction) => Math.round(pageHeight * fraction)) : null),
+        [ pageHeight ]
+    )
+    const sheetHeight = sheetDragPx != null
+        ? sheetDragPx
+        : (snapHeights ? snapHeights[sheetSnap] : null)
+
+    // Live values for the native touch handlers, which are attached once.
+    const sheetHeightRef = useRef(0)
+    if (sheetHeight != null) sheetHeightRef.current = sheetHeight
+    const sheetSnapRef = useRef(0)
+    sheetSnapRef.current = sheetSnap
+
+    /** Track the usable page height (follows the Android keyboard and rotation). */
+    useEffect(() => {
+        const el = pageRef.current
+        if (!el) return undefined
+        const measure = () => setPageHeight(Math.round(el.clientHeight))
+        measure()
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure)
+            return () => window.removeEventListener('resize', measure)
+        }
+        const observer = new ResizeObserver(measure)
+        observer.observe(el)
+        return () => observer.disconnect()
+    }, [ hasRoute ])
+
+    /**
+     * Panel drag — the drag HANDLE is the only thing that moves the sheet.
+     * The ride list keeps scrolling normally and taps on cards/buttons are never
+     * intercepted: the gesture lives entirely on the handle, which is
+     * `touch-action: none` and captures the pointer for the duration of the drag.
+     */
+    useEffect(() => {
+        const handle = handleRef.current
+        if (!handle || !snapHeights) return undefined
+
+        const minH = snapHeights[0]
+        const maxH = snapHeights[snapHeights.length - 1]
+        let startY = 0
+        let startH = 0
+        let lastY = 0
+        let lastT = 0
+        let velocity = 0
+        let dragging = false
+
+        const onDown = (event) => {
+            if (dragging) return
+            if (event.pointerType === 'mouse' && event.button !== 0) return
+            dragging = true
+            startY = event.clientY
+            lastY = startY
+            lastT = event.timeStamp
+            velocity = 0
+            startH = sheetHeightRef.current
+            setSheetAnimating(false)
+            try { handle.setPointerCapture(event.pointerId) } catch { /* ignore */ }
+        }
+
+        const onMove = (event) => {
+            if (!dragging) return
+            event.preventDefault()
+            const y = event.clientY
+            const dt = event.timeStamp - lastT
+            if (dt > 0) velocity = (y - lastY) / dt
+            lastY = y
+            lastT = event.timeStamp
+            setSheetDragPx(Math.min(maxH, Math.max(minH, Math.round(startH - (y - startY)))))
+        }
+
+        const settle = (event) => {
+            if (!dragging) return
+            dragging = false
+            try { handle.releasePointerCapture(event.pointerId) } catch { /* ignore */ }
+
+            const released = sheetHeightRef.current
+            let next = sheetSnapRef.current
+            if (Math.abs(velocity) > 0.45) {
+                // Flick: advance one snap in the drag direction.
+                next = velocity < 0
+                    ? Math.min(sheetSnapRef.current + 1, snapHeights.length - 1)
+                    : Math.max(sheetSnapRef.current - 1, 0)
+            } else {
+                let best = 0
+                let bestDistance = Infinity
+                snapHeights.forEach((height, index) => {
+                    const distance = Math.abs(height - released)
+                    if (distance < bestDistance) {
+                        bestDistance = distance
+                        best = index
+                    }
+                })
+                next = best
+            }
+
+            velocity = 0
+            setSheetDragPx(null)
+            setSheetAnimating(true)
+            setSheetSnap(next)
+        }
+
+        handle.addEventListener('pointerdown', onDown)
+        handle.addEventListener('pointermove', onMove, { passive: false })
+        handle.addEventListener('pointerup', settle)
+        handle.addEventListener('pointercancel', settle)
+        return () => {
+            handle.removeEventListener('pointerdown', onDown)
+            handle.removeEventListener('pointermove', onMove)
+            handle.removeEventListener('pointerup', settle)
+            handle.removeEventListener('pointercancel', settle)
+        }
+    }, [ snapHeights ])
+
+    /** Release the snap transition once it has finished. */
+    useEffect(() => {
+        if (!sheetAnimating) return undefined
+        const timer = setTimeout(() => setSheetAnimating(false), 320)
+        return () => clearTimeout(timer)
+    }, [ sheetAnimating, sheetSnap ])
+
+    /** Load fare from backend unless Home already passed it through. */
+    useEffect(() => {
+        if (fare && Object.keys(fare).length > 0) return
+        if (!hasRoute || !pickup || !destination) {
+            setFareLoading(false)
+            return
+        }
+        let cancelled = false
+        setFareLoading(true)
+        setFareError('')
+        apiClient
+            .get('/rides/get-fare', withAuth({
+                params: {
+                    pickup,
+                    destination,
+                    pickupLat: pickupCoords.lat,
+                    pickupLng: pickupCoords.lng,
+                    dropLat: dropCoords.lat,
+                    dropLng: dropCoords.lng,
+                },
+            }))
+            .then((res) => {
+                if (cancelled) return
+                setFare(stripApiEnvelope(res.data) || {})
+            })
+            .catch((err) => {
+                if (cancelled) return
+                setFareError(fareErrorMessage(err, t('fare_fetch_failed')))
+            })
+            .finally(() => {
+                if (!cancelled) setFareLoading(false)
+            })
+        return () => {
+            cancelled = true
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ hasRoute, pickup, destination ])
+
+    /** Fetch route distance + duration for the summary chip. */
+    useEffect(() => {
+        if (!hasRoute) {
+            setRouteLoading(false)
+            return
+        }
+        let cancelled = false
+        setRouteLoading(true)
+        setRouteError(false)
+        fetchOsrmDrivingRoute(
+            Number(pickupCoords.lng),
+            Number(pickupCoords.lat),
+            Number(dropCoords.lng),
+            Number(dropCoords.lat),
+            { overview: 'simplified' }
+        )
+            .then((data) => {
+                if (cancelled) return
+                setRouteStats({
+                    distanceMeters: data.distanceMeters,
+                    durationSeconds: data.durationSec,
+                })
+                setRouteError(false)
+            })
+            .catch(() => {
+                if (cancelled) return
+                setRouteStats(null)
+                setRouteError(true)
+            })
+            .finally(() => {
+                if (!cancelled) setRouteLoading(false)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [ hasRoute, pickupCoords?.lat, pickupCoords?.lng, dropCoords?.lat, dropCoords?.lng ])
+
+    const tiers = useMemo(() => {
+        const hasFare = fare && Object.keys(fare).length > 0
+        return RIDE_OPTIONS.map((o) => {
+            const t = o.tier
+            const backendPrice = hasFare ? (fare[t.vehicleType] ?? fare[String(t.vehicleType).toUpperCase()]) : undefined
+            const price = backendPrice != null && Number(backendPrice) > 0 ? backendPrice : (t.fare || null)
+            return { ...t, logo: o.logo, price }
+        })
+    }, [ fare ])
+
+    const cheapest = useMemo(() => {
+        const priced = tiers.filter((t) => t.price != null && Number(t.price) > 0)
+        if (priced.length === 0) return null
+        return priced.reduce((a, b) => (Number(a.price) <= Number(b.price) ? a : b))
+    }, [ tiers ])
+
+    const selected = tiers.find((tier) => tier.id === selectedTier?.id) || tiers[0] || null
+
+    useEffect(() => {
+        let cancelled = false
+        setOffersLoading(true)
+        apiClient.get('/users/coupons', withAuth())
+            .then((res) => {
+                if (cancelled) return
+                const body = stripApiEnvelope(res.data)
+                setOffers(Array.isArray(body?.coupons) ? body.coupons.filter((coupon) => !coupon.used) : [])
+            })
+            .catch(() => {
+                if (!cancelled) setOffers([])
+            })
+            .finally(() => {
+                if (!cancelled) setOffersLoading(false)
+            })
+        return () => { cancelled = true }
+    }, [])
+
+    const handleGoBack = () => {
+        if (window.history.length > 1) navigate(-1)
+        else navigate('/home')
+    }
+
+    const retryRoute = () => {
+        // Toggling a no-op dependency re-runs the route effect via state bump below.
+        setRouteError(false)
+        setRouteStats(null)
+        setRouteLoading(true)
+        // Re-trigger effect by re-running with current coords.
+        const { lng: olng, lat: olat } = pickupCoords
+        const { lng: dlng, lat: dlat } = dropCoords
+        fetchOsrmDrivingRoute(Number(olng), Number(olat), Number(dlng), Number(dlat), { overview: 'simplified' })
+            .then((data) => {
+                setRouteStats({ distanceMeters: data.distanceMeters, durationSeconds: data.durationSec })
+                setRouteError(false)
+            })
+            .catch(() => {
+                setRouteStats(null)
+                setRouteError(true)
+            })
+            .finally(() => setRouteLoading(false))
+    }
+
+    const retryFare = () => {
+        setFare(null)
+        setFareLoading(true)
+        setFareError('')
+        apiClient
+            .get('/rides/get-fare', withAuth({
+                params: {
+                    pickup,
+                    destination,
+                    pickupLat: pickupCoords.lat,
+                    pickupLng: pickupCoords.lng,
+                    dropLat: dropCoords.lat,
+                    dropLng: dropCoords.lng,
+                },
+            }))
+            .then((res) => setFare(stripApiEnvelope(res.data) || {}))
+            .catch((err) => setFareError(fareErrorMessage(err, t('fare_fetch_failed'))))
+            .finally(() => setFareLoading(false))
+    }
+
+    const handleConfirm = async () => {
+        if (!selected) return
+        if (!hasRoute) {
+            setBookingError(t('select_pickup_drop_first'))
+            return
+        }
+        const tier = selected
+        const vehicleType = tier.vehicleType
+        const price = Number(tier.price) > 0 ? tier.price : null
+        if (price == null) {
+            setBookingError(t('fare_unavailable_retry'))
+            return
+        }
+        setBookingError('')
+        navigate('/confirm-pickup', {
+            state: {
+                pickupCoords,
+                dropCoords,
+                pickup,
+                destination,
+                rideFor,
+                vehicleType,
+                tierId: tier.id,
+                paymentMethod,
+                price,
+                fare,
+                couponCode: couponState?.coupon?.code || '',
+                discountAmount: couponState?.coupon ? selectedDiscount : 0,
+                finalFare: couponState?.coupon ? selectedFinalFare : price,
+                distanceKm: fare?.distanceKm != null ? fare.distanceKm : (routeStats?.distanceMeters != null ? routeStats.distanceMeters / 1000 : undefined),
+                scheduledAt,
+            },
+        })
+    }
+
+    const applyCoupon = async (requestedCode = couponCode, fareOverride = null) => {
+        const candidate = typeof requestedCode === 'string' ? requestedCode : couponCode
+        const code = (typeof candidate === 'string' ? candidate : '').trim().toUpperCase()
+        const fare = Number(fareOverride ?? selected?.price)
+        if (!code || !Number.isFinite(fare) || fare <= 0) return false
+        setCouponLoading(true)
+        setBookingError('')
+        try {
+            const res = await apiClient.post('/users/coupons/validate', { code, fare }, withAuth())
+            const body = stripApiEnvelope(res.data)
+            setCouponState(body)
+            setCouponCode(code)
+            return true
+        } catch (err) {
+            setCouponState(null)
+            setBookingError(formatApiError(err))
+            return false
+        } finally {
+            setCouponLoading(false)
+        }
+    }
+
+    // Coupon amounts depend on the fare, so re-validate whenever the chosen tier changes.
+    const selectTier = (tier) => {
+        setSelectedTier(tier)
+        const appliedCode = couponState?.coupon?.code
+        if (appliedCode && Number(tier?.price) > 0) applyCoupon(appliedCode, tier.price)
+    }
+
+    const selectedOriginalFare = Number(selected?.price || 0)
+    const selectedDiscount = Number(couponState?.discountAmount || 0)
+    const selectedFinalFare = couponState?.finalFare != null ? Number(couponState.finalFare) : selectedOriginalFare
+
+    if (!hasRoute) {
+        return (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4 bg-theme-bg px-8 text-center text-theme-primary">
+                <i className="ri-roadster-line text-4xl text-brand-yellow" aria-hidden />
+                <p className="text-sm text-theme-primary">{t('ride_details_not_available')}</p>
+                <p className="text-xs text-theme-muted">{t('select_pickup_drop_first')}</p>
+                <button
+                    type="button"
+                    onClick={() => navigate('/home')}
+                    className="rounded-xl border border-brand-yellow bg-brand-yellow px-6 py-3 text-sm font-bold text-black active:scale-[0.98]"
+                >
+                    {t('back_to_home')}
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <div ref={pageRef} className="relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
+            {/* Map */}
+            <div className="relative h-[44%] min-h-[260px] w-full shrink-0 overflow-hidden">
+                <RideMap
+                    pickupCoords={pickupCoords}
+                    dropCoords={dropCoords}
+                    showRoute
+                    showRouteStatsChip={false}
+                    zoomControlPosition="topright"
+                />
+
+                {/* Back button */}
+                <button
+                    type="button"
+                    onClick={handleGoBack}
+                    aria-label={t('back')}
+                    className="absolute left-4 top-4 z-[1000] flex h-10 w-10 items-center justify-center rounded-full border border-theme bg-theme-bg/90 text-theme-primary shadow-lg backdrop-blur-sm active:scale-95"
+                >
+                    <i className="ri-arrow-left-line text-lg" aria-hidden />
+                </button>
+
+                {/* Route summary chip */}
+                {!routeLoading && routeStats && (
+                    <div className="pointer-events-none absolute left-1/2 top-4 z-[1000] -translate-x-1/2">
+                        <div
+                            className="flex items-center gap-2 whitespace-nowrap rounded-full border px-4 py-2 shadow-lg"
+                            style={{ background: 'rgba(10,10,10,0.92)', borderColor: '#2A2A2A' }}
+                        >
+                            <i className="ri-roadster-line text-brand-yellow" aria-hidden />
+                            <span className="text-sm font-bold text-white">
+                                {formatDuration(routeStats.durationSeconds)}
+                            </span>
+                            <span className="text-xs text-theme-muted" aria-hidden>•</span>
+                            <span className="text-sm font-semibold text-white">
+                                {formatDistance(routeStats.distanceMeters)}
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {/* Route stats overlay states */}
+                {routeLoading && (
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 bg-gradient-to-t from-black/70 to-transparent px-4 py-6">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-yellow border-t-transparent" />
+                        <span className="text-xs text-theme-primary">{t('loading_route')}</span>
+                    </div>
+                )}
+                {!routeLoading && routeError && (
+                    <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-3 border border-theme bg-theme-bg/90 px-4 py-4 backdrop-blur-sm">
+                        <p className="text-xs text-theme-primary">{t('unable_load_route')}</p>
+                        <button
+                            type="button"
+                            onClick={retryRoute}
+                            className="rounded-full border border-brand-yellow px-3 py-1 text-xs font-semibold text-brand-yellow active:scale-95"
+                        >
+                            {t('retry')}
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Bottom sheet — bottom-anchored; only its height changes when dragged */}
+            <div
+                ref={sheetRef}
+                className="absolute inset-x-0 bottom-0 z-10 flex min-h-0 flex-col rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.45)]"
+                style={{
+                    height: sheetHeight != null ? `${sheetHeight}px` : '56%',
+                    transition: sheetAnimating ? 'height 300ms cubic-bezier(0.32, 0.72, 0, 1)' : 'none',
+                }}
+            >
+                {/* Drag handle — the only control that resizes the panel. The padded
+                    wrapper is a comfortable touch target; its negative bottom margin
+                    keeps the layout pixel-identical to the original single bar, and
+                    `relative z-10` keeps it hit-testable where it overlaps the list. */}
+                <div
+                    ref={handleRef}
+                    className="relative z-10 -mb-[26px] flex shrink-0 cursor-grab touch-none justify-center pb-[26px] pt-2.5"
+                >
+                    <div className="h-1 w-10 rounded-full bg-theme-card-muted" />
+                </div>
+
+                {/* Scrollable ride content — the only part of this page that scrolls.
+                    overflow-x-hidden/lock the pan axis so the list can never scroll
+                    sideways or chain its scroll to the page behind it. */}
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
+                    <h2 className="mb-3 mt-3 text-lg font-bold text-theme-primary">{t('choose_a_ride')}</h2>
+                    {/* Fare loading / error */}
+                    {fareLoading && (
+                        <p className="flex items-center gap-2 py-2 text-xs text-theme-secondary">
+                            <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand-yellow border-t-transparent" />
+                            {t('getting_fare')}
+                        </p>
+                    )}
+                    {!fareLoading && fareError && (
+                        <div className="flex items-center justify-between gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2.5">
+                            <p className="text-xs text-theme-secondary">{t('unable_fetch_fare')}</p>
+                            <button
+                                type="button"
+                                onClick={retryFare}
+                                className="rounded-full border border-brand-yellow px-3 py-1 text-xs font-semibold text-brand-yellow active:scale-95"
+                            >
+                                {t('retry')}
+                            </button>
+                        </div>
+                    )}
+                    {/* Ride options */}
+                    <div className="space-y-2.5">
+                        {tiers.map((tier) => {
+                            const isSelected = selected?.id === tier.id
+                            const isCheapest = cheapest?.id === tier.id
+                            const priceText = formatPrice(tier.price)
+                            return (
+                                <button
+                                    key={tier.id}
+                                    type="button"
+                                    onClick={() => selectTier(tier)}
+                                    className={[
+                                        'flex w-full items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition active:scale-[0.99]',
+                                        isSelected
+                                            ? 'border-brand-yellow bg-theme-card'
+                                            : 'border-theme bg-theme-card',
+                                    ].join(' ')}
+                                >
+                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center">
+                                        <img src={tier.logo} alt={tier.label} className="h-9 w-9 object-contain" />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="flex items-center gap-2">
+                                            <span className="truncate text-sm font-bold text-theme-primary">{tier.label}</span>
+                                            {isCheapest && tier.price != null && (
+                                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                                                    {t('cheaper')}
+                                                </span>
+                                            )}
+                                        </span>
+                                        <span className="mt-1 flex items-center gap-1.5 text-xs text-theme-muted">
+                                            <i className="ri-group-line" aria-hidden />
+                                            <span>{t('seats_count', { count: tier.capacity })}</span>
+                                        </span>
+                                        <span className="mt-0.5 block text-xs text-theme-secondary">
+                                            {formatArrival(tier.etaMinutes)} · {t('eta_min', { count: tier.etaMinutes })}
+                                        </span>
+                                    </span>
+                                    <span className="flex shrink-0 flex-col items-end gap-1">
+                                        {isSelected && couponState?.coupon && selectedDiscount > 0 ? (
+                                            <>
+                                                <span className="text-[11px] font-medium text-theme-muted line-through">{formatPrice(selectedOriginalFare)}</span>
+                                                <span className="text-sm font-bold text-emerald-400">{formatPrice(selectedFinalFare)}</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-sm font-bold text-theme-primary">
+                                                {priceText ?? '—'}
+                                            </span>
+                                        )}
+                                        {isSelected && (
+                                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-yellow text-black">
+                                                <i className="ri-check-line text-xs" aria-hidden />
+                                            </span>
+                                        )}
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </div>
+
+                    {bookingError && (
+                        <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{bookingError}</p>
+                    )}
+
+                    {couponState?.coupon && (
+                        <div className="mt-3 space-y-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="font-semibold text-emerald-400">{couponState.coupon.code} applied</span>
+                                <button type="button" onClick={() => { setCouponState(null); setCouponCode('') }} className="font-semibold text-red-400 active:scale-95">Remove</button>
+                            </div>
+                            <div className="flex justify-between text-theme-secondary"><span>Fare</span><span>{formatPrice(selectedOriginalFare)}</span></div>
+                            <div className="flex justify-between text-emerald-400"><span>{couponState.coupon.code}</span><span>−{formatPrice(selectedDiscount)}</span></div>
+                            <div className="flex justify-between font-bold text-theme-primary"><span>You pay</span><span>{formatPrice(selectedFinalFare)}</span></div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Payment + action footer */}
+                <div className="shrink-0 border-t border-theme px-4 pb-4 pt-3">
+                    {/* Payment method row */}
+                    <button
+                        type="button"
+                        onClick={() => setPaymentOpen(true)}
+                        className="mb-3 flex w-full items-center justify-between rounded-xl border border-theme bg-theme-card px-3.5 py-3 transition active:scale-[0.99]"
+                    >
+                        <span className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                                <i className="ri-money-rupee-circle-line text-lg" aria-hidden />
+                            </span>
+                            <span className="text-sm font-semibold text-theme-primary">{paymentMethod}</span>
+                        </span>
+                        <i className="ri-arrow-right-s-line text-xl text-theme-muted" aria-hidden />
+                    </button>
+
+                    <div className="flex items-stretch gap-2">
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            disabled={!selected}
+                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+                        >
+                            <>{t('choose_ride')}</>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOffersOpen(true)}
+                            aria-label="Offer"
+                            className="flex h-[52px] w-[76px] shrink-0 items-center justify-center gap-1 rounded-2xl border border-brand-yellow bg-theme-card px-2 text-brand-yellow transition active:scale-95"
+                        >
+                            <span className="text-xs font-bold">Offer</span>
+                            <i className="ri-arrow-right-s-line text-base" aria-hidden />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setScheduleOpen(true)}
+                            aria-label={t('schedule_ride')}
+                            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border border-theme bg-theme-card text-brand-yellow transition active:scale-95"
+                        >
+                            <i className="ri-calendar-line text-xl" aria-hidden />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Payment method sheet */}
+            {paymentOpen && (
+                <div className="absolute inset-0 z-[60] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" onClick={() => setPaymentOpen(false)} aria-hidden />
+                    <div className="relative w-full max-w-[430px] rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
+                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                        <h3 className="mb-3 text-base font-bold text-theme-primary">{t('payment_method')}</h3>
+                        <div className="space-y-2">
+                            {[ ...PAYMENT_METHODS, 'Wallet' ].map((m) => (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => {
+                                        setPaymentMethod(m)
+                                        setPaymentOpen(false)
+                                    }}
+                                    className={[
+                                        'flex w-full items-center justify-between rounded-xl border px-3.5 py-3 text-sm font-semibold text-theme-primary transition active:scale-[0.99]',
+                                        paymentMethod === m ? 'border-brand-yellow bg-theme-card' : 'border-theme bg-theme-card',
+                                    ].join(' ')}
+                                >
+                                    <span className="flex items-center gap-3">
+                                        <i className={m === 'Cash' ? 'ri-money-rupee-circle-line text-brand-yellow' : 'ri-bank-card-line text-brand-yellow'} aria-hidden />
+                                        {m}
+                                    </span>
+                                    {paymentMethod === m && <i className="ri-check-line text-brand-yellow" aria-hidden />}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {offersOpen && (
+                <div className="absolute inset-0 z-[70] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/65 backdrop-blur-[1px]" onClick={() => setOffersOpen(false)} aria-hidden />
+                    <div className="relative max-h-[82%] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card px-4 pb-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-theme-primary">Offers</h3>
+                            <button type="button" onClick={() => setOffersOpen(false)} aria-label="Close offers" className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-bg text-theme-secondary">
+                                <i className="ri-close-line text-lg" aria-hidden />
+                            </button>
+                        </div>
+
+                        {offersLoading ? <p className="py-6 text-center text-sm text-theme-muted">Loading offers…</p> : offers.length === 0 ? <p className="rounded-xl border border-dashed border-theme px-4 py-6 text-center text-sm text-theme-muted">No offers available right now.</p> : (
+                            <div className="space-y-2.5">
+                                {offers.map((offer) => (
+                                    <div key={offer._id} className="rounded-xl border border-theme bg-theme-bg p-3.5">
+                                        <div className="flex items-start gap-3">
+                                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-yellow/15 text-brand-yellow">
+                                                <i className="ri-price-tag-3-line text-lg" aria-hidden />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-bold text-theme-primary">{offer.title}</p>
+                                                <p className="mt-1 text-xs leading-5 text-theme-secondary">{offer.description || `${offer.discountType === 'percentage' ? `${offer.discountValue}% off` : `₹${offer.discountValue} off`}`}</p>
+                                                <p className="mt-1 text-[11px] text-theme-muted">{offer.code}{offer.expiresAt ? ` · Valid until ${new Date(offer.expiresAt).toLocaleDateString()}` : ''}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    const applied = await applyCoupon(offer.code)
+                                                    if (applied) setOffersOpen(false)
+                                                }}
+                                                className="shrink-0 rounded-lg bg-brand-yellow px-3 py-2 text-xs font-bold text-black active:scale-95"
+                                            >
+                                                Apply
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="mt-4 border-t border-theme pt-4">
+                            <div className="flex gap-2">
+                                <input value={couponCode} onChange={(e) => { setCouponCode(e.target.value); setCouponState(null) }} placeholder="Enter coupon code" className="min-w-0 flex-1 rounded-lg border border-theme bg-theme-bg px-3 py-2.5 text-sm text-theme-primary outline-none" />
+                                <button type="button" onClick={() => applyCoupon()} disabled={couponLoading || !couponCode.trim()} className="rounded-lg border border-brand-yellow px-3 py-2 text-xs font-bold text-brand-yellow disabled:opacity-50">{couponLoading ? 'Checking…' : 'Apply'}</button>
+                            </div>
+                            {couponState?.coupon && <div className="mt-3 space-y-1 text-xs">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-emerald-400">{couponState.coupon.title} applied</p>
+                                    <button type="button" onClick={() => { setCouponState(null); setCouponCode('') }} className="text-[11px] font-semibold text-red-400 active:scale-95">Remove</button>
+                                </div>
+                                <p className="flex justify-between text-theme-muted"><span>Original fare</span><span>{formatPrice(selectedOriginalFare)}</span></p>
+                                <p className="flex justify-between text-emerald-400"><span>Discount</span><span>−{formatPrice(selectedDiscount)}</span></p>
+                                <p className="flex justify-between font-bold text-theme-primary"><span>Final fare</span><span>{formatPrice(selectedFinalFare)}</span></p>
+                                {Number(couponState.excessDiscount || 0) > 0 && <p className="text-emerald-400">{formatPrice(Number(couponState.excessDiscount))} excess will be credited to your wallet</p>}
+                            </div>}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <ScheduleModal
+                open={scheduleOpen}
+                onClose={() => setScheduleOpen(false)}
+                onContinue={(iso) => {
+                    setScheduledAt(iso)
+                    setScheduleOpen(false)
+                }}
+                findingTrip={false}
+            />
+        </div>
+    )
+}
+
+export default ChooseRide

@@ -9,7 +9,6 @@ import { getPassengerToken, getCaptainToken, getAdminToken } from '../utils/auth
 export const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
   timeout: Number(import.meta.env.VITE_API_TIMEOUT_MS || 30000),
-  headers: { 'Content-Type': 'application/json' },
 })
 
 // Development diagnostics: the single resolved API origin every request uses.

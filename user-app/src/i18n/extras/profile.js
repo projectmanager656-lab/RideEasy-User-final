@@ -88,6 +88,18 @@ const en = {
   safe_rides_verified_drivers: 'Safe rides, Verified drivers.',
   rideeasy_serves_region: 'RideEasy Serves Kolhapur Region',
 
+  // --- UserProfile: profile photo ---
+  profile_photo: 'Profile Photo',
+  choose_photo: 'Choose Photo',
+  take_photo: 'Take Photo',
+
+  // --- UserProfile: gender / date of birth ---
+  gender: 'Gender',
+  date_of_birth: 'Date of Birth',
+  select_gender: 'Select gender',
+  male: 'Male',
+  female: 'Female',
+
   // --- UserLogout ---
   signing_out: 'Signing out…',
 }
@@ -174,6 +186,18 @@ const hi = {
   safe_rides_verified_drivers: 'सुरक्षित राइड्स, सत्यापित ड्राइवर।',
   rideeasy_serves_region: 'RideEasy कोल्हापुर क्षेत्र में सेवा देता है',
 
+  // --- UserProfile: profile photo ---
+  profile_photo: 'प्रोफ़ाइल फ़ोटो',
+  choose_photo: 'फ़ोटो चुनें',
+  take_photo: 'फ़ोटो लें',
+
+  // --- UserProfile: gender / date of birth ---
+  gender: 'लिंग',
+  date_of_birth: 'जन्म तिथि',
+  select_gender: 'लिंग चुनें',
+  male: 'पुरुष',
+  female: 'महिला',
+
   // --- UserLogout ---
   signing_out: 'साइन आउट हो रहा है…',
 }
@@ -259,6 +283,18 @@ const mr = {
   // --- SafetyPromoCard ---
   safe_rides_verified_drivers: 'सुरक्षित राइड्स, सत्यापित ड्रायव्हर.',
   rideeasy_serves_region: 'RideEasy कोल्हापूर प्रदेशात सेवा पुरवते',
+
+  // --- UserProfile: profile photo ---
+  profile_photo: 'प्रोफाइल फोटो',
+  choose_photo: 'फोटो निवडा',
+  take_photo: 'फोटो घ्या',
+
+  // --- UserProfile: gender / date of birth ---
+  gender: 'लिंग',
+  date_of_birth: 'जन्मतारीख',
+  select_gender: 'लिंग निवडा',
+  male: 'पुरुष',
+  female: 'स्त्री',
 
   // --- UserLogout ---
   signing_out: 'साइन आउट होत आहे…',

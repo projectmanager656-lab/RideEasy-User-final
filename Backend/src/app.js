@@ -4,6 +4,7 @@ validateEnv();
 warnDevelopmentEnv();
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
@@ -115,6 +116,9 @@ app.post('/webhooks/razorpay', express.raw({ type: 'application/json', limit: '2
 app.use(express.json({ limit: '100kb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+/** Uploaded profile photos — /uploads/profile/<file> maps to Backend/uploads/profile/<file>. */
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 const isProdLike = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 /** Admin UI + React dev fire many requests; rate-limit is off locally unless NODE_ENV=production. */
