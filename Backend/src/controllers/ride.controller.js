@@ -520,6 +520,39 @@ function broadcastRideNew(rideDoc, driverIds) {
   return { matched: driverIds.length, delivered };
 }
 
+/**
+ * Offer a searching ride to the matched drivers AND guarantee a live socket
+ * actually receives it.
+ *
+ * `broadcastRideNew` targets each matched driver's `driver-<id>` room. A driver
+ * whose document still carries `isOnline: true` / `status: "active"` from an
+ * earlier session (those flags are deliberately not cleared on disconnect so the
+ * `/rides/pending` poll keeps working) is matched but has no room, so the offer
+ * reaches nobody in real time. In that case fall back to every connected driver
+ * socket — the same `online-drivers` room the zero-match case already uses. A
+ * genuinely offline driver still ignores the frame client-side.
+ */
+function offerRideToDrivers(rideDoc, driverIds) {
+  const dispatch = broadcastRideNew(rideDoc, driverIds);
+  if (dispatch.delivered > 0) return dispatch;
+
+  const fallbackPayload = { ride: publicRide(rideDoc), offeredAt: Date.now() };
+  const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
+  emitToOnlineDrivers("new-ride", fallbackPayload);
+  console.warn(
+    "[ride dispatch] ride %s matched %d driver(s) but none had a live socket — broadcast fallback reached %d connected driver socket(s)",
+    String(rideDoc?._id ?? ""),
+    driverIds.length,
+    fallbackSockets,
+  );
+  return {
+    ...dispatch,
+    fallbackBroadcast: fallbackSockets,
+    /** Sockets that actually received the offer (matched rooms, else the online fallback). */
+    delivered: fallbackSockets,
+  };
+}
+
 function mergeUniqueIds(...lists) {
   return [
     ...new Set(
@@ -585,23 +618,11 @@ async function startRideDispatch(rideOrId) {
       pickupLat,
     });
   }
-  let dispatch = broadcastRideNew(populated, driverIds);
-  if (driverIds.length === 0) {
-    /* Nobody survived the eligibility query (city, online, wallet, subscription,
-       vehicle). Rather than leave the rider on a silent "searching" screen, offer
-       the ride to every connected driver socket — the driver app still ignores it
-       when that driver is offline. */
-    const fallbackPayload = { ride: publicRide(populated), offeredAt: Date.now() };
-    const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
-    emitToOnlineDrivers("new-ride", fallbackPayload);
-    console.warn(
-      "[ride dispatch] ride %s matched 0 drivers — broadcast fallback reached %d connected driver socket(s)",
-      String(rideId),
-      fallbackSockets,
-    );
-    dispatch = { ...dispatch, fallbackBroadcast: fallbackSockets };
-  }
-  return dispatch;
+  /**
+   * `offerRideToDrivers` also covers the case where the eligibility query DID
+   * match drivers but none of them has a live socket (stale online flags).
+   */
+  return offerRideToDrivers(populated, driverIds);
 }
 
 module.exports.startRideDispatch = startRideDispatch;
@@ -893,7 +914,7 @@ module.exports.retryAssign = async (req, res) => {
     if (driverIds.length === 0) {
       driverIds = await findCityAnyVehicleDriverIds({ rideCity: ride.city });
     }
-    broadcastRideNew(ride, driverIds);
+    offerRideToDrivers(ride, driverIds);
     return res.status(200).json({
       ...publicRide(ride),
       ok: true,
