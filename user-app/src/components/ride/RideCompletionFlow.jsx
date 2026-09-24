@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { normalizeLocationText } from '../../utils/locationText'
+import phonePeImg from '../../assets/upi/phonepe.png'
+import googlePayImg from '../../assets/upi/googlepay.png'
+import paytmImg from '../../assets/upi/paytm.png'
+import bhimImg from '../../assets/upi/bhim.png'
 
 function formatINR (n) {
     const x = Number(n)
@@ -76,9 +80,18 @@ function isValidVpa (value) {
  *
  * The unavailable state is signalled with a muted label and a not-allowed cursor rather
  * than `opacity`, because an element-level fade also dims the button's own background —
- * which made the app buttons look darker than the rest of the grid.
+ * which made the app buttons look darker than the rest of the grid. The brand icons are
+ * deliberately left untouched: no fade and no desaturation, so every logo keeps its
+ * official colours and an unavailable app is communicated by the inert button + cursor.
  */
 const UPI_APP_BUTTON_CLASS = 'rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-primary transition hover:bg-theme-card active:scale-[0.98] disabled:cursor-not-allowed disabled:text-theme-muted'
+
+/**
+ * Brand icons are drawn taller than the 20px text line they replace — a 28px logo reads
+ * properly inside the ~42px button. `-my-1` keeps their layout box at 20px, so every
+ * button in the grid keeps exactly the height it had with a text label.
+ */
+const UPI_APP_ICON_CLASS = 'mx-auto -my-1 block h-7 w-auto object-contain'
 
 /**
  * Passenger trip-complete UX: summary, pay (if needed), rating, receipt, book again + auto home.
@@ -303,16 +316,18 @@ export default function RideCompletionFlow ({
                                         disabled={paying || !payeeVpa}
                                         onClick={() => openUpiApp('phonepe://pay')}
                                         className={UPI_APP_BUTTON_CLASS}
+                                        aria-label="PhonePe"
                                     >
-                                        PhonePe
+                                        <img src={phonePeImg} alt="" aria-hidden draggable={false} className={UPI_APP_ICON_CLASS} />
                                     </button>
                                     <button
                                         type="button"
                                         disabled={paying || !payeeVpa}
                                         onClick={() => openUpiApp('upi://pay')}
                                         className={UPI_APP_BUTTON_CLASS}
+                                        aria-label="Google Pay"
                                     >
-                                        Google Pay
+                                        <img src={googlePayImg} alt="" aria-hidden draggable={false} className={UPI_APP_ICON_CLASS} />
                                     </button>
                                     <button
                                         type="button"
@@ -340,16 +355,18 @@ export default function RideCompletionFlow ({
                                             disabled={paying || !payeeVpa}
                                             onClick={() => openUpiApp('paytmmp://pay')}
                                             className={UPI_APP_BUTTON_CLASS}
+                                            aria-label="Paytm"
                                         >
-                                            Paytm
+                                            <img src={paytmImg} alt="" aria-hidden draggable={false} className={UPI_APP_ICON_CLASS} />
                                         </button>
                                         <button
                                             type="button"
                                             disabled={paying || !payeeVpa}
                                             onClick={() => openUpiApp('bhim://pay')}
                                             className={UPI_APP_BUTTON_CLASS}
+                                            aria-label="BHIM"
                                         >
-                                            BHIM
+                                            <img src={bhimImg} alt="" aria-hidden draggable={false} className={UPI_APP_ICON_CLASS} />
                                         </button>
                                         <button
                                             type="button"

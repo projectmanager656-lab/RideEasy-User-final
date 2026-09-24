@@ -59,12 +59,16 @@ function normalizeRideStatus(s) {
 /**
  * THE canonical ride status → screen mapping, shared by the Home active-ride banner and
  * notification clicks. `null` means there is no screen to open (nothing live).
+ *
+ * `searching`, `accepted` and `arrived` are all owned by the live ride screen
+ * (/searching-for-driver): it renders the driver search, the assigned driver's details
+ * and the arrival/OTP state of the ride a passenger is actually on. The standalone
+ * `/driver-details` and `/user-otp` pages are superseded — nothing in the live ride
+ * flow navigates to them, so they must never be a routing target from here.
  */
 function rideRouteForStatus(s) {
     const st = normalizeRideStatus(s)
-    if (st === 'searching') return '/searching-for-driver'
-    if (st === 'accepted') return '/driver-details'
-    if (st === 'arrived') return '/user-otp'
+    if (st === 'searching' || st === 'accepted' || st === 'arrived') return '/searching-for-driver'
     if (st === 'started' || st === 'completed') return '/riding'
     /* Reserved or finished: the upcoming/history list owns it. */
     if (st === 'scheduled' || st === 'cancelled') return '/history'
