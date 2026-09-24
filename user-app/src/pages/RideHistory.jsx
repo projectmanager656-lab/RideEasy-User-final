@@ -104,13 +104,6 @@ function vehicleMeta(vt) {
   }
 }
 
-const FILTERS = [
-  { key: 'all', i18n: 'all_rides' },
-  { key: 'completed', i18n: 'completed' },
-  { key: 'cancelled', i18n: 'cancelled' },
-  { key: 'upcoming', i18n: 'upcoming' },
-]
-
 /** Accent config for the four summary stat cards (icon circle, glow line). */
 const STAT_ACCENTS = {
   total: { icon: 'ri-file-text-line', circle: 'bg-amber-400/15 text-amber-400', glow: 'bg-amber-400' },
@@ -122,17 +115,30 @@ const STAT_ACCENTS = {
 // ---------------------------------------------------------------------------
 // Presentational pieces
 // ---------------------------------------------------------------------------
-const StatCard = ({ accent, label, value }) => {
+/**
+ * Summary card that doubles as the ride filter — clicking it selects the matching
+ * category, so the page needs no separate filter button row.
+ */
+const StatCard = ({ accent, label, value, onClick, active = false }) => {
   const a = STAT_ACCENTS[accent] || STAT_ACCENTS.total
   return (
-    <div className="relative flex flex-col items-center gap-1.5 overflow-hidden rounded-xl border border-theme bg-theme-card px-2 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`relative flex w-full cursor-pointer flex-col items-center gap-1.5 overflow-hidden rounded-xl border px-2 py-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+        active
+          ? 'border-brand bg-brand/10 ring-1 ring-brand/40'
+          : 'border-theme bg-theme-card hover:bg-theme-card-muted'
+      }`}
+    >
       <span className={`flex h-7 w-7 items-center justify-center rounded-full ${a.circle}`}>
         <i className={`${a.icon} text-sm`} />
       </span>
       <span className="text-xl font-bold text-theme-primary">{value}</span>
       <span className="text-center text-[0.65rem] leading-tight text-theme-muted">{label}</span>
       <span className={`absolute inset-x-0 bottom-0 h-0.5 ${a.glow}`} />
-    </div>
+    </button>
   )
 }
 
@@ -740,37 +746,36 @@ const RideHistory = () => {
         ) : null}
 
         {!loading ? (
-          <div className="mb-3 grid grid-cols-4 gap-2">
-            <StatCard accent="total" label={t('total_rides')} value={stats.total} />
-            <StatCard accent="completed" label={t('completed')} value={stats.completed} />
-            <StatCard accent="cancelled" label={t('cancelled')} value={stats.cancelled} />
-            <StatCard accent="upcoming" label={t('upcoming')} value={stats.upcoming} />
+          <div className="mb-3 grid grid-cols-4 gap-2" role="group" aria-label={t('filter_rides')}>
+            <StatCard
+              accent="total"
+              label={t('total_rides')}
+              value={stats.total}
+              active={activeFilter === 'all'}
+              onClick={() => setActiveFilter('all')}
+            />
+            <StatCard
+              accent="completed"
+              label={t('completed')}
+              value={stats.completed}
+              active={activeFilter === 'completed'}
+              onClick={() => setActiveFilter('completed')}
+            />
+            <StatCard
+              accent="cancelled"
+              label={t('cancelled')}
+              value={stats.cancelled}
+              active={activeFilter === 'cancelled'}
+              onClick={() => setActiveFilter('cancelled')}
+            />
+            <StatCard
+              accent="upcoming"
+              label={t('upcoming')}
+              value={stats.upcoming}
+              active={activeFilter === 'upcoming'}
+              onClick={() => setActiveFilter('upcoming')}
+            />
           </div>
-        ) : null}
-
-        {!loading ? (
-          <nav
-            className="mb-3 grid grid-cols-4 gap-1.5"
-            aria-label={t('filter_rides')}
-          >
-            {FILTERS.map((f) => {
-              const active = activeFilter === f.key
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setActiveFilter(f.key)}
-                  className={`flex w-full items-center justify-center whitespace-nowrap rounded-full px-1 py-2 text-[13px] font-semibold transition-colors focus:outline-none ${
-                    active
-                      ? 'bg-brand text-brand-ink shadow-[0_0_16px_rgba(255,168,0,0.35)]'
-                      : 'border border-theme bg-theme-card text-theme-muted hover:bg-theme-card-muted hover:text-theme-primary'
-                  }`}
-                >
-                  {t(f.i18n)}
-                </button>
-              )
-            })}
-          </nav>
         ) : null}
 
         {!loading ? (

@@ -18,7 +18,7 @@ import NotificationSheet from '../components/NotificationSheet';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
-import { addRecentSearch, getRecentSearches } from '../utils/recentSearches'
+import { addRecentSearch, fetchBackendRecentSearches, getRecentSearches } from '../utils/recentSearches'
 import { useLanguage } from '../i18n'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 /** Same search window the tracking screen uses before it declares "No Driver Found". */
@@ -220,6 +220,27 @@ const Home = () => {
 
     const socket = useSocket()
     const { user: currentUser } = useContext(UserDataContext)
+
+    /**
+     * Recent searches are per account. Whenever the authenticated rider changes, drop
+     * whatever the previous account had on screen and reconcile with this account's
+     * server list — which is authoritative, so a brand-new account simply stays empty
+     * and a returning account gets its own history back.
+     */
+    const recentSearchesUserId = currentUser?._id ? String(currentUser._id) : ''
+    useEffect(() => {
+        let cancelled = false
+        if (!recentSearchesUserId) {
+            /* Signed out: never keep the previous account's list on screen. */
+            setRecentSearches([])
+            return () => { cancelled = true }
+        }
+        setRecentSearches(getRecentSearches())
+        fetchBackendRecentSearches().then((list) => {
+            if (!cancelled) setRecentSearches(Array.isArray(list) ? list : [])
+        })
+        return () => { cancelled = true }
+    }, [recentSearchesUserId])
 
     useEffect(() => {
         if (!socket || !currentUser?._id) return;
@@ -823,9 +844,14 @@ const Home = () => {
      * the rider can come back here while a search is still running — without this the
      * ride stays `searching` forever, the top banner never clears and the search hangs.
      * Hand off to the tracking screen, which cancels the ride and shows the modal.
+     *
+     * A passenger who deliberately opened Home stays here — the active-ride banner is
+     * their way back into the search, the same rule the started/completed handoffs use.
+     * Only a genuine app entry (reload / reopen / deep link to Home) keeps the handoff.
      */
     useEffect(() => {
         if (rideStatus !== 'searching' || !ride?._id) return
+        if (arrivedByUserActionRef.current) return
         const openSearchOutcome = () => {
             navigate('/searching-for-driver', { replace: true, state: { ride } })
         }
