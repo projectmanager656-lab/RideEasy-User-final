@@ -11,6 +11,7 @@ import RideEasyHeader from '../components/RideEasyHeader';
 import LocationSelector from '../components/LocationSelector';
 import ForMeSheet from '../components/ForMeSheet';
 import SafetyPromoCard from '../components/SafetyPromoCard';
+import rideEasyCity from '../assets/rideeasy-city.png';
 import ScheduleModal from '../components/ScheduleModal';
 import ScheduledRideConfirmation from '../components/ScheduledRideConfirmation';
 import NotificationSheet from '../components/NotificationSheet';
@@ -1486,7 +1487,7 @@ const Home = () => {
 
     return (
         <div className={`relative h-full w-full overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden bg-theme-bg text-theme-primary${notificationsOpen ? ' overflow-hidden' : ''}`}>
-            <div className="relative z-20 mx-auto flex min-h-full w-full max-w-[430px] flex-col pb-8">
+            <div className="relative z-20 mx-auto flex min-h-full w-full max-w-[430px] flex-col pb-0">
                 <RideEasyHeader
                     onBack={() => navigate('/location', { replace: true })}
                     onNotifications={() => setNotificationsOpen(true)}
@@ -1629,6 +1630,24 @@ const Home = () => {
 
                 <div className="mt-4 shrink-0 pb-2">
                     <SafetyPromoCard />
+                </div>
+
+                <div className="mt-0 w-full shrink-0 pb-0">
+                    <div className="relative overflow-hidden rounded-2xl">
+                        <div className="absolute left-5 top-5 z-10">
+                            <div className="text-xl font-extrabold leading-tight">
+                                <span style={{color: '#000000'}}>Ride</span><span style={{color: '#FACC15'}}> Easy</span>
+                            </div>
+                            <div className="mt-1 text-sm font-bold leading-tight text-black">
+                                Ride Anywhere, Any Time
+                            </div>
+                        </div>
+                        <img
+                            src={rideEasyCity}
+                            alt="RideEasy city"
+                            className="block h-auto w-full object-cover"
+                        />
+                    </div>
                 </div>
             </div>
 

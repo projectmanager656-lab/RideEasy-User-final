@@ -5,7 +5,7 @@ import { useLanguage } from '../i18n'
 const SafetyPromoCard = () => {
     const { t } = useLanguage()
     return (
-        <div className="relative mx-4 mb-4 flex h-[120px] shrink-0 items-center gap-3.5 overflow-hidden rounded-[18px] bg-theme-card p-3 transition duration-150 active:scale-[0.98]"
+        <div className="relative mx-4 flex h-[120px] shrink-0 items-center gap-3.5 overflow-hidden rounded-[18px] bg-theme-card p-3 transition duration-150 active:scale-[0.98]"
             style={{ border: '1px solid rgba(255, 200, 0, 0.55)' }}
         >
             {/* Background image layer — auto fills the right side of the card and blends into the card */}
