@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { loadRazorpayCheckout } from '../utils/loadRazorpay'
 
 function money (value) {
     const n = Number(value)
@@ -129,12 +130,21 @@ const Wallet = () => {
         }
 
         if (paymentMethod === 'razorpay' && !window.Razorpay) {
-            setTopupError('Razorpay is not loaded. Please refresh the app and try again.')
-            return
+            /**
+             * Razorpay Checkout is loaded on demand (utils/loadRazorpay) instead of a
+             * global <script> in index.html, so it no longer initialises on every screen
+             * at launch and fire its broken `.../build/undefined` request (403).
+             */
+            try {
+                await loadRazorpayCheckout()
+            } catch {
+                setTopupError('Payment gateway is not loaded. Please check your connection and try again.')
+                return
+            }
         }
 
         if (!window.Razorpay) {
-            setTopupError('Payment gateway is not loaded. Please refresh the app and try again.')
+            setTopupError('Payment gateway is not loaded. Please check your connection and try again.')
             return
         }
 

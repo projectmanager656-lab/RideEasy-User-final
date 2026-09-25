@@ -55,6 +55,14 @@ function ensureSocketAuth () {
   if (import.meta.env.VITE_DISABLE_SOCKET === 'true') return
   const token = getCaptainToken()
   if (socket.connected && token === lastAuthToken) return
+  /**
+   * Record the token we are about to handshake with. `syncConnection` replaces
+   * `socket.auth` with an object, so the callback form below never runs and
+   * `lastAuthToken` would stay null — making this guard always false and turning
+   * every call into a disconnect()+connect() loop. That flapping left the driver
+   * socket out of `driver-<id>` / `online-drivers`, so ride offers reached 0 sockets.
+   */
+  lastAuthToken = token
   if (socket.connected) socket.disconnect()
   socket.connect()
 }
@@ -109,6 +117,7 @@ const SocketProvider = ({ children }) => {
       // captain id inside the JWT, so the token must be in the handshake.
       if (socket.auth?.token !== token) {
         socket.auth = { token }
+        lastAuthToken = token
         if (socket.connected) socket.disconnect()
       }
       if (!socket.connected) {

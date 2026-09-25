@@ -404,6 +404,7 @@ const RideDetailModal = ({ ride, t, onClose }) => {
 const RideHistory = () => {
   const { t } = useLanguage()
   const [rides, setRides] = useState([])
+  const [counts, setCounts] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeFilter, setActiveFilter] = useState('all')
@@ -423,7 +424,7 @@ const RideHistory = () => {
     setLoading(true)
     setError('')
     return apiClient
-      .get('/rides/history', withAuth({ params: { limit: 50 } }))
+      .get('/rides/history', withAuth({ params: { limit: 'all' } }))
       .then((res) => {
         if (!mountedRef.current) return
         const raw = stripApiEnvelope(res.data)
@@ -433,6 +434,7 @@ const RideHistory = () => {
             ? raw
             : []
         setRides(list)
+        setCounts(raw?.counts || null)
       })
       .catch((err) => {
         if (!mountedRef.current) return
@@ -455,12 +457,13 @@ const RideHistory = () => {
 
   const stats = useMemo(
     () => ({
-      total: items.length,
-      completed: items.filter((r) => r.status === 'completed').length,
-      cancelled: items.filter((r) => r.status === 'cancelled').length,
-      upcoming: items.filter((r) => ACTIVE_STATUSES.has(r.status)).length,
+      /** Backend counts cover ALL rides; fall back to the loaded page if unavailable. */
+      total: Number(counts?.total) || items.length,
+      completed: counts ? Number(counts.completed) || 0 : items.filter((r) => r.status === 'completed').length,
+      cancelled: counts ? Number(counts.cancelled) || 0 : items.filter((r) => r.status === 'cancelled').length,
+      upcoming: counts ? Number(counts.upcoming) || 0 : items.filter((r) => ACTIVE_STATUSES.has(r.status)).length,
     }),
-    [items],
+    [items, counts],
   )
 
   const rideDates = useMemo(() => {

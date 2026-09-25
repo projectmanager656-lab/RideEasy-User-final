@@ -484,6 +484,52 @@ async function explainNoDrivers({ rideCity, vehicleType, pickupLng, pickupLat })
   return funnel;
 }
 
+/**
+ * TEMP DIAGNOSTIC (ride-dispatch): dumps the same-city driver pool with every field
+ * the eligibility query filters on, so the exact blocking reason for `matched=0` is
+ * visible (missing servingCity/vehicleType, offline, unapproved, blocked, wallet,
+ * stale socketId…). Read-only; never logs credentials. Remove once dispatch is confirmed.
+ */
+async function logDriverCandidates({ rideId, rideCity, vehicleType, pickupLng, pickupLat, eligibleDriverCount }) {
+  try {
+    const candidates = await captainModel
+      .find({ servingCity: rideCity })
+      .select(
+        "name vehicleType servingCity status isOnline blocked approved subscriptionStatus subscriptionExpiresAt walletBalance socketId city location",
+      )
+      .lean();
+    console.log("[ride dispatch]", {
+      rideId: String(rideId),
+      requestedVehicleType: vehicleType,
+      pickupLat,
+      pickupLng,
+      city: rideCity,
+      eligibleDriverCount,
+      candidateCount: candidates.length,
+    });
+    for (const d of candidates) {
+      console.log("[ride dispatch] candidate", {
+        driverId: String(d._id),
+        name: d.name,
+        vehicleType: d.vehicleType,
+        isOnline: d.isOnline,
+        status: d.status,
+        blocked: d.blocked,
+        approved: d.approved,
+        subscriptionStatus: d.subscriptionStatus,
+        subscriptionExpiresAt: d.subscriptionExpiresAt,
+        walletBalance: d.walletBalance,
+        servingCity: d.servingCity,
+        city: d.city,
+        socketId: d.socketId,
+        location: d.location,
+      });
+    }
+  } catch (e) {
+    console.warn("[ride dispatch] candidate dump failed (%s)", e?.message || e);
+  }
+}
+
 function broadcastRideNew(rideDoc, driverIds) {
   const ride = publicRide(rideDoc);
   const offeredAt = Date.now();
@@ -616,6 +662,14 @@ async function startRideDispatch(rideOrId) {
       vehicleType: populated.vehicleType,
       pickupLng,
       pickupLat,
+    });
+    await logDriverCandidates({
+      rideId,
+      rideCity,
+      vehicleType: populated.vehicleType,
+      pickupLng,
+      pickupLat,
+      eligibleDriverCount: driverIds.length,
     });
   }
   /**
@@ -1831,16 +1885,36 @@ module.exports.userRideHistory = async (req, res) => {
     return fail(res, req, 401, "Unauthorized");
   }
   try {
+    /**
+     * `limit=all` returns the rider's complete list so the history page shows every
+     * ride it counts. A numeric limit is still clamped to 100.
+     */
+    const wantsAll = String(req.query?.limit ?? "").toLowerCase() === "all";
     const limitRaw = Number(req.query?.limit);
-    const limit = Number.isFinite(limitRaw)
-      ? Math.min(100, Math.max(1, Math.floor(limitRaw)))
-      : 50;
+    const limit = wantsAll
+      ? 0
+      : Number.isFinite(limitRaw)
+        ? Math.min(100, Math.max(1, Math.floor(limitRaw)))
+        : 50;
     /** OTP fields are select:false — do not use negative select; avoids some Mongoose edge cases. */
     const rides = await rideModel
       .find({ user: userObjectId })
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
+
+    /**
+     * Real totals over ALL of the rider's rides (not just the returned page), so the
+     * history summary and the account stats never disagree with the true counts.
+     * "Upcoming" mirrors the app's active statuses (scheduled/active trips).
+     */
+    const upcomingStatuses = ["scheduled", "searching", "accepted", "arrived", "started"];
+    const [total, completed, cancelled, upcoming] = await Promise.all([
+      rideModel.countDocuments({ user: userObjectId }),
+      rideModel.countDocuments({ user: userObjectId, status: "completed" }),
+      rideModel.countDocuments({ user: userObjectId, status: "cancelled" }),
+      rideModel.countDocuments({ user: userObjectId, status: { $in: upcomingStatuses } }),
+    ]);
 
     const capIdStrings = [
       ...new Set(
@@ -1875,7 +1949,10 @@ module.exports.userRideHistory = async (req, res) => {
       return { ...o, captain: c || (cid ? { _id: cid } : null) };
     });
 
-    return ok(res, req, 200, "Ride history", { rides: list });
+    return ok(res, req, 200, "Ride history", {
+      rides: list,
+      counts: { total, completed, cancelled, upcoming },
+    });
   } catch (err) {
     console.error("[userRideHistory] error", {
       message: err?.message,
@@ -2518,7 +2595,6 @@ module.exports.getRideShare = async (req, res) => {
 module.exports.revokeRideShare = async (req, res) => {
   const rideId = req.params.id;
   if (!rideId || !mongoose.isValidObjectId(rideId)) {
-    return fail(res, req, 400, "Invalid ride id");
   }
   try {
     await RideShare.updateMany({ rideId, userId: req.user._id }, { $set: { revoked: true } });

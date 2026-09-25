@@ -126,11 +126,12 @@ const UserProfile = () => {
 
   const loadRideSummary = useCallback(async () => {
     try {
-      const res = await apiClient.get('/rides/history', withAuth({ params: { limit: 100 } }))
+      const res = await apiClient.get('/rides/history', withAuth({ params: { limit: 'all' } }))
       const raw = stripApiEnvelope(res.data)
       const list = Array.isArray(raw?.rides) ? raw.rides : Array.isArray(raw) ? raw : []
       const completed = list.filter((r) => String(r?.status).toLowerCase() === 'completed')
-      setRideCount(list.length)
+      /** Real total from the backend (covers all rides), not just the fetched page. */
+      setRideCount(Number(raw?.counts?.total) || list.length)
       if (completed.length) {
         const sum = completed.reduce((acc, r) => acc + (Number(r?.rating) || 0), 0)
         setRating(Math.round((sum / completed.length) * 10) / 10)

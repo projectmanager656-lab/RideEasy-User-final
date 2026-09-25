@@ -134,33 +134,58 @@ function emitToUser(userId, event, data, options = {}) {
 }
 
 function emitToCaptain(captainId, event, data) {
-  if (!io || captainId == null) return;
+  if (!io || captainId == null) {
+    console.warn("[socket emitToCaptain] unavailable", {
+      captainId,
+      event,
+      ioReady: Boolean(io),
+    });
+    return 0;
+  }
 
   const id = roomId(captainId);
-  if (!id) return;
+
+  if (!id) {
+    console.warn("[socket emitToCaptain] invalid captain id", {
+      captainId,
+      event,
+    });
+    return 0;
+  }
 
   const roomName = driverRoomHyphen(id);
   const room = io.sockets.adapter.rooms.get(roomName);
-  const socketCount = room ? room.size : 0;
+  const socketIds = room ? [...room] : [];
+  const socketCount = socketIds.length;
 
   console.log("[socket emitToCaptain]", {
     captainId: id,
     event,
     room: roomName,
     socketCount,
-    socketIds: room ? [...room] : [],
+    socketIds,
   });
 
   if (socketCount === 0) {
     console.warn(
-      "[socket emitToCaptain] room %s is empty — %s dropped for captain %s (driver socket not joined/authorized)",
-      roomName,
-      event,
-      id,
+      "[socket emitToCaptain] NO DRIVER SOCKET IN ROOM",
+      {
+        captainId: id,
+        room: roomName,
+        event,
+      },
     );
+    return 0;
   }
 
   io.to(roomName).emit(event, data);
+
+  console.log("[socket emitToCaptain] DELIVERED", {
+    captainId: id,
+    room: roomName,
+    event,
+    socketCount,
+  });
 
   return socketCount;
 }
@@ -187,33 +212,177 @@ function getIo() {
 }
 
 async function handleDriverPresenceJoin(socket, payload, sourceEvent) {
-  if (socket.data.jwtRole !== "captain" || !socket.data.jwtUserId) return;
-  const did = socket.data.jwtUserId;
-  const lat = payload?.lat;
-  const lng = payload?.lng;
-  const hasLocation = lat != null || lng != null;
-  const latN = Number(lat);
-  const lngN = Number(lng);
-  if (hasLocation && !validCoordinates(latN, lngN)) return;
+  try {
+    if (
+      socket.data.jwtRole !== "captain" ||
+      !socket.data.jwtUserId
+    ) {
+      console.warn(
+        "[socket driver join] rejected — unauthenticated captain",
+        {
+          socketId: socket.id,
+          sourceEvent,
+          jwtRole: socket.data.jwtRole,
+          jwtUserId: socket.data.jwtUserId,
+        },
+      );
+      return;
+    }
 
-  const update = {
-    socketId: socket.id,
-    status: "active",
-    isOnline: true,
-  };
-  if (hasLocation) {
-    update.location = { type: "Point", coordinates: [lngN, latN] };
+    // Always use the authenticated captain ID.
+    // Do not trust payload.driverId.
+    const captainId = normalizeClientId(
+      socket.data.jwtUserId,
+    );
+
+    if (!captainId) {
+      console.warn(
+        "[socket driver join] rejected — missing captain id",
+        {
+          socketId: socket.id,
+          sourceEvent,
+        },
+      );
+      return;
+    }
+
+    const requestedCity =
+      typeof payload?.city === "string" &&
+      payload.city.trim()
+        ? payload.city.trim()
+        : "";
+
+    const lat = Number(payload?.lat);
+    const lng = Number(payload?.lng);
+
+    const captain = await captainModel
+      .findById(captainId)
+      .select(
+        "_id servingCity city status isOnline blocked",
+      );
+
+    if (!captain) {
+      console.warn(
+        "[socket driver join] captain not found",
+        {
+          captainId,
+          socketId: socket.id,
+          sourceEvent,
+        },
+      );
+      return;
+    }
+
+    if (captain.blocked) {
+      console.warn(
+        "[socket driver join] blocked captain rejected",
+        {
+          captainId,
+          socketId: socket.id,
+          sourceEvent,
+        },
+      );
+      return;
+    }
+
+    const cityKey =
+      captain.servingCity ||
+      captain.city ||
+      requestedCity ||
+      "Kolhapur";
+
+    // Save the latest socket.
+    await captainModel.findByIdAndUpdate(
+      captainId,
+      {
+        socketId: socket.id,
+        status: "active",
+        isOnline: true,
+      },
+    );
+
+    // Join the exact room used by emitToCaptain().
+    joinDriverSocketRooms(
+      socket,
+      captainId,
+      cityKey,
+    );
+
+    // Update driver location if valid.
+    if (validCoordinates(lat, lng)) {
+      try {
+        await DriverLocation.findOneAndUpdate(
+          { captain: captainId },
+          {
+            captain: captainId,
+            location: {
+              type: "Point",
+              coordinates: [lng, lat],
+            },
+            latitude: lat,
+            longitude: lng,
+            updatedAt: new Date(),
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          },
+        );
+      } catch (locationError) {
+        console.warn(
+          "[socket driver join] location update failed",
+          locationError?.message ||
+            locationError,
+        );
+      }
+    }
+
+    const roomName =
+      driverRoomHyphen(captainId);
+
+    const room =
+      io?.sockets?.adapter?.rooms?.get(
+        roomName,
+      );
+
+    const socketIds = room
+      ? [...room]
+      : [];
+
+    console.log(
+      "[socket driver join] SUCCESS",
+      {
+        sourceEvent,
+        captainId,
+        socketId: socket.id,
+        city: cityKey,
+        room: roomName,
+        socketCount: socketIds.length,
+        socketIds,
+        location:
+          validCoordinates(lat, lng)
+            ? { lat, lng }
+            : null,
+      },
+    );
+
+    // Recover offers created during reconnect.
+    void emitJoinCatchUp(socket);
+  } catch (error) {
+    console.error(
+      "[socket driver join] ERROR",
+      {
+        sourceEvent,
+        socketId: socket.id,
+        message:
+          error?.message ||
+          String(error),
+        stack: error?.stack,
+      },
+    );
   }
-  await captainModel.findByIdAndUpdate(did, update);
-
-  const cap = await captainModel.findById(did).select("servingCity");
-  const cityKey = cap?.servingCity || "Kolhapur";
-  joinDriverSocketRooms(socket, did, cityKey);
-  void emitJoinCatchUp(socket);
-
-  slog(sourceEvent, { city: cityKey, socket: socket.id });
 }
-
 function initializeSocket(server, app) {
   io = socketIo(server, {
     cors: socketIoCorsConfig(),

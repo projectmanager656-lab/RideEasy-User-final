@@ -455,11 +455,13 @@ const SearchingForDriver = () => {
     return () => clearInterval(timer)
   }, [isSearching, rideId, searchAgainModalOpen])
 
-  // Close looking for driver page after 2 minutes (120s) and open popup to search ride again
+  // After 2 minutes (120s) of searching, surface the "search ride again" popup.
+  // Nothing is cancelled here: mounting this screen must never call
+  // PATCH /rides/:id/cancel on its own. The ride keeps its real backend state and
+  // keeps searching; only the user's explicit Cancel (performCancel) cancels it.
   useEffect(() => {
     if (searchTimeLeft === 0 && isSearching && rideId && !searchTimeoutHandledRef.current) {
       searchTimeoutHandledRef.current = true
-      apiClient.patch(`/rides/${rideId}/cancel`, { reason: 'No driver found within 2 minutes' }, withAuth()).catch(() => {})
       try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
       setCancelSheetOpen(false)
       setSearchAgainModalOpen(true)

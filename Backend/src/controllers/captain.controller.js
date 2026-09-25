@@ -15,6 +15,10 @@ const { logLoginRequestBody } = require("../utils/loginDebug");
 const driverService = require("../services/driver.service");
 const notificationService = require("../services/notification.service");
 
+/** Values accepted by the captain model enums — used to normalise the signup profile. */
+const SIGNUP_CITIES = ["Kolhapur", "Ichalkaranji", "Sangli"];
+const SIGNUP_VEHICLE_TYPES = ["BIKE", "AUTO", "CAR"];
+
 /** Minimal identity payload for authentication responses; full details remain on /captains/profile. */
 function toCaptainLoginDoc(captain) {
   const publicCaptain = toPublicDoc(captain);
@@ -52,11 +56,36 @@ module.exports.registerCaptain = async (req, res) => {
   if (existing) return fail(res, req, 400, "Driver already exist");
 
   const hashed = await captainModel.hashPassword(password);
+  /**
+   * The Driver app collects the serving city and vehicle type at signup and posts
+   * them as `city` + `vehicleType`. Ride dispatch matches drivers on exactly those
+   * two fields (`servingCity`, `vehicleType`), so they must be persisted here —
+   * dropping them left every app-registered driver with no city/vehicle type and
+   * therefore unmatchable (`matched=0` even when online).
+   * Values are normalised to the model enums; an omitted/invalid value is left
+   * unset so callers that only send credentials keep working unchanged.
+   */
+  const signupProfile = {};
+  const rawCity = String(req.body.servingCity ?? req.body.city ?? "").trim();
+  const servingCity = SIGNUP_CITIES.find(
+    (c) => c.toLowerCase() === rawCity.toLowerCase(),
+  );
+  if (servingCity) signupProfile.servingCity = servingCity;
+  const rawVehicleType = String(req.body.vehicleType ?? "").trim().toUpperCase();
+  const vehicleType =
+    rawVehicleType === "MINI" || rawVehicleType === "SEDAN"
+      ? "CAR"
+      : rawVehicleType;
+  if (SIGNUP_VEHICLE_TYPES.includes(vehicleType)) {
+    signupProfile.vehicleType = vehicleType;
+  }
+
   const captain = await captainModel.create({
     name: String(name).trim(),
     phone: normalizedPhone,
     email: String(email).toLowerCase().trim(),
     password: hashed,
+    ...signupProfile,
   });
   const token = captain.generateAuthToken();
   res.cookie("token", token, getAuthCookieOptions());
