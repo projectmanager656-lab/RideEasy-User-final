@@ -7,6 +7,7 @@ const captainModel = require("../models/captain.model");
 const SubscriptionRecord = require("../models/subscriptionRecord.model");
 const Refund = require("../models/refund.model");
 const { expiresAfterPlan } = require("../services/subscriptionDriver.service");
+const paymentService = require("../services/payment.service");
 
 /** Body must be raw Buffer (mounted with express.raw before express.json) */
 module.exports.razorpayWebhook = async (req, res) => {
@@ -67,31 +68,42 @@ module.exports.razorpayWebhook = async (req, res) => {
       if (rideId) {
         const ride = await rideModel.findById(rideId);
         if (ride) {
-          const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
-          const advance = Math.round(total * 0.25);
-          const amount = part === "advance" ? advance : (part === "remaining" ? Math.max(0, total - advance) : total);
+          const { payable, advanceAmount, remainingAmount } = paymentService.computeAdvanceSplit(ride);
+          const amount = part === "advance" ? advanceAmount : part === "remaining" ? remainingAmount : payable;
 
-          await PaymentRecord.findOneAndUpdate(
-            { rideId, externalRef: paymentEntity.id },
-            {
-              $set: {
-                userId: ride.user,
-                driverId: ride.captain || null,
-                amount,
-                paymentMode: "Online",
-                paymentStatus: "success",
-                paymentType: "ride_fare",
-                paymentPart: part,
+          if (part === "advance") {
+            /**
+             * The provider is the source of truth, so this settles the ride even when
+             * the app never returned to confirm the payment. Idempotent: a repeat
+             * delivery only re-writes the same advance ledger row.
+             */
+            await paymentService.confirmRideAdvancePaid({
+              rideId,
+              transactionId: paymentEntity.id,
+              amount,
+            });
+          } else {
+            await PaymentRecord.findOneAndUpdate(
+              { rideId, paymentType: "ride_fare", paymentPart: part },
+              {
+                $set: {
+                  userId: ride.user,
+                  driverId: ride.captain || null,
+                  amount,
+                  paymentMode: "Online",
+                  paymentStatus: "success",
+                  paymentType: "ride_fare",
+                  paymentPart: part,
+                  externalRef: paymentEntity.id,
+                },
               },
-            },
-            { upsert: true, new: true }
-          );
-
-          const set = part === "advance"
-            ? { advancePaymentStatus: "success", advanceAmount: amount, remainingAmount: Math.max(0, total - amount) }
-            : { paymentStatus: "success", chargedAmount: total, remainingAmount: 0 };
-          await rideModel.findByIdAndUpdate(rideId, { $set: set });
-          result = { handled: true, rideId };
+              { upsert: true, new: true }
+            );
+            await rideModel.findByIdAndUpdate(rideId, {
+              $set: { paymentStatus: "success", chargedAmount: payable, remainingAmount: 0 },
+            });
+          }
+          result = { handled: true, rideId, part };
         }
       }
     } else if (paymentType === "driver_subscription" && (payload.event === "payment.captured" || payload.event === "order.paid")) {

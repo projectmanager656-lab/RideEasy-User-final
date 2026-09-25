@@ -2148,15 +2148,27 @@ module.exports.payMock = async (req, res) => {
       return res.status(403).json({ message: "Forbidden" });
     }
 
-    const total = Number(ride.price) || 0;
+    const { payable, advanceAmount, remainingAmount } = paymentService.computeAdvanceSplit(ride);
     const isRemaining = String(part).toLowerCase() === "remaining";
-    const advance = Math.round(total * 0.25);
-    const amount = isRemaining ? Math.max(0, total - advance) : advance;
+    const amount = isRemaining ? remainingAmount : advanceAmount;
+    const paymentPart = isRemaining ? "remaining" : "advance";
+
+    /**
+     * A ride whose rail owes a provider-verified advance must never be marked paid
+     * by this unverified recorder — only the Razorpay confirmation path can do that.
+     * Cash and Wallet rides carry no such requirement.
+     */
+    if (!isRemaining && ride.advancePaymentRequired) {
+      return res.status(409).json({
+        message: "This ride's 25% advance can only be confirmed by the payment provider.",
+      });
+    }
 
     if (amount <= 0) {
       return res.status(400).json({ message: "Invalid payment amount" });
     }
 
+    const externalRef = `txn_${Date.now()}`;
     let ledger = null;
     try {
       ledger = await PaymentRecord.create({
@@ -2167,27 +2179,37 @@ module.exports.payMock = async (req, res) => {
         paymentMode: normalizePaymentModeForLedger(method || ride.paymentMethod),
         paymentStatus: "success",
         paymentType: "ride_fare",
-        externalRef: `txn_${Date.now()}`,
+        paymentPart,
+        externalRef,
       });
     } catch (e) {
       if (e?.code === 11000) {
         // duplicate partial-payment ledger — treat as already paid (idempotent)
-        ledger = await PaymentRecord.findOne({ rideId: ride._id }).lean();
+        ledger = await PaymentRecord.findOne({ rideId: ride._id, paymentPart }).lean();
       } else {
         throw e;
       }
     }
 
-    // The ride is settled once full payment is recorded (advance+remaining => success).
+    /**
+     * An advance settles ONLY the 25% — the ride keeps `paymentStatus: pending` and
+     * the remaining fare stays outstanding so the completion screen still collects
+     * it. Only the remaining payment marks the whole ride as settled.
+     */
+    const set = isRemaining
+      ? { paymentStatus: "success", chargedAmount: payable, remainingAmount: 0 }
+      : {
+          advancePercentage: paymentService.ADVANCE_PERCENTAGE,
+          advanceAmount: amount,
+          advancePaymentStatus: "success",
+          advancePaymentState: "paid",
+          advancePaymentTransactionId: ledger?.externalRef || externalRef,
+          remainingAmount: paymentService.roundAmount(Math.max(0, payable - amount)),
+        };
+
     const updated = await rideModel.findByIdAndUpdate(
       ride._id,
-      {
-        $set: {
-          paymentStatus: "success",
-          chargedAmount: total,
-          ...(ride.captain ? {} : { chargedAmount: total }),
-        },
-      },
+      { $set: set },
       { new: true, runValidators: false },
     ).populate("user", "name phone email").populate("captain");
 
@@ -2296,13 +2318,83 @@ module.exports.verifyUpiPayment = async (req, res) => {
   }
 };
 
-/** Create Razorpay order for ride fare payment */
+/** Gateway credentials live on the server only — never in the React app. */
+function razorpayGateway() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    return {
+      error:
+        "Online payment gateway is not configured on the server (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET)",
+    };
+  }
+  return { keyId, keySecret, client: new Razorpay({ key_id: keyId, key_secret: keySecret }) };
+}
+
+/**
+ * Ask the provider for a previously created order to decide whether it can still
+ * be re-opened. Returns `{ paid: true }` when the provider already has a captured
+ * payment for it (the ride then gets reconciled instead of charged again), or null
+ * when the order is unusable so the caller creates a fresh one.
+ */
+async function fetchReusableRazorpayOrder(client, orderId, expectedAmountPaise) {
+  try {
+    const order = await client.orders.fetch(orderId);
+    if (!order) return null;
+    if (order.status === "paid") {
+      const captured = await findCapturedPaymentForOrder(client, orderId);
+      return captured
+        ? { paid: true, orderId: order.id, transactionId: captured.id }
+        : null;
+    }
+    if (order.status !== "created" && order.status !== "attempted") return null;
+    if (Number(order.amount) !== Number(expectedAmountPaise)) return null;
+    return { paid: false, orderId: order.id };
+  } catch (e) {
+    console.warn("[ride advance] Razorpay order lookup failed:", e?.message || e);
+    return null;
+  }
+}
+
+/** The provider's own record of a successful payment on an order. */
+async function findCapturedPaymentForOrder(client, orderId) {
+  try {
+    const res = await client.orders.fetchPayments(orderId);
+    const list = Array.isArray(res?.items) ? res.items : [];
+    return (
+      list.find((p) => p.status === "captured") ||
+      list.find((p) => p.status === "authorized") ||
+      null
+    );
+  } catch (e) {
+    console.warn("[ride advance] Razorpay order payments lookup failed:", e?.message || e);
+    return null;
+  }
+}
+
+function paymentPartOf(raw) {
+  const part = String(raw || "advance").trim().toLowerCase();
+  return [ "advance", "remaining", "full" ].includes(part) ? part : null;
+}
+
+/**
+ * Create (or reuse) a Razorpay order for the ride's advance / remaining / full fare.
+ *
+ * The amount is ALWAYS recomputed from the persisted ride fare on the server, and
+ * no order id is ever fabricated: if the gateway is unconfigured or unreachable the
+ * request fails instead of pretending a payment can proceed.
+ */
 module.exports.createRideRazorpayOrder = async (req, res) => {
   const rideId = req.params.id;
-  const { part = "full" } = req.body || {};
+  const part = paymentPartOf(req.body?.part);
   if (!rideId || !mongoose.isValidObjectId(rideId)) {
     return fail(res, req, 400, "Invalid ride id");
   }
+  if (!part) return fail(res, req, 400, "Invalid payment part");
+
+  const gateway = razorpayGateway();
+  if (gateway.error) return fail(res, req, 503, gateway.error);
+
   try {
     const ride = await rideModel.findById(rideId);
     if (!ride) return fail(res, req, 404, "Ride not found");
@@ -2313,105 +2405,268 @@ module.exports.createRideRazorpayOrder = async (req, res) => {
       return fail(res, req, 403, "Forbidden");
     }
 
-    const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
-    const advance = Math.round(total * 0.25);
-    const amount = part === "advance" ? advance : (part === "remaining" ? Math.max(0, total - advance) : total);
+    const { payable, advanceAmount, remainingAmount } = paymentService.computeAdvanceSplit(ride);
+    const amount = part === "advance" ? advanceAmount : part === "remaining" ? remainingAmount : payable;
     if (amount <= 0) return fail(res, req, 400, "Invalid payable amount");
+    /** Paise from the same rounded amount that gets stored — the gateway charge matches exactly. */
+    const amountPaise = Math.round(amount * 100);
 
-    const keyId = process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder";
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "rzp_secret_placeholder";
-
-    let orderId = `order_${Date.now()}_${String(ride._id).slice(-4)}`;
-    try {
-      const rzp = new Razorpay({ key_id: keyId, key_secret: keySecret });
-      const order = await rzp.orders.create({
-        amount: Math.round(amount * 100), // paise
-        currency: "INR",
-        receipt: `rcpt_${String(ride._id).slice(-6)}_${Date.now()}`,
-        notes: {
-          rideId: String(ride._id),
-          userId: String(ownerId),
-          paymentType: "ride_fare",
-          part,
-        },
+    if (part === "advance" && ride.advancePaymentStatus === "success") {
+      return ok(res, req, 200, "Advance payment already verified", {
+        alreadyPaid: true,
+        ride: publicRide(ride),
+        amount,
+        part,
       });
-      orderId = order.id;
-    } catch (e) {
-      console.warn("[createRideRazorpayOrder] provider warning:", e?.message);
     }
 
-    return ok(res, req, 200, "Razorpay order created", {
-      orderId,
-      amount,
-      currency: "INR",
-      keyId,
-      part,
-    });
-  } catch (err) {
-    return fail(res, req, 500, err.message || "Failed to create payment order");
-  }
-};
-
-/** Verify Razorpay payment signature and record ledger */
-module.exports.verifyRideRazorpayPayment = async (req, res) => {
-  const rideId = req.params.id;
-  const { razorpayOrderId, razorpayPaymentId, razorpaySignature, part = "full" } = req.body || {};
-  if (!rideId || !mongoose.isValidObjectId(rideId)) {
-    return fail(res, req, 400, "Invalid ride id");
-  }
-  if (!razorpayPaymentId) {
-    return fail(res, req, 400, "razorpayPaymentId is required");
-  }
-  try {
-    const ride = await rideModel.findById(rideId);
-    if (!ride) return fail(res, req, 404, "Ride not found");
-
-    const ownerId = userIdOf(ride.user);
-    const requestUserId = req.user ? userIdOf(req.user) : null;
-    if (!ownerId || !requestUserId || ownerId !== requestUserId) {
-      return fail(res, req, 403, "Forbidden");
-    }
-
-    // Verify signature if secret provided
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (secret && razorpayOrderId && razorpaySignature) {
-      const expected = crypto.createHmac("sha256", secret).update(`${razorpayOrderId}|${razorpayPaymentId}`).digest("hex");
-      if (expected !== razorpaySignature) {
-        return fail(res, req, 400, "Invalid payment signature");
+    /**
+     * Reuse the order this ride already opened, so a repeated tap (or a retry after
+     * the passenger cancelled) can never start a second charge. If the provider says
+     * that order is already paid, settle the ride from the provider's own record.
+     */
+    if (part === "advance" && ride.advancePaymentOrderId) {
+      const reusable = await fetchReusableRazorpayOrder(
+        gateway.client,
+        ride.advancePaymentOrderId,
+        amountPaise,
+      );
+      if (reusable?.paid) {
+        const settled = await paymentService.confirmRideAdvancePaid({
+          rideId: ride._id,
+          transactionId: reusable.transactionId,
+          amount,
+        });
+        return ok(res, req, 200, "Advance payment already verified", {
+          alreadyPaid: true,
+          ride: publicRide(settled || ride),
+          amount,
+          part,
+        });
+      }
+      if (reusable) {
+        return ok(res, req, 200, "Existing payment order reused", {
+          orderId: reusable.orderId,
+          amount,
+          currency: "INR",
+          keyId: gateway.keyId,
+          part,
+          reused: true,
+        });
       }
     }
 
-    const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
-    const advance = Math.round(total * 0.25);
-    const amount = part === "advance" ? advance : (part === "remaining" ? Math.max(0, total - advance) : total);
-
-    try {
-      await PaymentRecord.create({
-        rideId: ride._id,
-        userId: ride.user,
-        driverId: ride.captain || null,
-        amount,
-        paymentMode: "Online",
-        paymentStatus: "success",
+    const order = await gateway.client.orders.create({
+      amount: amountPaise,
+      currency: "INR",
+      receipt: `rcpt_${String(ride._id).slice(-10)}_${part}_${Date.now()}`,
+      notes: {
+        rideId: String(ride._id),
+        userId: String(ownerId),
         paymentType: "ride_fare",
-        paymentPart: part,
-        externalRef: razorpayPaymentId,
-      });
-    } catch (e) {
-      if (e?.code !== 11000) throw e;
+        part,
+      },
+    });
+    if (!order?.id) {
+      return fail(res, req, 502, "Could not start the payment. Please try again.");
     }
 
-    const set = part === "advance"
-      ? { advancePaymentStatus: "success", advanceAmount: amount, remainingAmount: Math.max(0, total - amount) }
-      : { paymentStatus: "success", chargedAmount: total, remainingAmount: 0 };
+    if (part === "advance") {
+      await rideModel.updateOne(
+        { _id: ride._id },
+        {
+          $set: {
+            advancePaymentRequired: true,
+            advancePercentage: paymentService.ADVANCE_PERCENTAGE,
+            advanceAmount: amount,
+            remainingAmount: Math.max(0, paymentService.roundAmount(payable - amount)),
+            advancePaymentOrderId: order.id,
+            advancePaymentState: "processing",
+          },
+        },
+      );
+    }
 
-    const updated = await rideModel.findByIdAndUpdate(
-      ride._id,
-      { $set: set },
-      { new: true }
-    ).populate("user", "name phone email").populate("captain");
+    return ok(res, req, 200, "Razorpay order created", {
+      orderId: order.id,
+      amount,
+      currency: "INR",
+      keyId: gateway.keyId,
+      part,
+      reused: false,
+    });
+  } catch (err) {
+    console.error("[createRideRazorpayOrder]", err?.message || err);
+    /* A provider failure must never look like a usable payment order. */
+    return fail(res, req, 502, "Could not start the payment. Please try again.");
+  }
+};
 
-    const payload = { rideId: ride._id, status: updated.status, ride: publicRide(updated), paymentStatus: updated.paymentStatus };
+/**
+ * Confirm a Razorpay payment for the ride.
+ *
+ * Opening a UPI app is not proof of payment, so the callback is verified twice:
+ * the checkout signature proves the response came from Razorpay untampered, and the
+ * payment is then fetched from the Razorpay API to check its status, amount,
+ * currency and order. Only then is the ride's advance marked paid — and only the
+ * advance, so the remaining fare stays outstanding.
+ */
+module.exports.verifyRideRazorpayPayment = async (req, res) => {
+  const rideId = req.params.id;
+  const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body || {};
+  const part = paymentPartOf(req.body?.part);
+  if (!rideId || !mongoose.isValidObjectId(rideId)) {
+    return fail(res, req, 400, "Invalid ride id");
+  }
+  if (!part) return fail(res, req, 400, "Invalid payment part");
+  if (!razorpayPaymentId) return fail(res, req, 400, "razorpayPaymentId is required");
+  if (!razorpayOrderId || !razorpaySignature) {
+    return fail(res, req, 400, "razorpayOrderId and razorpaySignature are required");
+  }
+
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keySecret) {
+    return fail(res, req, 503, "Online payment gateway is not configured on the server (RAZORPAY_KEY_SECRET)");
+  }
+
+  try {
+    const ride = await rideModel.findById(rideId);
+    if (!ride) return fail(res, req, 404, "Ride not found");
+
+    const ownerId = userIdOf(ride.user);
+    const requestUserId = req.user ? userIdOf(req.user) : null;
+    if (!ownerId || !requestUserId || ownerId !== requestUserId) {
+      return fail(res, req, 403, "Forbidden");
+    }
+
+    /** Idempotent — a repeated callback for an already-verified advance changes nothing. */
+    if (part === "advance" && ride.advancePaymentStatus === "success") {
+      return ok(res, req, 200, "Advance payment already verified", {
+        alreadyPaid: true,
+        ride: publicRide(ride),
+        paymentStatus: ride.paymentStatus,
+      });
+    }
+
+    const paymentId = String(razorpayPaymentId);
+    const expectedSignature = crypto
+      .createHmac("sha256", keySecret)
+      .update(`${razorpayOrderId}|${paymentId}`)
+      .digest("hex");
+    const providedSignature = String(razorpaySignature);
+    const signatureMatches =
+      expectedSignature.length === providedSignature.length &&
+      crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(providedSignature));
+    if (!signatureMatches) {
+      return fail(res, req, 400, "Invalid payment signature");
+    }
+
+    const { payable, advanceAmount, remainingAmount } = paymentService.computeAdvanceSplit(ride);
+    const expectedAmount =
+      part === "advance" ? advanceAmount : part === "remaining" ? remainingAmount : payable;
+
+    /* The signature does not cover the amount, so read the payment back from Razorpay. */
+    const client = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: keySecret });
+    let payment;
+    try {
+      payment = await client.payments.fetch(paymentId);
+    } catch (e) {
+      console.error("[verifyRideRazorpayPayment] provider lookup failed:", e?.message || e);
+      return fail(res, req, 502, "Could not confirm the payment with the gateway. Please try again.");
+    }
+
+    if (Number(payment?.amount) !== Math.round(expectedAmount * 100)) {
+      return fail(res, req, 400, "Paid amount does not match this ride's payable amount");
+    }
+    if (String(payment?.currency || "INR").toUpperCase() !== "INR") {
+      return fail(res, req, 400, "Unsupported payment currency");
+    }
+    if (![ "captured", "authorized" ].includes(String(payment?.status))) {
+      /** A provider-confirmed failure is recorded; `created`/`attempted` just means unfinished. */
+      if (part === "advance" && String(payment?.status) === "failed") {
+        await rideModel.updateOne(
+          { _id: ride._id, advancePaymentStatus: { $ne: "success" } },
+          { $set: { advancePaymentStatus: "failed", advancePaymentState: "failed" } },
+        );
+      }
+      return fail(res, req, 409, `Payment is not successful yet (status: ${payment?.status || "unknown"})`);
+    }
+    if (payment?.order_id && String(payment.order_id) !== String(razorpayOrderId)) {
+      return fail(res, req, 400, "Payment does not belong to the supplied order");
+    }
+    if (
+      part === "advance" &&
+      ride.advancePaymentOrderId &&
+      String(payment?.order_id) !== String(ride.advancePaymentOrderId)
+    ) {
+      return fail(res, req, 400, "Payment does not belong to this ride's advance order");
+    }
+
+    if (part === "advance") {
+      const settled = await paymentService.confirmRideAdvancePaid({
+        rideId: ride._id,
+        transactionId: paymentId,
+        amount: expectedAmount,
+      });
+      if (!settled) return fail(res, req, 404, "Ride not found");
+
+      const payload = {
+        rideId: settled._id,
+        status: settled.status,
+        ride: publicRide(settled),
+        paymentStatus: settled.paymentStatus,
+        advancePaymentStatus: settled.advancePaymentStatus,
+      };
+      const uid = userIdOf(settled.user);
+      const cid = captainIdOf(settled.captain);
+      if (uid) emitToUser(uid, "ride:status-update", payload);
+      if (cid) emitToCaptain(cid, "ride:status-update", payload);
+
+      return ok(res, req, 200, "25% advance payment verified", {
+        ...publicRide(settled),
+        ride: publicRide(settled),
+        paymentStatus: settled.paymentStatus,
+        advancePaymentStatus: settled.advancePaymentStatus,
+        alreadyPaid: false,
+      });
+    }
+
+    /** Full / remaining fare settlement — unchanged behaviour once the gateway agrees. */
+    await PaymentRecord.findOneAndUpdate(
+      { rideId: ride._id, paymentType: "ride_fare", paymentPart: part },
+      {
+        $set: {
+          userId: ride.user,
+          driverId: ride.captain || null,
+          amount: expectedAmount,
+          discountAmount: Number(ride.discountAmount || 0),
+          originalFare: Number(ride.originalFare ?? ride.price ?? 0),
+          finalPayableAmount: payable,
+          paymentMode: "Online",
+          paymentStatus: "success",
+          paymentType: "ride_fare",
+          paymentPart: part,
+          externalRef: paymentId,
+        },
+      },
+      { upsert: true, new: true },
+    );
+
+    const updated = await rideModel
+      .findByIdAndUpdate(
+        ride._id,
+        { $set: { paymentStatus: "success", chargedAmount: payable, remainingAmount: 0 } },
+        { new: true },
+      )
+      .populate("user", "name phone email")
+      .populate("captain");
+
+    const payload = {
+      rideId: ride._id,
+      status: updated.status,
+      ride: publicRide(updated),
+      paymentStatus: updated.paymentStatus,
+    };
     const uid = userIdOf(updated.user);
     const cid = captainIdOf(updated.captain);
     if (uid) emitToUser(uid, "ride:status-update", payload);
@@ -2423,6 +2678,7 @@ module.exports.verifyRideRazorpayPayment = async (req, res) => {
       paymentStatus: updated.paymentStatus,
     });
   } catch (err) {
+    console.error("[verifyRideRazorpayPayment]", err?.message || err);
     return fail(res, req, 500, err.message || "Payment verification failed");
   }
 };

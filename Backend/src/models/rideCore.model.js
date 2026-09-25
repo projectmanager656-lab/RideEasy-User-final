@@ -74,9 +74,23 @@ const rideSchema = new mongoose.Schema({
     chargedAmount: { type: Number },
     originalFare: { type: Number },
     finalFare: { type: Number },
+    /** Pre-ride 25% advance — billed online before the trip can start. */
+    advancePaymentRequired: { type: Boolean, default: false },
+    advancePercentage: { type: Number, default: 25 },
     advanceAmount: { type: Number, default: 0 },
     remainingAmount: { type: Number, default: 0 },
+    /** Legacy paid flag read by the existing screens. `success` only after provider verification. */
     advancePaymentStatus: { type: String, enum: [ 'pending', 'success', 'failed' ], default: 'pending' },
+    /** Advance lifecycle: pending → processing (order created) → paid | failed | cancelled. */
+    advancePaymentState: {
+        type: String,
+        enum: [ 'pending', 'processing', 'paid', 'failed', 'cancelled' ],
+        default: 'pending',
+    },
+    /** Provider payment id that was actually verified server-side. Never client-supplied. */
+    advancePaymentTransactionId: { type: String, default: null },
+    /** Reused across retries so repeated taps cannot open a second charge. */
+    advancePaymentOrderId: { type: String, default: null },
     couponCode: { type: String, default: '' },
     customerName: { type: String },
     customerPhone: { type: String },

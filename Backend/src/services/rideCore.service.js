@@ -48,6 +48,17 @@ module.exports.normalizePaymentMethod = normalizePaymentMethod;
 /** Re-export for backward compatibility — prefer `payment.service`. */
 module.exports.settleRidePaymentIfNeeded = paymentService.settleRidePaymentIfNeeded;
 
+/** Pre-ride advance: the one shared 25% split, always recomputed from the stored fare. */
+const { ADVANCE_PERCENTAGE, computeAdvanceSplit } = paymentService;
+module.exports.ADVANCE_PERCENTAGE = ADVANCE_PERCENTAGE;
+module.exports.computeAdvanceSplit = computeAdvanceSplit;
+
+/**
+ * Payment rails that collect the 25% advance online before the trip may start.
+ * Cash and Wallet keep their existing behaviour untouched.
+ */
+const ADVANCE_REQUIRED_METHODS = [ 'UPI', 'Online' ];
+
 async function buildFarePayload(pickup, destination, coordOpts = null) {
     if (!pickup || !destination) throw new Error('Pickup and destination are required');
     const distanceTime =
@@ -106,6 +117,13 @@ module.exports.createRide = async ({
 }) => {
     /** Book Now searches straight away; a scheduled booking waits for `dispatchAt`. */
     const isScheduled = bookingType === 'scheduled';
+    const method = normalizePaymentMethod(paymentMethod);
+    /**
+     * The 25% advance is fixed at booking time from the fare the server itself
+     * computed, so every later screen and the payment gateway read the SAME split.
+     */
+    const advanceRequired = ADVANCE_REQUIRED_METHODS.includes(method);
+    const advanceSplit = computeAdvanceSplit({ price, discountAmount });
     /** OTP is created only when the driver arrives. */
     const ride = await rideModel.create({
         user,
@@ -121,15 +139,20 @@ module.exports.createRide = async ({
         discountReason: discountReason || '',
         couponCode: couponCode || '',
         originalFare: Math.round(Number(price || 0) * 100) / 100,
-        finalFare: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
-        chargedAmount: Math.max(0, Math.round((Number(price || 0) - Number(discountAmount || 0)) * 100) / 100),
+        finalFare: advanceSplit.payable,
+        chargedAmount: advanceSplit.payable,
         status: isScheduled ? 'scheduled' : 'searching',
         bookingType: isScheduled ? 'scheduled' : 'now',
         scheduledPickupAt: isScheduled ? scheduledPickupAt : null,
         dispatchAt: isScheduled ? dispatchAt : null,
         searchStartedAt: isScheduled ? null : new Date(),
-        paymentMethod: normalizePaymentMethod(paymentMethod),
+        paymentMethod: method,
         paymentStatus: 'pending',
+        advancePaymentRequired: advanceRequired,
+        advancePercentage: ADVANCE_PERCENTAGE,
+        advanceAmount: advanceRequired ? advanceSplit.advanceAmount : 0,
+        remainingAmount: advanceRequired ? advanceSplit.remainingAmount : 0,
+        advancePaymentState: 'pending',
         customerName,
         customerPhone,
     });
@@ -244,6 +267,14 @@ module.exports.startRide = async ({ rideId, otp, captain }) => {
     const ok = await verifyOtp(String(otp || '').trim(), ride.otpHash);
     if (!ok) throw rideError('Invalid OTP', 400);
     if (ride.otpExpiresAt && ride.otpExpiresAt < new Date()) throw rideError('OTP expired — ask passenger for new code', 400);
+    /**
+     * The 25% advance has to be verified by the payment provider before the trip
+     * may start — a valid OTP alone is not proof of payment. Only the online rails
+     * carry the requirement, so Cash and Wallet keep their existing behaviour.
+     */
+    if (ride.advancePaymentRequired && ride.advancePaymentStatus !== 'success') {
+        throw rideError('Passenger must complete the 25% advance payment before this ride can start', 402);
+    }
     await rideModel.updateOne({ _id: rideId }, { status: 'started', startedAt: new Date() });
     return rideModel.findById(rideId).populate('user').populate('captain');
 };
