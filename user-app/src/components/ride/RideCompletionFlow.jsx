@@ -129,10 +129,10 @@ export default function RideCompletionFlow ({
 
     /** 25% advance split — at completion we only collect the remaining 75%. */
     const totalFare = Number(ride?.price || 0)
+    /** What this ride is actually payable for (fare minus any coupon). */
+    const payableFare = Number(ride?.chargedAmount) > 0 ? Number(ride.chargedAmount) : totalFare
     const advancePaid = ride?.advancePaymentStatus === 'success' ? Number(ride?.advanceAmount || 0) : 0
-    const remainingDue = Number(ride?.chargedAmount) > 0
-        ? Number(ride.chargedAmount)
-        : Math.max(0, totalFare - advancePaid)
+    const remainingDue = Math.max(0, payableFare - advancePaid)
 
     /** Open the invoice for this exact ride; keep the user in the app. */
     const openInvoice = () => {
@@ -534,7 +534,8 @@ export default function RideCompletionFlow ({
                             ) : null}
                             <div className="flex justify-between border-t border-theme pt-3 text-base font-semibold text-theme-primary">
                                 <span>Total paid</span>
-                                <span>{formatINR(advancePaid + Number(ride?.chargedAmount ?? 0))}</span>
+                                {/* The advance is part of this total and is itemised above. */}
+                                <span>{formatINR(payableFare)}</span>
                             </div>
                             <div className="flex justify-between text-xs text-theme-muted">
                                 <span>Method</span>

@@ -1,15 +1,11 @@
 # Taste
-- Expects an explicit root-cause investigation before any edit — wants the exact source of the problem identified and reported, not guessed or patched around. Confidence: 0.85
-- Prefers the smallest, most narrowly scoped change possible; explicitly wants unrelated code, UI, and features left exactly as they are. Confidence: 0.85
-- Prefers extending/reusing existing patterns and helpers over introducing a new competing system (e.g. extend an existing guard rather than build a second navigation system). Confidence: 0.8
-- Rejects workaround-style fixes (arbitrary setTimeout/delays, clearing state or sessionStorage, disabling sockets, hard-coded globals, polling, blocking navigation) — fix the actual condition. Confidence: 0.8
-- Wants a short final report structured around: exact cause, files modified, exact change made, verification/test results, and build result. Confidence: 0.85
-- Prefers lightweight, focused verification over large browser/E2E harnesses (declines permission prompts for headless-browser screenshot/visual-render checks; markup, class, and compiled-CSS inspection is acceptable instead); do not leave permanent test files behind and clean up temporary verification files/processes afterward. Confidence: 0.8
-- Prefers frontend-only fixes and avoiding backend changes unless investigation proves the backend is the cause. Confidence: 0.7
-- Wants to be asked before expanding scope or applying a behavior the spec didn't request (surfaces optional follow-ups as a question rather than doing them). Confidence: 0.7
-- Asks for concise, no-fluff reports ("keep the report very short") with numbered, itemized answers. Confidence: 0.8
-- Treats per-user data isolation as a security requirement: server operations must scope to the authenticated user (JWT-verified id) and never trust a userId supplied by the client; explicitly wants proof that one user cannot retrieve another's data. Confidence: 0.8
-- Does not want results overclaimed: distinguishes what was actually tested vs unverified, explicitly asks for "anything still unverified", and states "do not claim VERIFIED unless you actually tested it". Confidence: 0.8
-- For UI changes, preserve the existing component's visual design intact (size, count, icon, layout, spacing, typography, responsive grid) and express any new state (e.g. selected/active) subtly using the project's existing theme colors and accent/border/background system — do not redesign the component. Confidence: 0.75
-- Expects interactive UI elements to be genuinely accessible: the whole element clickable/tappable (not just the text), pointer cursor on desktop, comfortable touch target on mobile, semantic button/ARIA semantics, and keyboard activation via Enter/Space. Confidence: 0.7
-- When removing a UI element, wants it removed completely — no leftover empty wrapper, margin, padding, or blank space; surrounding content should reflow into the freed space. Confidence: 0.65
+- Before editing, inspect the existing implementation end-to-end (models, controllers, routes, services, config, frontend screens) and reuse the project's existing architecture and naming conventions rather than creating a parallel/duplicate subsystem. Confidence: 0.9
+- Make the minimum necessary changes: do not redesign unrelated screens, rename or add routes unnecessarily, or touch flows outside the requested scope. Confidence: 0.9
+- After implementing, provide a concise summary: every file changed, what changed in each file, how it works, and any environment variables / credentials / configuration the user must supply. Confidence: 0.85
+- Verify work by running the project's tests, build, and lint, and confirm there are no new failures (compare against a baseline of pre-existing failures when the suite is already red). Confidence: 0.8
+- Never invent or hard-code fake values (UPI IDs, merchant credentials, order/transaction IDs, payment details, placeholder secrets); if the required configuration/credentials are missing, STOP and report exactly what is missing instead of guessing. Confidence: 0.9
+- Do not fabricate success: a provider/gateway handoff or a frontend flag is not proof — only server-side/provider verification may mark something as done. Confidence: 0.9
+- Treat the backend as the source of truth: never trust amounts, success flags, transaction IDs, or payment status supplied by the frontend; recompute/validate on the server. Confidence: 0.9
+- Keep gateway secrets and merchant credentials on the backend / environment variables only, never in client (React/Vite) code. Confidence: 0.9
+- Money-handling operations must be idempotent and reuse existing pending orders so repeated taps or retries cannot cause duplicate charges; failures/cancellations should leave state pending and retryable. Confidence: 0.75
+- Treat user-provided reference assets (screenshots, QR images, videos) as reference-only: do not copy, store, import, or display them inside the project (src, public, assets, or backend). Confidence: 0.65

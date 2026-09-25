@@ -18,6 +18,21 @@ import luxuryImg from '../assets/luxury-img-ride.png'
 const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 const LOOKING_TIMEOUT_SECONDS = 120
 
+/**
+ * Razorpay Checkout display config scoped to UPI only. On a phone the gateway then
+ * opens the UPI app-intent flow — the passenger picks an installed app (Google Pay,
+ * PhonePe, Paytm, BHIM …) which opens with the exact advance amount prefilled.
+ * Mirrors the wallet top-up checkout config already used in this app.
+ */
+const ADVANCE_UPI_DISPLAY = {
+  blocks: { upi: { name: 'UPI', instruments: [{ method: 'upi' }] } },
+  sequence: ['block.upi'],
+  preferences: { show_default_blocks: false },
+}
+
+/** Gateway/UPI error text that means the device has no usable UPI app installed. */
+const NO_UPI_APP_PATTERN = /no\s+upi|upi\s+app\s+not|app\s+not\s+(found|installed)|no\s+app|not\s+installed|intent/i
+
 function normalizeStatus (s) {
   return String(s || '').trim().toLowerCase()
 }
@@ -149,9 +164,11 @@ const SearchingForDriver = () => {
   const [cancelling, setCancelling] = useState(false)
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
-  /** Paying the 25% UPI advance at Card 3 (mock payment endpoint, same as completion). */
+  /** Paying the 25% advance for this ride (Wallet rail, or the UPI intent checkout). */
   const [payingAdvance, setPayingAdvance] = useState(false)
   const [advancePayError, setAdvancePayError] = useState('')
+  /** Guards the button so repeated taps cannot open two checkouts / start two charges. */
+  const advanceInFlightRef = useRef(false)
   /** Passenger OTP — backend only returns it once status is accepted/arrived. */
   const [passengerOtp, setPassengerOtp] = useState('')
   /** 2 minute overall driver search timeout */
@@ -524,6 +541,8 @@ const SearchingForDriver = () => {
     ? Number(ride.remainingAmount)
     : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
   const advancePaid = ride?.advancePaymentStatus === 'success'
+  /** UPI / Online rides must clear the advance before the trip can start — enforced by the backend. */
+  const advanceRequiredToStart = ride?.paymentMethod === 'UPI' || ride?.paymentMethod === 'Online'
   /** Advance section appears once a driver is assigned — applies to every
      payment method, replacing the old Cash-only "pay at end" behavior. */
   const showAdvanceSection = !isSearching
@@ -539,24 +558,143 @@ const SearchingForDriver = () => {
     window.location.href = `tel:${digits}`
   }, [])
 
-  /** Pay the server-derived 25% advance using the selected payment rail. */
+  /**
+   * Pay the server-derived 25% advance on the rail the passenger selected.
+   *
+   * Wallet and Cash keep their existing rails. UPI / Online open the Razorpay UPI
+   * app-intent checkout, so an installed UPI app receives the payee, the exact
+   * advance amount and the note — the passenger only reviews and enters their PIN.
+   * Returning from that app is NOT proof of payment: the backend verifies the
+   * signature and the payment itself before the advance is marked paid.
+   */
   const payAdvance = useCallback(async () => {
-    if (!rideId || payingAdvance || advancePaid) return
-    setPayingAdvance(true)
+    if (!rideId || advanceInFlightRef.current || advancePaid) return
     setAdvancePayError('')
-    try {
-      const endpoint = ride?.paymentMethod === 'Wallet' ? '/rides/pay-wallet' : '/rides/pay-mock'
-      const res = await apiClient.post(endpoint, { rideId, method: ride?.paymentMethod || 'UPI', part: 'advance' }, withAuth())
-      const o = stripApiEnvelope(res.data)
-      if (o?.ride) {
-        setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+
+    /** Wallet — existing rail, unchanged. */
+    if (ride?.paymentMethod === 'Wallet') {
+      setPayingAdvance(true)
+      try {
+        const res = await apiClient.post('/rides/pay-wallet', { rideId, part: 'advance' }, withAuth())
+        const o = stripApiEnvelope(res.data)
+        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      } catch (err) {
+        setAdvancePayError(formatApiError(err))
+      } finally {
+        setPayingAdvance(false)
       }
+      return
+    }
+
+    /** Cash — no online rail; the existing recorder stays as the advance fallback. */
+    if (ride?.paymentMethod !== 'UPI' && ride?.paymentMethod !== 'Online') {
+      setPayingAdvance(true)
+      try {
+        const res = await apiClient.post(
+          '/rides/pay-mock',
+          { rideId, method: ride?.paymentMethod || 'Cash', part: 'advance' },
+          withAuth(),
+        )
+        const o = stripApiEnvelope(res.data)
+        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      } catch (err) {
+        setAdvancePayError(formatApiError(err))
+      } finally {
+        setPayingAdvance(false)
+      }
+      return
+    }
+
+    if (!window.Razorpay) {
+      setAdvancePayError(t('advance_gateway_missing'))
+      return
+    }
+
+    advanceInFlightRef.current = true
+    setPayingAdvance(true)
+    try {
+      const orderRes = await apiClient.post(
+        `/rides/${rideId}/create-razorpay-order`,
+        { part: 'advance' },
+        withAuth(),
+      )
+      const order = stripApiEnvelope(orderRes.data)
+
+      /** The backend already verified this advance — nothing left to charge. */
+      if (order?.alreadyPaid) {
+        if (order.ride) setRide((prev) => ({ ...(prev || {}), ...order.ride, _id: order.ride._id || prev?._id }))
+        advanceInFlightRef.current = false
+        setPayingAdvance(false)
+        return
+      }
+
+      const orderId = order?.orderId
+      const keyId = order?.keyId
+      const orderAmount = Number(order?.amount)
+      if (!orderId || !keyId || !Number.isFinite(orderAmount) || orderAmount <= 0) {
+        throw new Error(t('advance_order_failed'))
+      }
+
+      const checkout = new window.Razorpay({
+        key: keyId,
+        order_id: orderId,
+        amount: Math.round(orderAmount * 100),
+        currency: order?.currency || 'INR',
+        name: 'RideEasy',
+        description: 'RideEasy 25% Ride Advance',
+        notes: { rideId: String(rideId), paymentType: 'ride_fare', part: 'advance' },
+        /** UPI only, so the gateway opens the installed UPI app / app chooser. */
+        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
+        config: { display: ADVANCE_UPI_DISPLAY },
+        theme: { color: '#FFD000' },
+        handler: async (paymentResponse) => {
+          try {
+            setAdvancePayError('')
+            const verifyRes = await apiClient.post(
+              `/rides/${rideId}/verify-razorpay-payment`,
+              {
+                razorpayOrderId: paymentResponse?.razorpay_order_id,
+                razorpayPaymentId: paymentResponse?.razorpay_payment_id,
+                razorpaySignature: paymentResponse?.razorpay_signature,
+                part: 'advance',
+              },
+              withAuth(),
+            )
+            const verified = stripApiEnvelope(verifyRes.data)
+            const verifiedRide = verified?.ride || verified
+            if (verifiedRide?._id) setRide((prev) => ({ ...(prev || {}), ...verifiedRide }))
+          } catch (err) {
+            setAdvancePayError(formatApiError(err))
+          } finally {
+            advanceInFlightRef.current = false
+            setPayingAdvance(false)
+          }
+        },
+        modal: {
+          /** Closed without a verified payment — stays unpaid, so a retry is possible. */
+          ondismiss: () => {
+            advanceInFlightRef.current = false
+            setPayingAdvance(false)
+          },
+        },
+      })
+
+      checkout.on('payment.failed', (failure) => {
+        advanceInFlightRef.current = false
+        setPayingAdvance(false)
+        const description = String(failure?.error?.description || '')
+        setAdvancePayError(
+          NO_UPI_APP_PATTERN.test(description) ? t('advance_upi_app_missing') : (description || t('payment_failed')),
+        )
+      })
+
+      checkout.open()
     } catch (err) {
       setAdvancePayError(formatApiError(err))
-    } finally {
+      advanceInFlightRef.current = false
       setPayingAdvance(false)
     }
-  }, [rideId, payingAdvance, advancePaid, ride?.paymentMethod])
+  }, [rideId, advancePaid, ride?.paymentMethod, t])
 
   /** Only the vehicle type the passenger selected is relevant to the map marker. */
   const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
@@ -871,32 +1009,47 @@ const SearchingForDriver = () => {
                     <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{advancePayError}</p>
                   )}
                   {advancePaid ? (
-                    <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5">
-                      <span className="text-sm font-semibold text-emerald-300">
-                        <i className="ri-checkbox-circle-fill mr-1.5 align-[-1px]" aria-hidden />
-                        {t('advance_25_paid')}
-                      </span>
-                      <span className="text-sm font-semibold text-theme-primary">{t('remaining_75_amount', { amount: formatPrice(remainingAmount) })}</span>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5">
+                        <span className="text-sm font-semibold text-emerald-300">
+                          <i className="ri-checkbox-circle-fill mr-1.5 align-[-1px]" aria-hidden />
+                          {t('advance_25_paid')}
+                        </span>
+                        <span className="text-sm font-semibold text-theme-primary">{t('remaining_75_amount', { amount: formatPrice(remainingAmount) })}</span>
+                      </div>
+                      {/* Only ever shown after the backend verified the payment with the provider. */}
+                      <p className="text-xs text-emerald-300">
+                        <i className="ri-shield-check-line mr-1 align-[-1px]" aria-hidden />
+                        {t('advance_payment_success')}
+                      </p>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={payAdvance}
-                      disabled={payingAdvance || !rideId}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-yellow px-3 py-2.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
-                    >
-                      {payingAdvance ? (
-                        <>
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" aria-hidden />
-                          {t('processing')}
-                        </>
-                      ) : (
-                        <>
-                          <i className="ri-qr-code-line text-base" aria-hidden />
-                          {t('pay_advance_upi', { amount: formatPrice(advanceAmount) })}
-                        </>
+                    <>
+                      {advanceRequiredToStart && (
+                        <p className="text-xs text-amber-300">
+                          <i className="ri-information-line mr-1 align-[-1px]" aria-hidden />
+                          {t('advance_required_to_start')}
+                        </p>
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={payAdvance}
+                        disabled={payingAdvance || !rideId}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-yellow px-3 py-2.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+                      >
+                        {payingAdvance ? (
+                          <>
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" aria-hidden />
+                            {t('processing')}
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-secure-payment-line text-base" aria-hidden />
+                            {t('pay_advance_upi', { amount: formatPrice(advanceAmount) })}
+                          </>
+                        )}
+                      </button>
+                    </>
                   )}
                 </>
               )}
