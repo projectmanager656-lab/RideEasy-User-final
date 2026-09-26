@@ -4,7 +4,7 @@ import CaptainDetails from '../components/CaptainDetails'
 import RidePopUp from '../components/RidePopUp'
 import ConfirmRidePopUp from '../components/ConfirmRidePopUp'
 import DriverAcceptSuccessModal from '../components/DriverAcceptSuccessModal'
-import { useSocket } from '../hooks/useSocket'
+import { useSocket, useSocketAuth } from '../hooks/useSocket'
 import { CaptainDataContext } from '../context/CaptainContext'
 import LiveTracking from '../components/LiveTracking'
 import RideMap from '../components/RideMap'
@@ -48,6 +48,7 @@ const CaptainHome = () => {
     /** User minimized panel or rejected — only block pending poll (fresh socket can still show same ride). */
     const pollSuppressedRideIdsRef = useRef(new Set())
     const socket = useSocket()
+    const ensureSocketAuth = useSocketAuth()
     const { captain } = useContext(CaptainDataContext)
 
     const ridePopupOpenRef = useRef(false)
@@ -133,6 +134,8 @@ const CaptainHome = () => {
         const fallback = fallbackCoordsForCaptainCity(city)
 
         const doJoin = () => {
+            ensureSocketAuth()
+            console.info('[driver socket] registered', { captainId: capId, socketId: socket.id, city, online })
             socket.emit('join', { userId: capId, userType: 'captain' })
             if (navigator.geolocation) {
                 const emitJoin = (lat, lng) => {
@@ -158,7 +161,12 @@ const CaptainHome = () => {
                 socket.emit('join-driver', { driverId: capId, city, lat: fallback.lat, lng: fallback.lng })
             }
         }
-        doJoin()
+        /**
+         * Register now ONLY when already connected. Emitting before the first connect
+         * would buffer the frame AND fire again from the 'connect' handler below,
+         * registering this one socket twice (duplicate join frames per connection).
+         */
+        if (socket.connected) doJoin()
         socket.on('connect', doJoin)
         const fetchPending = () => apiClient
             .get('/rides/pending', {
@@ -196,27 +204,56 @@ const CaptainHome = () => {
             clearTimeout(bootFetch)
             clearInterval(pendingInterval)
         }
-    }, [ captain?._id, captain?.city, captain?.status, socket ])
+    }, [ captain?._id, captain?.city, captain?.status, socket, ensureSocketAuth ])
 
     useEffect(() => {
         if (!socket) return
 
         const handleNewRide = (data) => {
-            if (import.meta.env.DEV) {
-                const id = data?.ride?._id ?? data?._id
-                if (id) console.debug('[RideEasy driver] new-ride event', String(id))
-            }
-            if (captainOnlineRef.current !== true) return
-            if (confirmRideOpenRef.current || acceptSuccessOpenRef.current) return
             const r = data?.ride || data
-            if (!r || !(r._id || r.id)) return
-            if (!ridePickupInServiceArea(r)) return
-            const idStr = String(r._id ?? r.id)
-            if (completedRideIdsRef.current.has(idStr)) return
+            const idStr = r?._id != null || r?.id != null ? String(r._id ?? r.id) : ''
+            if (!idStr) {
+                console.warn('[RideEasy driver] rideRequest received but payload has no ride id', data)
+                return
+            }
+            console.log('[RideEasy driver] rideRequest received', idStr)
+            if (captainOnlineRef.current !== true) {
+                console.warn('[RideEasy driver] rideRequest %s ignored — you are offline, go online to receive offers', idStr)
+                return
+            }
+            if (confirmRideOpenRef.current || acceptSuccessOpenRef.current) {
+                console.warn('[RideEasy driver] rideRequest %s ignored — another offer is already open', idStr)
+                return
+            }
+            if (!ridePickupInServiceArea(r)) {
+                console.warn('[RideEasy driver] rideRequest %s ignored — pickup is outside your service area', idStr)
+                return
+            }
+            if (completedRideIdsRef.current.has(idStr)) {
+                console.warn('[RideEasy driver] rideRequest %s ignored — ride already handled', idStr)
+                return
+            }
             const st = String(r.status || 'searching').trim().toLowerCase()
-            if (st !== 'searching') return
+            if (st !== 'searching') {
+                console.warn('[RideEasy driver] rideRequest %s ignored — ride status is %s', idStr, st)
+                return
+            }
             const cap = r.captain
-            if (cap && (cap._id || (typeof cap === 'string' && cap.length > 0))) return
+            if (cap && (cap._id || (typeof cap === 'string' && cap.length > 0))) {
+                console.warn('[RideEasy driver] rideRequest %s ignored — already assigned to a driver', idStr)
+                return
+            }
+            console.log('[ride socket] OFFER RECEIVED', { rideId: idStr })
+            /**
+             * Acknowledge receipt so the backend keeps durable proof the offer reached
+             * this driver — a successful server-side room emit alone does not prove it.
+             */
+            socket.emit('rideRequest:ack', { rideId: idStr })
+            /** Reconnect / catch-up can re-deliver the same offer — never stack it twice. */
+            if (activeRideIdRef.current === idStr && ridePopupOpenRef.current) {
+                console.log('[ride socket] duplicate offer ignored', { rideId: idStr })
+                return
+            }
             pollSuppressedRideIdsRef.current.delete(idStr)
             setRide(r)
             setAcceptSuccessOpen(false)

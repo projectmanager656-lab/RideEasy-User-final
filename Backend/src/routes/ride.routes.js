@@ -9,15 +9,17 @@ router.post('/create',
     auth.authUser,
     body('pickupLocation').isString().isLength({ min: 3 }),
     body('dropLocation').isString().isLength({ min: 3 }),
-    body('city').optional().isIn([ 'Kolhapur', 'Ichalkaranji', 'Sangli' ]),
     body('vehicleType').isString().isIn([ 'BIKE', 'AUTO', 'CAR' ]),
-    body('paymentMethod').isString(),
+    body('paymentMethod').optional().isString().isIn([ 'Cash', 'UPI', 'Online', 'Wallet' ]),
     body('price').isNumeric(),
+    body('couponCode').optional({ checkFalsy: true }).isString().isLength({ max: 40 }),
     body('distanceKm').optional().isNumeric(),
     body('pickupLat').optional().isFloat({ min: -90, max: 90 }),
     body('pickupLng').optional().isFloat({ min: -180, max: 180 }),
     body('dropLat').optional().isFloat({ min: -90, max: 90 }),
     body('dropLng').optional().isFloat({ min: -180, max: 180 }),
+    /** Future pickup for a scheduled booking. Absolute ISO-8601 instant from the client. */
+    body('scheduledAt').optional({ checkFalsy: true }).isISO8601(),
     rideController.createRide
 );
 
@@ -47,21 +49,6 @@ router.get('/user/history', auth.authUser, rideController.userRideHistory);
 router.get('/history', auth.authUser, rideController.userRideHistory);
 router.get('/:id/passenger-otp', auth.authUser, rideController.getPassengerOtp);
 
-router.post('/pay-mock',
-    auth.authUser,
-    body('rideId').isMongoId(),
-    body('method').isString(),
-    rideController.payMock
-);
-router.post('/upi/verify',
-    auth.authUser,
-    body('rideId').isMongoId(),
-    body('transactionRef').isString().isLength({ min: 3 }),
-    body('status').isString(),
-    body('amount').optional().isNumeric(),
-    rideController.verifyUpiIntent
-);
-
 router.patch('/:id/accept', auth.authCaptain, rideController.acceptRide);
 router.patch('/:id/reject', auth.authCaptain, rideController.rejectRide);
 router.patch('/:id/cancel', auth.authUser, body('reason').optional().isString().isLength({ max: 240 }), rideController.cancelRideByUser);
@@ -89,6 +76,26 @@ router.post('/rate',
 );
 
 router.post('/:id/retry-assign', auth.authUser, rideController.retryAssign);
+
+/** Passenger records a real ride payment (advance/remaining) — persists a ledger row. */
+router.post('/pay-mock', auth.authUser, rideController.payMock);
+router.post('/pay-wallet', auth.authUser, rideController.payWallet);
+/** Passenger verifies a UPI payment intent (real, idempotent ledger write). */
+router.post('/upi/verify', auth.authUser, rideController.verifyUpiPayment);
+/** Passenger invoice built from the actual ride + payment ledger. */
+router.get('/:id/invoice', auth.authUser, rideController.getRideInvoice);
+
+// Razorpay ride payments
+router.post('/:id/create-razorpay-order', auth.authUser, rideController.createRideRazorpayOrder);
+router.post('/:id/verify-razorpay-payment', auth.authUser, rideController.verifyRideRazorpayPayment);
+
+// Refund request
+router.post('/:id/refund', auth.authUser, rideController.requestRideRefund);
+
+// Ride Share
+router.get('/shared/:token', rideController.getRideShare);
+router.post('/:id/share', auth.authUser, rideController.createRideShare);
+router.delete('/:id/share', auth.authUser, rideController.revokeRideShare);
 
 router.get('/:id', auth.authUserOrCaptain, rideController.getRideById); // keep after /:id/passenger-otp
 

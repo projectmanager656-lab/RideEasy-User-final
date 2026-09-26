@@ -20,5 +20,18 @@ router.post(
   controller.createSubscription
 )
 
+router.post(
+  '/create-order',
+  auth.authCaptain,
+  body('plan').optional().isIn(['weekly', 'monthly', 'yearly']),
+  controller.createSubscriptionOrder
+)
+
+router.post(
+  '/verify-payment',
+  auth.authCaptain,
+  controller.verifySubscriptionPayment
+)
+
 module.exports = router
 

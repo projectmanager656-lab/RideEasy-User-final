@@ -1,8 +1,27 @@
 const express = require('express');
 const pricingService = require('../services/pricing.service');
 const { SERVICE_AREAS } = require('../config/serviceAreas');
+const { getScheduledDispatchLeadMinutes } = require('../config/env');
 
 const router = express.Router();
+
+/**
+ * Public scheduling rule for clients (no auth).
+ *
+ * The Schedule picker enforces exactly this lead, so it can never offer a pickup
+ * time that `resolveScheduleWindow()` would immediately turn into an instant
+ * search. Published from the same config source ride creation uses — one rule.
+ */
+router.get('/scheduling', (req, res) => {
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.status(200).json({
+        success: true,
+        ok: true,
+        scheduledDispatchLeadMinutes: getScheduledDispatchLeadMinutes(),
+        message: 'Scheduling rules',
+        requestId: req.requestId,
+    });
+});
 
 /**
  * Public service-area config for clients (no auth).

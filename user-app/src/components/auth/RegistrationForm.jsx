@@ -37,8 +37,8 @@ const RegistrationForm = ({
     const email = String(draft.email || '').trim().toLowerCase()
     const phone = String(draft.phone || '').trim()
 
-    if (name.length < 2) errors.name = t('valid_name_error')
-    if (!EMAIL_RE.test(email)) errors.email = t('valid_email_error')
+    if (!/^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/.test(name)) errors.name = t('valid_name_error')
+    if (!EMAIL_RE.test(email) || email.includes('..')) errors.email = t('valid_email_error')
     if (!/^[6-9]\d{9}$/.test(phone)) errors.phone = t('valid_phone_error')
     if (password.length < 6) errors.password = t('min_6_chars')
     if (confirmPassword !== password) errors.confirmPassword = t('passwords_do_not_match')
@@ -80,7 +80,7 @@ const RegistrationForm = ({
             </div>
           ) : null}
           <div className="mb-4">
-            <label htmlFor="reg-name" className={labelClass}>{t('full_name')}</label>
+            <label htmlFor="reg-name" className={labelClass}>{t('full_name')} <span className="text-red-500" aria-hidden>*</span></label>
             <input
               id="reg-name"
               name="name"
@@ -95,7 +95,7 @@ const RegistrationForm = ({
             {fieldErrors.name ? <p className="mt-1 text-xs text-red-500">{fieldErrors.name}</p> : null}
           </div>
           <div className="mb-4">
-            <label htmlFor="reg-email" className={labelClass}>{t('email')}</label>
+            <label htmlFor="reg-email" className={labelClass}>{t('email')} <span className="text-red-500" aria-hidden>*</span></label>
             <input
               id="reg-email"
               name="email"
@@ -107,7 +107,8 @@ const RegistrationForm = ({
               className={`${inputBase} ${emailReadOnly ? 'cursor-not-allowed opacity-70' : ''} ${fieldErrors.email ? 'border-red-400 focus:border-red-500 focus:ring-red-500/50' : ''}`}
               placeholder={t('enter_email')}
               value={draft.email}
-              onChange={(e) => set('email')(e.target.value)}
+              onChange={(e) => set('email')(e.target.value.trim().toLowerCase())}
+              onBlur={(e) => set('email')(e.target.value.trim().toLowerCase())}
             />
             {fieldErrors.email ? <p className="mt-1 text-xs text-red-500">{fieldErrors.email}</p> : null}
           </div>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * API smoke test: health → register user + driver (Pune, AUTO) → create ride → driver /rides/pending must list it.
+ * API smoke test: health → register user + driver (Kolhapur, AUTO) → create ride → driver /rides/pending must list it.
  * Requires: API server running (default http://localhost:5001), MongoDB reachable.
  *
  * Usage:  API_URL=http://127.0.0.1:5001 node scripts/smoke-api.mjs
@@ -50,7 +50,7 @@ async function main() {
             phone: phoneU,
             email: userEmail,
             password: pass,
-            city: 'Pune',
+            city: 'Kolhapur',
             bankDetails: {
                 accountHolderName: 'Smoke User',
                 accountNumber: '123456789012',
@@ -79,7 +79,7 @@ async function main() {
             vehicleType: 'AUTO',
             vehicleNumber: 'MH12SM9999',
             license: 'MH142011006282',
-            city: 'Pune',
+            city: 'Kolhapur',
         },
     });
     if (!capReg.ok) {
@@ -93,8 +93,8 @@ async function main() {
     }
     console.log('OK  captain registered');
 
-    const pickup = 'Pune Railway Station';
-    const drop = 'Kothrud Pune';
+    const pickup = 'Kolhapur Railway Station';
+    const drop = 'Shivaji Chowk Kolhapur';
     const fareRes = await req(
         'GET',
         `/rides/get-fare?pickup=${encodeURIComponent(pickup)}&destination=${encodeURIComponent(drop)}`,
@@ -118,7 +118,7 @@ async function main() {
         body: {
             pickupLocation: pickup,
             dropLocation: drop,
-            city: 'Pune',
+            city: 'Kolhapur',
             vehicleType: 'AUTO',
             paymentMethod: 'Cash',
             price,
@@ -141,7 +141,7 @@ async function main() {
     const found = list.some((r) => String(r._id) === String(rideId));
     console.log('OK  pending count=', list.length, found ? '(includes new ride)' : '');
     if (!found) {
-        console.error('FAIL: pending list should include the new ride (same Pune + AUTO + active subscription).');
+        console.error('FAIL: pending list should include the new ride (same Kolhapur + AUTO + active subscription).');
         process.exit(1);
     }
 

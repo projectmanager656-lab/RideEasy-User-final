@@ -4,15 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getCaptainToken } from '../utils/authTokens'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
-
-function normalizeLocationText(value, fallback = '—') {
-    if (typeof value === 'string') return value
-    if (value && typeof value === 'object') {
-        if (typeof value.name === 'string') return value.name
-        if (Array.isArray(value.coordinates)) return `${value.coordinates[1]}, ${value.coordinates[0]}`
-    }
-    return fallback
-}
+import { normalizeLocationText } from '../utils/locationText'
 
 function normalizePersonName(user) {
     if (!user) return 'Rider'

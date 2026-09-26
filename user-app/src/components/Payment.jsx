@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { buildUpiQrImageUrl } from '../config/externalEndpoints'
+import { useLanguage } from '../i18n'
 
 const PENDING_KEY = 'rideeasy_upi_pending'
 const PENDING_MAX_MS = 15 * 60 * 1000
@@ -49,6 +50,7 @@ const Payment = ({
     onMethodChange,
     onContinue,
 }) => {
+    const { t } = useLanguage()
     const [waitingForConfirmation, setWaitingForConfirmation] = useState(false)
     const [paymentSuccess, setPaymentSuccess] = useState(false)
     const [transactionRef, setTransactionRef] = useState('')
@@ -106,9 +108,7 @@ const Payment = ({
 
         const canDeepLink = await shouldNavigateToUpiScheme()
         if (!canDeepLink) {
-            setLaunchHint(
-                'This browser cannot open UPI apps (desktop or emulator has no upi:// handler). Scan the QR with PhonePe/GPay on your phone, or test on a real Android/iPhone.'
-            )
+            setLaunchHint(t('upi_app_launch_hint'))
             setWaitingForConfirmation(true)
             setNeedsManualConfirm(true)
             setTransactionRef(txnRef)
@@ -194,9 +194,9 @@ const Payment = ({
         (!waitingForConfirmation && !paymentSuccess)
 
     return (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm font-semibold text-slate-800">Payment</p>
-            <p className="text-xs text-slate-500 mt-1">Complete payment to confirm your ride</p>
+        <div className="rounded-2xl border border-theme bg-theme-card p-4 shadow-sm">
+            <p className="text-sm font-semibold text-theme-primary">{t('payment')}</p>
+            <p className="text-xs text-theme-muted mt-1">{t('complete_payment_to_confirm')}</p>
 
             <div className="mt-3 grid grid-cols-3 gap-2">
                 {['Cash', 'UPI', 'Online'].map((m) => (
@@ -214,7 +214,7 @@ const Payment = ({
                             }
                         }}
                         className={`rounded-lg border px-2 py-2 text-xs font-medium sm:text-sm ${
-                            method === m ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700'
+                            method === m ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-theme text-theme-secondary'
                         }`}
                     >
                         {m}
@@ -222,10 +222,10 @@ const Payment = ({
                 ))}
             </div>
 
-            <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                Amount: <span className="font-semibold">₹{amount}</span>
+            <div className="mt-3 rounded-lg bg-theme-card-muted p-3 text-sm text-theme-secondary">
+                {t('amount_label')} <span className="font-semibold text-theme-primary">₹{amount}</span>
                 {isUpiLike && (
-                    <p className="mt-1 text-xs text-slate-500">UPI Payee: {upiPayeeName}</p>
+                    <p className="mt-1 text-xs text-theme-muted">{t('upi_payee_label')} {upiPayeeName}</p>
                 )}
             </div>
 
@@ -237,27 +237,27 @@ const Payment = ({
                         disabled={paymentSuccess}
                         className="mt-3 w-full rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
                     >
-                        {method === 'Online' ? 'Pay online (UPI apps)' : 'Pay with UPI (PhonePe/GPay)'} — ₹{amount}
+                        {method === 'Online' ? t('pay_online_upi_apps') : t('pay_with_upi_apps')} — ₹{amount}
                     </button>
                     {waitingForConfirmation && !paymentSuccess && (
                         <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                            Waiting for payment confirmation.
+                            {t('waiting_payment_confirmation')}
                         </div>
                     )}
                     {paymentSuccess && (
                         <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-                            Payment successful. Confirming your ride…
+                            {t('payment_success_confirming')}
                         </div>
                     )}
                     {launchHint && (
-                        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <div className="mt-2 rounded-lg border border-theme bg-theme-card-muted px-3 py-2 text-xs text-theme-muted">
                             {launchHint}
                         </div>
                     )}
                     {!!upiQrUrl && (
-                        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-center">
-                            <p className="text-xs text-slate-600 mb-2">UPI QR fallback (scan in PhonePe/GPay)</p>
-                            <img src={upiQrUrl} alt="UPI QR" className="mx-auto h-44 w-44 rounded-md border border-slate-100" />
+                        <div className="mt-3 rounded-lg border border-theme bg-theme-card p-3 text-center">
+                            <p className="text-xs text-theme-muted mb-2">{t('upi_qr_fallback')}</p>
+                            <img src={upiQrUrl} alt={t('upi_qr_alt')} className="mx-auto h-44 w-44 rounded-md border border-theme" />
                         </div>
                     )}
                 </>
@@ -276,7 +276,7 @@ const Payment = ({
                     }
                     className="mt-3 w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
-                    Confirm Ride (₹{amount})
+                    {t('confirm_ride')} (₹{amount})
                 </button>
             )}
         </div>

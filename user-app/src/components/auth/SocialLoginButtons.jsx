@@ -16,12 +16,6 @@ const GoogleIcon = () => (
   </svg>
 )
 
-const AppleIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden>
-    <path d="M17.05 12.54c-.03-2.4 1.96-3.55 2.05-3.6-1.12-1.63-2.86-1.86-3.48-1.88-1.48-.15-2.89.87-3.64.87-.75 0-1.9-.85-3.13-.83-1.61.02-3.1.94-3.93 2.38-1.67 2.9-.43 7.2 1.2 9.55.8 1.15 1.75 2.45 3 2.4 1.2-.05 1.66-.78 3.12-.78s1.87.78 3.14.75c1.3-.02 2.12-1.17 2.91-2.33.92-1.34 1.3-2.64 1.32-2.7-.03-.02-2.52-.97-2.56-3.83ZM14.6 4.9c.66-.8 1.1-1.92.98-3.03-.95.04-2.1.63-2.78 1.43-.61.7-1.15 1.83-1 2.9 1.06.09 2.14-.5 2.8-1.3Z" />
-  </svg>
-)
-
 const socialBase =
   'flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-theme bg-theme-card px-4 py-3 text-sm font-semibold text-theme-primary transition hover:border-theme-strong hover:bg-theme-card-muted active:scale-[0.99]'
 
@@ -49,7 +43,7 @@ function loadGoogleIdentity() {
  * token and creates/links the account. Apple login requires Apple Developer
  * credentials, so it stays as a notice until configured.
  */
-const SocialLoginButtons = ({ onAuthenticated }) => {
+const SocialLoginButtons = ({ onAuthenticated, onPhoneLogin }) => {
   const { t } = useLanguage()
   const [ notice, setNotice ] = useState('')
   const googleSlotRef = useRef(null)
@@ -93,7 +87,13 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
                 showNotice(t('google_login_failed'))
               }
             } catch (err) {
-              showNotice(formatApiError(err))
+              // Backend may not expose Google sign-in yet — surface that honestly
+              // instead of a generic failure.
+              if (err?.response?.status === 404) {
+                showNotice(t('social_login_unavailable'))
+              } else {
+                showNotice(formatApiError(err))
+              }
             }
           },
         })
@@ -120,14 +120,18 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
       return
     }
     setNotice('')
+    // Without a Google OAuth backend endpoint the sign-in cannot complete —
+    // show an honest notice rather than launching a flow that will 404.
+    if (!GOOGLE_CLIENT_ID) {
+      showNotice(t('social_login_unavailable'))
+      return
+    }
     loadGoogleIdentity()
       .then((google) => {
         google.accounts.id.prompt()
       })
       .catch(() => showNotice(t('google_login_failed')))
   }
-
-  const handleApple = () => showNotice(`${t('continue_with_apple')}: ${t('social_login_unavailable')}`)
 
   return (
     <div>
@@ -145,9 +149,9 @@ const SocialLoginButtons = ({ onAuthenticated }) => {
             <span>{t('continue_with_google')}</span>
           </button>
         )}
-        <button type="button" className={socialBase} onClick={handleApple}>
-          <AppleIcon />
-          <span>{t('continue_with_apple')}</span>
+        <button type="button" className={socialBase} onClick={onPhoneLogin}>
+          <i className="ri-phone-line text-lg text-brand" aria-hidden />
+          <span>{t('phone')} {t('login')}</span>
         </button>
       </div>
       {notice ? (

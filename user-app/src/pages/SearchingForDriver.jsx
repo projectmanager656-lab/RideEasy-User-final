@@ -1,0 +1,1325 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { apiClient, withAuth } from '../services/http'
+import { formatApiError } from '../utils/apiError'
+import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
+import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { useUserData } from '../context/UserContext'
+import { useLanguage } from '../i18n'
+import { tierFare } from '../constants/rideTiers'
+import { useSocket } from '../hooks/useSocket'
+import {
+  readRideSessionId,
+  writeRideSessionId,
+  clearRideSession,
+  isRideStatusFinal,
+  isRideGenuinelyActive,
+} from '../utils/rideSession'
+import RideMap from '../components/RideMap'
+import bikeImg from '../assets/Bike-img-ride.png'
+import autoImg from '../assets/Auto-img-ride.png'
+import carImg from '../assets/Car-img-ride.png'
+import luxuryImg from '../assets/luxury-img-ride.png'
+
+const LOOKING_TIMEOUT_SECONDS = 120
+
+/**
+ * Razorpay Checkout display config scoped to UPI only. On a phone the gateway then
+ * opens the UPI app-intent flow — the passenger picks an installed app (Google Pay,
+ * PhonePe, Paytm, BHIM …) which opens with the exact advance amount prefilled.
+ * Mirrors the wallet top-up checkout config already used in this app.
+ */
+const ADVANCE_UPI_DISPLAY = {
+  blocks: { upi: { name: 'UPI', instruments: [{ method: 'upi' }] } },
+  sequence: ['block.upi'],
+  preferences: { show_default_blocks: false },
+}
+
+/** Gateway/UPI error text that means the device has no usable UPI app installed. */
+const NO_UPI_APP_PATTERN = /no\s+upi|upi\s+app\s+not|app\s+not\s+(found|installed)|no\s+app|not\s+installed|intent/i
+
+function normalizeStatus (s) {
+  return String(s || '').trim().toLowerCase()
+}
+
+function formatPrice (n) {
+  const v = Number(n)
+  if (!Number.isFinite(v) || v <= 0) return null
+  return `₹${v.toFixed(2)}`
+}
+
+/**
+ * Pick the real vehicle photo for the driver card from the tier selected at
+ * booking (e.g. PREMIUM) or the backend vehicle type (BIKE / AUTO / CAR).
+ */
+function vehicleImageFor (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL') return luxuryImg
+  const type = String(backendType || '').toUpperCase()
+  if (type === 'BIKE') return bikeImg
+  if (type === 'AUTO') return autoImg
+  if (type === 'CAR') return carImg
+  return null
+}
+
+/**
+ * Friendly descriptive vehicle label for the driver card — "Auto rickshaw",
+ * "Bike", "Car" or "Premium/Luxury Car" — derived from the booked tier and
+ * the backend vehicle type.
+ */
+function vehicleDetailLabel (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  const type = String(backendType || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL' || type === 'PREMIUM' || type === 'PREMIUM_CAR' || type === 'LUXURY' || type === 'LUXURY_CAR') return 'Premium/Luxury Car'
+  if (tier === 'BIKE' || type === 'BIKE') return 'Bike'
+  if (tier === 'ECONOMY' || type === 'AUTO' || type === 'RICKSHAW') return 'Auto rickshaw'
+  if (tier === 'COMFORT' || type === 'CAR') return 'Car'
+  const raw = String(backendType || 'Ride').replace(/[_-]+/g, ' ').trim()
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+}
+
+/**
+ * Short vehicle label for the fare card — "Auto", "Bike", "Car" or
+ * "Premium/Luxury Car" — derived from the booked tier and backend type.
+ */
+function vehicleShortLabel (tierId, backendType) {
+  const tier = String(tierId || '').toUpperCase()
+  const type = String(backendType || '').toUpperCase()
+  if (tier === 'PREMIUM' || tier === 'XL' || type === 'PREMIUM' || type === 'PREMIUM_CAR' || type === 'LUXURY' || type === 'LUXURY_CAR') return 'Premium/Luxury Car'
+  if (tier === 'BIKE' || type === 'BIKE') return 'Bike'
+  if (tier === 'ECONOMY' || type === 'AUTO' || type === 'RICKSHAW') return 'Auto'
+  if (tier === 'COMFORT' || type === 'CAR') return 'Car'
+  const raw = String(backendType || 'Ride').replace(/[_-]+/g, ' ').trim()
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+}
+
+/** Selectable reasons shown in the cancellation sheet. `key` drives the
+ * translated label shown to the passenger; `label` stays the English value
+ * sent to the backend (existing cancel payload). */
+const CANCEL_REASONS = [
+  { key: 'cancel_reason_accident', label: 'Requested by accident', icon: 'ri-error-warning-line' },
+  { key: 'cancel_reason_wait_time', label: 'Wait time was too long', icon: 'ri-time-line' },
+  { key: 'cancel_reason_wrong_pickup', label: 'Selected wrong pick-up', icon: 'ri-map-pin-user-line' },
+  { key: 'cancel_reason_wrong_vehicle', label: 'Requested wrong vehicle', icon: 'ri-roadster-line' },
+  { key: 'cancel_reason_wrong_drop', label: 'Selected wrong drop-off', icon: 'ri-map-pin-2-line' },
+  { key: 'other', label: 'Other', icon: 'ri-more-2-fill' },
+]
+
+/**
+ * Normalize a vehicle type/tier to the marker asset group: BIKE / AUTO / CAR / PREMIUM.
+ * Accepts tier ids (ECONOMY → AUTO, COMFORT → CAR, PREMIUM/XL → PREMIUM) and
+ * backend type spellings (e.g. RICKSHAW → AUTO, PREMIUM_CAR → PREMIUM).
+ */
+function normalizeVehicleTypeForMarkers (value) {
+  const t = String(value || '').trim().toUpperCase()
+  if (t === 'BIKE') return 'BIKE'
+  if (t === 'ECONOMY' || t === 'AUTO' || t === 'RICKSHAW') return 'AUTO'
+  if (t === 'COMFORT' || t === 'CAR') return 'CAR'
+  if (t === 'PREMIUM' || t === 'LUXURY' || t === 'PREMIUM_CAR' || t === 'XL') return 'PREMIUM'
+  return null
+}
+
+/**
+ * Full-page Uber-style "Searching for Driver" screen entered from Choose Ride.
+ * Map-first layout: the route map fills the screen, compact back + Safety
+ * controls float on it, and a dark rounded bottom sheet carries the searching
+ * status + compact ride summary + Cancel Ride. Reuses the same REST polling +
+ * Socket.IO status flow used by Home. Ride creation stays in ChooseRide
+ * (single POST /rides/create) — this page only monitors it.
+ */
+const SearchingForDriver = () => {
+  const { t } = useLanguage()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const state = location.state || {}
+
+  /**
+   * A ride handed over by the booking flow is already backend-confirmed, so it may
+   * open tracking immediately. A bare id restored from session storage is only a
+   * HINT — it must be confirmed with GET /rides/:id before this screen may show
+   * "Looking for a driver", and must be cleared when the ride is not genuinely active.
+   */
+  const navRide = state.ride && state.ride._id ? state.ride : null
+  const [rideId] = useState(() => navRide?._id || readRideSessionId() || null)
+  const [ride, setRide] = useState(() => (navRide ? { ...navRide } : null))
+  /** True once the ride is confirmed (handed over by booking, or fetched from the backend). */
+  const [rideResolved, setRideResolved] = useState(Boolean(navRide))
+
+  /** Passed-through details from the Choose Ride screen (fall back to ride fields). */
+  const pickup = normalizeLocationText(state.pickup || ride?.pickupLocation, '')
+  const destination = normalizeLocationText(state.destination || ride?.dropLocation, '')
+  const vehicleType = state.vehicleType || ride?.vehicleType || null
+  const rideTierId = state.tierId || null
+  const fare = state.price != null ? state.price : (ride?.price ?? ride?.fare ?? null)
+
+  const [pickupCoords, setPickupCoords] = useState(state.pickupCoords || null)
+  const [dropCoords, setDropCoords] = useState(state.dropCoords || null)
+
+  /** Fill map coords from the fetched ride (GeoJSON) when arriving without navigation state. */
+  const applyGeoFromRide = (o) => {
+    const pc = o?.pickup?.coordinates
+    const dc = o?.drop?.coordinates
+    if (Array.isArray(pc) && pc.length === 2) {
+      setPickupCoords((prev) => prev || { lat: Number(pc[1]), lng: Number(pc[0]) })
+    }
+    if (Array.isArray(dc) && dc.length === 2) {
+      setDropCoords((prev) => prev || { lat: Number(dc[1]), lng: Number(dc[0]) })
+    }
+  }
+
+  const [rideConfirmation, setRideConfirmation] = useState(null)
+  const [cancelError, setCancelError] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelSheetOpen, setCancelSheetOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  /** Paying the 25% advance for this ride (Wallet rail, or the UPI intent checkout). */
+  const [payingAdvance, setPayingAdvance] = useState(false)
+  const [advancePayError, setAdvancePayError] = useState('')
+  /** Guards the button so repeated taps cannot open two checkouts / start two charges. */
+  const advanceInFlightRef = useRef(false)
+  /** Passenger OTP — backend only returns it once status is accepted/arrived. */
+  const [passengerOtp, setPassengerOtp] = useState('')
+  /** 2 minute overall driver search timeout */
+  const [searchTimeLeft, setSearchTimeLeft] = useState(LOOKING_TIMEOUT_SECONDS)
+  const [searchAgainModalOpen, setSearchAgainModalOpen] = useState(false)
+  const searchTimeoutHandledRef = useRef(false)
+  /** Guard so a single "started" event can't fire duplicate /riding navigations. */
+  const startedHandledRef = useRef(null)
+  const missingRideHandledRef = useRef(false)
+
+  const socket = useSocket()
+  const rideIdRef = useRef(null)
+  rideIdRef.current = rideId
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
+
+  /**
+   * Persist the ride id ONLY once a genuinely active ride has been confirmed, so a
+   * stale id can never re-seed itself into session storage just by opening this
+   * screen (the old mount-time write kept a dead ride alive across reloads).
+   */
+  useEffect(() => {
+    if (!rideId || !rideResolved) return
+    writeRideSessionId(rideId)
+  }, [rideId, rideResolved])
+
+  /** Join the passenger room so status/location events reach this page (also after a refresh). */
+  const { user: currentUser } = useUserData()
+  useEffect(() => {
+    if (!socket || !currentUser?._id) return
+    const uid = String(currentUser._id)
+    const emitJoin = () => socket.emit('join', { userType: 'user', userId: uid })
+    emitJoin()
+    socket.on('connect', emitJoin)
+    return () => {
+      socket.off('connect', emitJoin)
+    }
+  }, [socket, currentUser?._id])
+
+  /** Missing ride — nothing to search for. */
+  useEffect(() => {
+    if (rideId) return
+    navigate('/home', { replace: true })
+  }, [rideId, navigate])
+
+  /**
+   * One-shot live fetch. When the ride was handed over by the booking flow it only
+   * refreshes state; when it came from the storage hint it is the CONFIRMATION step —
+   * the tracking screen may only render once the backend reports a genuinely active
+   * ride. A final status, an unconfirmable hint, a 404 or any failed fetch clears the
+   * stale id and leaves tracking, instead of leaving "Looking for a driver" on screen.
+   */
+  useEffect(() => {
+    if (!rideId) return
+    let cancelled = false
+    const fromBooking = Boolean(state.ride?._id)
+    /** Clear the stale pointer and leave tracking — at most once. */
+    const leaveTracking = () => {
+      if (missingRideHandledRef.current) return
+      missingRideHandledRef.current = true
+      clearRideSession()
+      navigateRef.current('/home', { replace: true })
+    }
+    apiClient.get(`/rides/${rideId}`, withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const o = stripApiEnvelope(res.data)
+        const status = normalizeStatus(o.status)
+        const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
+        /**
+         * A stored hint must resolve to a GENUINELY active ride (`isRideGenuinelyActive`
+         * already rejects expired searches) before it may keep tracking. A ride handed
+         * over by navigation is already backend-confirmed — a terminal status still ends
+         * tracking, but a live search is left to the existing 120s timeout / "No Driver
+         * Found" fallback rather than being bounced home immediately.
+         */
+        const unresolvedHint = !fromBooking && !isRideGenuinelyActive(o)
+        if (isRideStatusFinal(status) || unresolvedHint) {
+          console.warn('[ride socket] stale ride — leaving tracking', { rideId, status })
+          leaveTracking()
+          return
+        }
+        setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        if (conf) setRideConfirmation(conf)
+        applyGeoFromRide(o)
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        setRideResolved(true)
+        console.info('[ride socket] ride confirmed', { rideId, status })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const httpStatus = err?.response?.status
+        console.warn('[ride socket] ride fetch failed', { rideId, status: httpStatus || 'network' })
+        // A ride handed over by booking is trusted and may still be retried by polling;
+        // an unconfirmable STORED id must be cleared rather than trusted.
+        if (fromBooking) return
+        leaveTracking()
+      })
+    return () => { cancelled = true }
+  }, [rideId, state.ride?._id])
+
+  /** Socket status events — mirrors Home.jsx handlers (OTP only arrives via REST). */
+  useEffect(() => {
+    if (!socket || !rideId) return
+
+    const handleAccepted = (payload) => {
+      const rideDoc = payload?.ride != null ? payload.ride : (payload?._id ? payload : null)
+      const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
+      const eventRid = rideDoc?._id != null ? String(rideDoc._id) : ''
+      console.info('[ride socket] event', { event: RIDE_ACCEPTED, rideId: eventRid || currentRid })
+      if (!rideDoc || eventRid !== currentRid) {
+        if (eventRid && currentRid && eventRid !== currentRid) {
+          console.info('[ride socket] ignored stale ride event', { event: RIDE_ACCEPTED, eventRideId: eventRid, currentRideId: currentRid })
+        }
+        return
+      }
+      setRide((prev) => ({ ...(prev || {}), ...rideDoc }))
+      if (payload?.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...payload.confirmation }))
+      const otpVal = payload?.confirmation?.otp ?? payload?.otp
+      if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+    }
+
+    const handleStatusUpdate = (data) => {
+      if (!data?.status) return
+      const incomingRid = data?.rideId != null ? String(data.rideId) : ''
+      const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
+      console.info('[ride socket] event', { event: 'ride:status-update', rideId: incomingRid || currentRid, status: data.status })
+      /** Never let a different/stale ride drive this screen's UI. */
+      if (incomingRid && currentRid && incomingRid !== currentRid) {
+        console.info('[ride socket] ignored stale ride event', { event: 'ride:status-update', eventRideId: incomingRid, currentRideId: currentRid })
+        return
+      }
+      if (data.status === 'started') {
+        if (startedHandledRef.current === currentRid) return
+        startedHandledRef.current = currentRid
+        const nextRide = data.ride
+          ? { ...data.ride, status: 'started' }
+          : { _id: currentRid, status: 'started' }
+        navigateRef.current('/riding', { state: { ride: nextRide } })
+        return
+      }
+      /**
+       * The `arrived` event carries the passenger OTP inside `confirmation`
+       * (emitted only to this passenger's private socket room). Capture it here so
+       * the PIN appears the moment the driver arrives — no refresh needed.
+       * Side effects are kept OUT of the setRide updater so React can safely
+       * re-invoke it (updaters must stay pure).
+       */
+      if (data.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
+      const otpVal = data.confirmation?.otp ?? data.otp
+      if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      /** Any terminal status ends tracking here — clear the pointer and move on. */
+      if (isRideStatusFinal(data.status)) {
+        clearRideSession()
+        if (data.status === 'completed') {
+          navigateRef.current('/riding', { state: { ride: { ...(data.ride || { _id: currentRid }), status: 'completed' } } })
+        } else {
+          navigateRef.current('/home', { replace: true })
+        }
+        return
+      }
+      setRide((prev) => {
+        const base = { ...(prev || {}) }
+        return data.ride
+          ? { ...base, ...data.ride, status: data.status }
+          : { ...base, status: data.status }
+      })
+    }
+
+    const handleLocationUpdate = (payload) => {
+      if (!payload || payload.source === 'passenger') return
+      const incomingRid = payload?.rideId != null ? String(payload.rideId) : ''
+      const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
+      if (incomingRid && currentRid && incomingRid !== currentRid) {
+        console.info('[ride socket] ignored stale ride event', { event: LOCATION_UPDATE, eventRideId: incomingRid, currentRideId: currentRid })
+        return
+      }
+      if (payload.lat != null && payload.lng != null) {
+        setRideConfirmation((prev) => ({ ...(prev || {}), liveLocation: { lat: Number(payload.lat), lng: Number(payload.lng) } }))
+      }
+    }
+
+    const handleRideStarted = (payload) => {
+      handleStatusUpdate({
+        rideId: payload?.rideId,
+        status: 'started',
+        ride: payload?.ride,
+        confirmation: payload?.confirmation,
+      })
+    }
+
+    const handleRideCompleted = (payload) => {
+      handleStatusUpdate({
+        rideId: payload?.rideId,
+        status: 'completed',
+        ride: payload?.ride,
+      })
+    }
+
+    socket.on(RIDE_ACCEPTED, handleAccepted)
+    socket.on(RIDE_STARTED, handleRideStarted)
+    socket.on(RIDE_COMPLETED, handleRideCompleted)
+    socket.on(LOCATION_UPDATE, handleLocationUpdate)
+    socket.on('ride:status-update', handleStatusUpdate)
+
+    return () => {
+      socket.off(RIDE_ACCEPTED, handleAccepted)
+      socket.off(RIDE_STARTED, handleRideStarted)
+      socket.off(RIDE_COMPLETED, handleRideCompleted)
+      socket.off(LOCATION_UPDATE, handleLocationUpdate)
+      socket.off('ride:status-update', handleStatusUpdate)
+      console.info('[ride socket] listeners cleaned', { rideId: rideIdRef.current })
+    }
+  }, [socket, rideId])
+
+  /**
+   * Authoritative OTP re-sync. If the ride is `arrived` but the socket payload did
+   * not deliver the PIN (partial payload / event race), read the ride once from the
+   * backend — the same source the mount-fetch and refresh use — and apply it.
+   * Read-only: `GET /rides/:id` only decrypts the existing PIN, it never mints a new
+   * one. Runs at most once per arrival because `passengerOtp` short-circuits it.
+   */
+  useEffect(() => {
+    if (!rideId || passengerOtp) return
+    if (normalizeStatus(ride?.status) !== 'arrived') return
+    let cancelled = false
+    apiClient.get(`/rides/${rideId}`, withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const o = stripApiEnvelope(res.data)
+        const conf = o.confirmation && typeof o.confirmation === 'object' ? o.confirmation : null
+        if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [rideId, ride?.status, passengerOtp])
+
+  /**
+   * Poll ride status while searching (8s) / after assignment (5s).
+   * The same REST response carries the driver details + passenger OTP, and is
+   * also the source of truth for advancing to the live-ride page once the
+   * server confirms `started`.
+   */
+  useEffect(() => {
+    if (!rideId || searchAgainModalOpen) return
+    const st = normalizeStatus(ride?.status)
+    if (st === 'completed') return
+    if (st === 'cancelled') {
+      clearRideSession()
+      navigateRef.current('/home', { replace: true })
+      return
+    }
+    const isActive = !st || st === 'searching'
+    const intervalMs = isActive ? 8000 : 5000
+
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const res = await apiClient.get(`/rides/${rideId}`, withAuth())
+        if (cancelled) return
+        const o = stripApiEnvelope(res.data)
+        const dst = normalizeStatus(o.status)
+        if (dst === 'completed') {
+          clearRideSession()
+          navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'completed' } } })
+          return
+        }
+        if (isRideStatusFinal(dst)) {
+          clearRideSession()
+          navigateRef.current('/home', { replace: true })
+          return
+        }
+        if (dst === 'started') {
+          if (startedHandledRef.current === rideId) return
+          startedHandledRef.current = rideId
+          navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'started' } } })
+          return
+        }
+        setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
+        if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+        applyGeoFromRide(o)
+        const otpVal = o.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      } catch (err) {
+        if (err?.response?.status !== 404 || missingRideHandledRef.current) return
+        missingRideHandledRef.current = true
+        clearRideSession()
+        navigateRef.current('/home', { replace: true })
+      }
+    }
+
+    tick()
+    const id = setInterval(tick, intervalMs)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [rideId, ride?.status, searchAgainModalOpen])
+
+  /** Open the cancellation sheet (never navigates away by itself). */
+  const openCancelSheet = useCallback(() => {
+    setCancelError('')
+    setCancelReason('')
+    setCancelSheetOpen(true)
+  }, [])
+
+  const closeCancelSheet = useCallback(() => {
+    if (cancelling) return
+    setCancelSheetOpen(false)
+  }, [cancelling])
+
+  /** Actual cancellation via the existing backend endpoint, then return home. */
+  const performCancel = useCallback(async () => {
+    if (!rideId || cancelling) return
+    setCancelling(true)
+    setCancelError('')
+    try {
+      await apiClient.patch(`/rides/${rideId}/cancel`, { reason: cancelReason || 'Cancelled by passenger' }, withAuth())
+    } catch (err) {
+      /**
+       * 409 = the ride is no longer cancellable. NEVER retry the cancel; read the real
+       * status once and route by it (final → leave tracking, otherwise show the error).
+       */
+      if (err?.response?.status === 409) {
+        try {
+          const res = await apiClient.get(`/rides/${rideId}`, withAuth())
+          const o = stripApiEnvelope(res.data)
+          const dst = normalizeStatus(o.status)
+          if (isRideStatusFinal(dst)) {
+            clearRideSession()
+            setCancelSheetOpen(false)
+            setCancelling(false)
+            if (dst === 'completed') {
+              navigate('/riding', { replace: true, state: { ride: { ...(o || {}), status: 'completed' } } })
+            } else {
+              navigate('/home', { replace: true })
+            }
+            return
+          }
+          setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        } catch {
+          /* fall through to the error banner */
+        }
+      }
+      setCancelError(formatApiError(err))
+      setCancelling(false)
+      return
+    }
+    clearRideSession()
+    setCancelSheetOpen(false)
+    navigate('/home', { replace: true })
+  }, [rideId, cancelling, cancelReason, navigate])
+
+  const goBack = useCallback(() => {
+    navigate('/home', { replace: true })
+  }, [navigate])
+
+  const openSafety = useCallback(() => {
+    navigate('/safety')
+  }, [navigate])
+
+  const status = normalizeStatus(ride?.status)
+  /** Only a backend-confirmed active ride may render the "Looking for a driver" sheet. */
+  const isSearching = rideResolved && (!status || status === 'searching')
+  const isAssigned = rideResolved && status === 'accepted'
+  const isArrived = rideResolved && status === 'arrived'
+
+  // Sync remaining search seconds from when the search actually began.
+  // A scheduled ride is created hours earlier, so `createdAt` would make the
+  // window look already expired the moment the backend dispatches it.
+  useEffect(() => {
+    const searchStartedAt = ride?.searchStartedAt || ride?.createdAt
+    if (searchStartedAt && isSearching) {
+      const elapsed = Math.floor((Date.now() - new Date(searchStartedAt).getTime()) / 1000)
+      setSearchTimeLeft(Math.max(0, LOOKING_TIMEOUT_SECONDS - Math.max(0, elapsed)))
+    }
+  }, [ride?.searchStartedAt, ride?.createdAt, isSearching])
+
+  // Count down 2 minutes overall search time
+  useEffect(() => {
+    if (!isSearching || !rideId || searchAgainModalOpen) return
+
+    const timer = setInterval(() => {
+      setSearchTimeLeft((prev) => Math.max(0, prev - 1))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isSearching, rideId, searchAgainModalOpen])
+
+  // After 2 minutes (120s) of searching, surface the "search ride again" popup.
+  // Nothing is cancelled here: mounting this screen must never call
+  // PATCH /rides/:id/cancel on its own. The ride keeps its real backend state and
+  // keeps searching; only the user's explicit Cancel (performCancel) cancels it.
+  useEffect(() => {
+    if (searchTimeLeft === 0 && isSearching && rideId && !searchTimeoutHandledRef.current) {
+      searchTimeoutHandledRef.current = true
+      clearRideSession()
+      setCancelSheetOpen(false)
+      setSearchAgainModalOpen(true)
+    }
+  }, [searchTimeLeft, isSearching, rideId])
+
+  const handleSearchAgain = useCallback(() => {
+    clearRideSession()
+    navigate('/choose-ride', {
+      replace: true,
+      state: {
+        pickup,
+        destination,
+        pickupCoords,
+        dropCoords,
+        vehicleType,
+        tierId: rideTierId,
+      },
+    })
+  }, [navigate, pickup, destination, pickupCoords, dropCoords, vehicleType, rideTierId])
+
+  const handleCloseSearchAgainModal = useCallback(() => {
+    clearRideSession()
+    navigate('/home', { replace: true })
+  }, [navigate])
+
+  const price = fare ?? tierFare(vehicleType)
+  const confirmation = rideConfirmation
+  const captain = ride?.captain
+  const driverName = confirmation?.driverName || captain?.name || t('your_driver')
+  const driverPhone = confirmation?.driverPhone || captain?.phone || ''
+  const driverRating = confirmation?.driverRating != null ? Number(confirmation.driverRating) : null
+  /** Driver photo — only shown when the backend actually provides one. */
+  const driverPhoto = confirmation?.driverPhoto || captain?.photo || captain?.avatar || ''
+  /** Vehicle type + number plate — show only what the backend actually provides. */
+  const vehicleTypeText = confirmation?.vehicleType || ride?.vehicleType || captain?.vehicleType || ''
+  const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || ''
+  const tripCount = confirmation?.tripCount != null ? Number(confirmation.tripCount) : null
+  const vehicleImage = vehicleImageFor(rideTierId, vehicleType)
+  /** Card 1 type line (descriptive) + Card 3 fare row (short) labels.
+   * Localize a known vehicle label; unknown backend type tokens pass through untranslated. */
+  const vehicleLabelText = (label) => {
+    switch (label) {
+      case 'Premium/Luxury Car': return t('vehicle_premium_luxury_car')
+      case 'Bike': return t('bike')
+      case 'Auto rickshaw': return t('vehicle_auto_rickshaw')
+      case 'Auto': return t('auto')
+      case 'Car': return t('car')
+      default: return label
+    }
+  }
+  const driverCardVehicleLabel = vehicleLabelText(vehicleDetailLabel(rideTierId, vehicleTypeText))
+  const fareCardVehicleLabel = vehicleLabelText(vehicleShortLabel(rideTierId, vehicleTypeText))
+  /** 25% advance (UPI) payment split — computed from the actual ride total. */
+  const totalFareNum = Math.max(0, Number(price) - Number(ride?.discountAmount || 0))
+  const advanceAmount = Number(ride?.advanceAmount) > 0
+    ? Number(ride.advanceAmount)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 0.25) : 0)
+  const remainingAmount = Number(ride?.remainingAmount) > 0
+    ? Number(ride.remainingAmount)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
+  const advancePaid = ride?.advancePaymentStatus === 'success'
+  /** UPI / Online rides must clear the advance before the trip can start — enforced by the backend. */
+  const advanceRequiredToStart = ride?.paymentMethod === 'UPI' || ride?.paymentMethod === 'Online'
+  /** Advance section appears once a driver is assigned — applies to every
+     payment method, replacing the old Cash-only "pay at end" behavior. */
+  const showAdvanceSection = !isSearching
+
+  const messageDriver = useCallback((phone) => {
+    const digits = String(phone || '').replace(/[^+\d]/g, '')
+    if (!digits) return
+    window.location.href = `sms:${digits}`
+  }, [])
+  const callDriver = useCallback((phone) => {
+    const digits = String(phone || '').replace(/[^+\d]/g, '')
+    if (!digits) return
+    window.location.href = `tel:${digits}`
+  }, [])
+
+  /**
+   * Pay the server-derived 25% advance on the rail the passenger selected.
+   *
+   * Wallet and Cash keep their existing rails. UPI / Online open the Razorpay UPI
+   * app-intent checkout, so an installed UPI app receives the payee, the exact
+   * advance amount and the note — the passenger only reviews and enters their PIN.
+   * Returning from that app is NOT proof of payment: the backend verifies the
+   * signature and the payment itself before the advance is marked paid.
+   */
+  const payAdvance = useCallback(async () => {
+    if (!rideId || advanceInFlightRef.current || advancePaid) return
+    setAdvancePayError('')
+
+    /** Wallet — existing rail, unchanged. */
+    if (ride?.paymentMethod === 'Wallet') {
+      setPayingAdvance(true)
+      try {
+        const res = await apiClient.post('/rides/pay-wallet', { rideId, part: 'advance' }, withAuth())
+        const o = stripApiEnvelope(res.data)
+        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      } catch (err) {
+        setAdvancePayError(formatApiError(err))
+      } finally {
+        setPayingAdvance(false)
+      }
+      return
+    }
+
+    /** Cash — no online rail; the existing recorder stays as the advance fallback. */
+    if (ride?.paymentMethod !== 'UPI' && ride?.paymentMethod !== 'Online') {
+      setPayingAdvance(true)
+      try {
+        const res = await apiClient.post(
+          '/rides/pay-mock',
+          { rideId, method: ride?.paymentMethod || 'Cash', part: 'advance' },
+          withAuth(),
+        )
+        const o = stripApiEnvelope(res.data)
+        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      } catch (err) {
+        setAdvancePayError(formatApiError(err))
+      } finally {
+        setPayingAdvance(false)
+      }
+      return
+    }
+
+    if (!window.Razorpay) {
+      setAdvancePayError(t('advance_gateway_missing'))
+      return
+    }
+
+    advanceInFlightRef.current = true
+    setPayingAdvance(true)
+    try {
+      const orderRes = await apiClient.post(
+        `/rides/${rideId}/create-razorpay-order`,
+        { part: 'advance' },
+        withAuth(),
+      )
+      const order = stripApiEnvelope(orderRes.data)
+
+      /** The backend already verified this advance — nothing left to charge. */
+      if (order?.alreadyPaid) {
+        if (order.ride) setRide((prev) => ({ ...(prev || {}), ...order.ride, _id: order.ride._id || prev?._id }))
+        advanceInFlightRef.current = false
+        setPayingAdvance(false)
+        return
+      }
+
+      const orderId = order?.orderId
+      const keyId = order?.keyId
+      const orderAmount = Number(order?.amount)
+      if (!orderId || !keyId || !Number.isFinite(orderAmount) || orderAmount <= 0) {
+        throw new Error(t('advance_order_failed'))
+      }
+
+      const checkout = new window.Razorpay({
+        key: keyId,
+        order_id: orderId,
+        amount: Math.round(orderAmount * 100),
+        currency: order?.currency || 'INR',
+        name: 'RideEasy',
+        description: 'RideEasy 25% Ride Advance',
+        notes: { rideId: String(rideId), paymentType: 'ride_fare', part: 'advance' },
+        /** UPI only, so the gateway opens the installed UPI app / app chooser. */
+        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
+        config: { display: ADVANCE_UPI_DISPLAY },
+        theme: { color: '#FFD000' },
+        handler: async (paymentResponse) => {
+          try {
+            setAdvancePayError('')
+            const verifyRes = await apiClient.post(
+              `/rides/${rideId}/verify-razorpay-payment`,
+              {
+                razorpayOrderId: paymentResponse?.razorpay_order_id,
+                razorpayPaymentId: paymentResponse?.razorpay_payment_id,
+                razorpaySignature: paymentResponse?.razorpay_signature,
+                part: 'advance',
+              },
+              withAuth(),
+            )
+            const verified = stripApiEnvelope(verifyRes.data)
+            const verifiedRide = verified?.ride || verified
+            if (verifiedRide?._id) setRide((prev) => ({ ...(prev || {}), ...verifiedRide }))
+          } catch (err) {
+            setAdvancePayError(formatApiError(err))
+          } finally {
+            advanceInFlightRef.current = false
+            setPayingAdvance(false)
+          }
+        },
+        modal: {
+          /** Closed without a verified payment — stays unpaid, so a retry is possible. */
+          ondismiss: () => {
+            advanceInFlightRef.current = false
+            setPayingAdvance(false)
+          },
+        },
+      })
+
+      checkout.on('payment.failed', (failure) => {
+        advanceInFlightRef.current = false
+        setPayingAdvance(false)
+        const description = String(failure?.error?.description || '')
+        setAdvancePayError(
+          NO_UPI_APP_PATTERN.test(description) ? t('advance_upi_app_missing') : (description || t('payment_failed')),
+        )
+      })
+
+      checkout.open()
+    } catch (err) {
+      setAdvancePayError(formatApiError(err))
+      advanceInFlightRef.current = false
+      setPayingAdvance(false)
+    }
+  }, [rideId, advancePaid, ride?.paymentMethod, t])
+
+  /** Only the vehicle type the passenger selected is relevant to the map marker. */
+  const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
+  const distanceTimeRequestRef = useRef('')
+
+  const hasValidPickup = pickupCoords?.lat != null && pickupCoords?.lng != null
+    && String(pickupCoords.lat).trim() !== '' && String(pickupCoords.lng).trim() !== ''
+    && Number.isFinite(Number(pickupCoords.lat)) && Number.isFinite(Number(pickupCoords.lng))
+  const hasValidDestination = dropCoords?.lat != null && dropCoords?.lng != null
+    && String(dropCoords.lat).trim() !== '' && String(dropCoords.lng).trim() !== ''
+    && Number.isFinite(Number(dropCoords.lat)) && Number.isFinite(Number(dropCoords.lng))
+
+  /** Estimated connection time while searching (best-effort, non-blocking). */
+  const [etaText, setEtaText] = useState('')
+  useEffect(() => {
+    if (!isSearching || !hasValidPickup || !hasValidDestination || !String(pickup).trim() || !String(destination).trim()) {
+      setEtaText('')
+      return
+    }
+    let cancelled = false
+    const eta = confirmation?.eta || confirmation?.etaMinutes
+    if (eta != null) {
+      setEtaText(typeof eta === 'number' ? `${Math.max(1, Math.round(eta))} min` : String(eta))
+      return
+    }
+    if (confirmation?.liveLocation?.lat != null && confirmation?.liveLocation?.lng != null) return
+    const requestKey = `${pickup}|${destination}|${pickupCoords.lat},${pickupCoords.lng}|${dropCoords.lat},${dropCoords.lng}`
+    if (distanceTimeRequestRef.current === requestKey) return
+    distanceTimeRequestRef.current = requestKey
+    apiClient.get('/maps/get-distance-time', withAuth({
+      params: { origin: pickup, destination },
+    }))
+      .then((res) => {
+        if (cancelled) return
+        const d = stripApiEnvelope(res.data)
+        const etaMin = d?.etaMinutes ?? d?.etaMin ?? d?.eta ?? d?.durationMin ?? d?.minutes
+        if (etaMin != null && Number.isFinite(Number(etaMin)) && Number(etaMin) > 0) {
+          setEtaText(`${Math.max(1, Math.round(Number(etaMin)))} min`)
+        }
+      })
+      .catch(() => { /* best-effort only */ })
+    return () => { cancelled = true }
+  }, [isSearching, hasValidPickup, hasValidDestination, pickup, destination, pickupCoords?.lat, pickupCoords?.lng, dropCoords?.lat, dropCoords?.lng, confirmation?.eta, confirmation?.etaMinutes, confirmation?.liveLocation?.lat, confirmation?.liveLocation?.lng])
+
+  /** Live driver pin used once a driver is assigned/arrived (socket + polling feed it). */
+  const liveDriverCoords = confirmation?.liveLocation || null
+
+  /**
+   * Nearby vehicles around the pickup while searching.
+   *
+   * The backend publishes no nearby-driver coordinates, so these are a purely
+   * cosmetic searching indicator of the ride type the passenger picked. They are
+   * dropped the moment a driver is assigned (or a live location arrives), so a
+   * simulated marker can never be read as the assigned driver.
+   */
+  const nearbySearch = isSearching && !liveDriverCoords && hasValidPickup
+    ? {
+        lat: Number(pickupCoords.lat),
+        lng: Number(pickupCoords.lng),
+        vehicleType: selectedMarkerType || 'AUTO',
+        seed: String(rideId || 'searching'),
+      }
+    : null
+
+  const sheetHeading = isSearching
+    ? t('looking_for_driver')
+    : (isArrived ? t('driver_has_arrived') : t('your_driver_is_coming'))
+  const sheetMessage = isSearching
+    ? t('connecting_with_nearby_driver')
+    : (isArrived ? t('driver_is_at_pickup', { driverName }) : t('driver_on_the_way', { driverName }))
+
+  const mapShown = useMemo(() => !!pickupCoords || !!dropCoords, [pickupCoords, dropCoords])
+
+  /**
+   * The ride was only a stored hint and the backend has not confirmed it yet — do NOT
+   * render the tracking sheet (that is the stale "Looking for a driver" screen). The
+   * confirmation effect above either resolves to a real ride or navigates away.
+   */
+  if (!rideResolved) return null
+
+  return (
+    <div className={`relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary ${isSearching ? '' : 'min-h-0'}`}>
+      {/* Map is the primary visual area — route + nearby vehicles while searching */}
+      {mapShown && (
+        <div className={isSearching ? 'absolute inset-0 z-0' : 'relative z-0 h-[44dvh] min-h-[270px] shrink-0'}>
+          <RideMap
+            pickupCoords={pickupCoords}
+            dropCoords={dropCoords}
+            driverCoords={liveDriverCoords}
+            driverVehicleType={selectedMarkerType}
+            nearbySearch={nearbySearch}
+            showRoute={!!(pickupCoords && dropCoords)}
+            showRouteStatsChip={false}
+            showTrackingEta={false}
+            zoomControlPosition="bottomleft"
+            trackingFrom={(isAssigned || isArrived) && liveDriverCoords?.lat != null && pickupCoords?.lat != null ? liveDriverCoords : null}
+            trackingTo={(isAssigned || isArrived) && liveDriverCoords?.lat != null && pickupCoords?.lat != null ? pickupCoords : null}
+          />
+        </div>
+      )}
+
+      {/* Compact floating controls on the map */}
+      <div className="pointer-events-none absolute inset-0 z-30">
+        <div className="mx-auto flex h-full w-full max-w-[430px] flex-col">
+          <div className="flex shrink-0 items-center justify-between px-3 pb-0 pt-3">
+            <button
+              type="button"
+              onClick={goBack}
+              aria-label={t('back_to_home')}
+              className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full border border-theme bg-theme-bg/90 text-theme-primary shadow-lg backdrop-blur-sm active:scale-95"
+            >
+              <i className="ri-arrow-left-line text-lg" aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={openSafety}
+              aria-label={t('safety')}
+              className="pointer-events-auto flex h-10 items-center gap-2 rounded-full border border-theme bg-theme-bg/90 px-3.5 text-sm font-semibold text-brand-yellow shadow-lg backdrop-blur-sm active:scale-95"
+            >
+              <i className="ri-shield-check-line text-base" aria-hidden />
+              {t('safety')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Dark rounded bottom sheet */}
+      <div className={isSearching ? 'absolute inset-x-0 bottom-0 z-40' : 'relative z-40 min-h-0 flex-1'}>
+        <div className={`mx-auto max-w-[430px] border-t border-theme bg-theme-card pb-[max(env(safe-area-inset-bottom,0px),12px)] shadow-[0_-8px_40px_rgba(0,0,0,0.45)] ${isSearching ? 'rounded-t-[28px]' : 'flex h-full flex-col rounded-t-[28px]'}`}>
+          <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-muted" aria-hidden />
+
+          <div className={`${isSearching ? 'max-h-[55dvh]' : 'min-h-0 flex-1'} overflow-y-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
+            {/* Status header */}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-bold text-theme-primary">{sheetHeading}</h2>
+                <p className="mt-0.5 text-sm text-theme-secondary">{sheetMessage}</p>
+                {isSearching && etaText && (
+                  <p className="mt-1 text-xs text-theme-muted">
+                    <i className="ri-time-line mr-1 align-[-1px]" aria-hidden />
+                    {t('usually_connects_in_about', { eta: etaText })}
+                  </p>
+                )}
+                {!isSearching && confirmation?.eta && (
+                  <p className="mt-1 text-xs text-theme-muted">
+                    <i className="ri-time-line mr-1 align-[-1px]" aria-hidden />
+                    {t('driver_eta', { eta: confirmation.eta })}
+                  </p>
+                )}
+              </div>
+              {isSearching ? (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15" aria-hidden>
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-brand-yellow border-t-transparent" />
+                </span>
+              ) : (
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/15" aria-hidden>
+                  <i className="ri-roadster-line text-lg text-emerald-400" />
+                </span>
+              )}
+            </div>
+
+            {/* Subtle progress indicator */}
+            {isSearching && (
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-theme-card-muted">
+                <div
+                  className="h-full rounded-full bg-brand-yellow transition-all duration-1000 ease-linear"
+                  style={{ width: `${Math.max(0, Math.min(100, (searchTimeLeft / LOOKING_TIMEOUT_SECONDS) * 100))}%` }}
+                />
+              </div>
+            )}
+
+            {/* Assignment / error banners */}
+            {isAssigned && (
+              <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+                {t('driver_assigned_track')}
+              </div>
+            )}
+            {isArrived && (
+              <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+                {t('driver_arrived_at_pickup')}
+              </div>
+            )}
+            {cancelError && (
+              <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {cancelError}
+              </div>
+            )}
+
+            {/* Share PIN / OTP — shown once a driver accepts (ready to share with the driver); matched to the accepted-state sync and the LookingForDriver sheet */}
+            {!isSearching && passengerOtp && (
+              <div className="mt-4 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
+                  <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
+                  {t('share_pin')}
+                </p>
+                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title={t('otp_share_instruction')}>
+                  {passengerOtp}
+                </p>
+                <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
+              </div>
+            )}
+
+            {/* Card 1 — Assigned / arrived: driver + vehicle details */}
+            {!isSearching && (
+              <div className="mt-3 rounded-xl border border-theme bg-theme-card p-3">
+                {/* Top row — driver info on the left, vehicle image + plate on the right */}
+                <div className="flex items-center gap-3">
+                  {driverPhoto ? (
+                    <img
+                      src={driverPhoto}
+                      alt={driverName}
+                      className="h-14 w-14 shrink-0 rounded-full border border-theme object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-bold text-brand-yellow" aria-hidden>
+                      {driverName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-muted">{t('your_driver')}</p>
+                    <h4 className="truncate text-base font-semibold capitalize text-theme-primary">{driverName}</h4>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-theme-secondary">
+                      {driverPhone && (
+                        <span>{driverPhone}</span>
+                      )}
+                      {tripCount != null && Number.isFinite(tripCount) && tripCount > 0 && (
+                        <span>{t('trips_count', { count: tripCount })}</span>
+                      )}
+                      {driverRating != null && Number.isFinite(driverRating) && driverRating > 0 && (
+                        <span className="ml-1 text-amber-400">
+                          <i className="ri-star-fill" aria-hidden /> {driverRating.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Vehicle image on the right side of the driver info — clean, no badge */}
+                  <div className="shrink-0">
+                    {vehicleImage ? (
+                      <img
+                        src={vehicleImage}
+                        alt={driverCardVehicleLabel}
+                        draggable={false}
+                        className="h-16 w-20 object-contain"
+                      />
+                    ) : (
+                      <i className="ri-roadster-line text-3xl text-brand-yellow" aria-hidden />
+                    )}
+                  </div>
+                </div>
+
+                {/* Vehicle type row — icon + vehicle type with the number plate after it */}
+                <div className="mt-4 flex items-center gap-2 rounded-xl bg-theme-card-muted px-3 py-2.5">
+                  <i className="ri-roadster-line text-lg text-brand-yellow" aria-hidden />
+                  <span className="truncate text-sm font-semibold text-theme-primary">{driverCardVehicleLabel}</span>
+                  {vehicleNumber && (
+                    <span className="ml-3 font-mono text-sm font-semibold tracking-wider text-theme-primary">{vehicleNumber}</span>
+                  )}
+                </div>
+
+                {/* Message + Call actions — hidden (non-breaking) when no phone exists */}
+                {driverPhone && (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => messageDriver(driverPhone)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2.5 text-sm font-semibold text-theme-primary transition active:scale-[0.99]"
+                    >
+                      <i className="ri-chat-3-line text-base text-brand-yellow" aria-hidden />
+                      {t('message')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => callDriver(driverPhone)}
+                      className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-sm font-semibold text-emerald-300 transition active:scale-[0.99]"
+                    >
+                      <i className="ri-phone-line text-base" aria-hidden />
+                      {t('call')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Card 2 — Pickup and drop only (no vehicle type, fare or payment) */}
+            <div className="mt-3 rounded-xl border border-theme bg-theme-card px-3.5 py-3">
+              <div className="flex items-start gap-3">
+                <div className="flex flex-col items-center self-stretch pt-0.5">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-emerald-400 bg-emerald-400/20" aria-hidden />
+                  <span className="my-1.5 w-px flex-1 bg-theme-border" aria-hidden />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-rose-400 bg-rose-400/20" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-theme-primary">{pickup || '—'}</p>
+                  <div className="my-2 h-px bg-theme-border" aria-hidden />
+                  <p className="truncate text-sm font-medium text-theme-primary">{destination || '—'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3 — Vehicle type + total amount + 25% advance (UPI) */}
+            <div className="mt-3 space-y-2.5 rounded-xl border border-theme bg-theme-card px-3.5 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-theme-primary">{fareCardVehicleLabel}</span>
+                <span className="text-sm font-bold text-brand-yellow">{formatPrice(totalFareNum) ?? '—'}</span>
+              </div>
+
+              {showAdvanceSection && (
+                <>
+                  <div className="flex items-center justify-between border-t border-theme pt-2.5 text-sm">
+                    <span className="text-theme-secondary">{t('advance_25')}</span>
+                    <span className="font-semibold text-theme-primary">{formatPrice(advanceAmount) ?? '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-theme-secondary">{t('remaining_75')}</span>
+                    <span className="font-semibold text-theme-primary">{formatPrice(remainingAmount) ?? '—'}</span>
+                  </div>
+                  {advancePayError && (
+                    <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{advancePayError}</p>
+                  )}
+                  {advancePaid ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5">
+                        <span className="text-sm font-semibold text-emerald-300">
+                          <i className="ri-checkbox-circle-fill mr-1.5 align-[-1px]" aria-hidden />
+                          {t('advance_25_paid')}
+                        </span>
+                        <span className="text-sm font-semibold text-theme-primary">{t('remaining_75_amount', { amount: formatPrice(remainingAmount) })}</span>
+                      </div>
+                      {/* Only ever shown after the backend verified the payment with the provider. */}
+                      <p className="text-xs text-emerald-300">
+                        <i className="ri-shield-check-line mr-1 align-[-1px]" aria-hidden />
+                        {t('advance_payment_success')}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {advanceRequiredToStart && (
+                        <p className="text-xs text-amber-300">
+                          <i className="ri-information-line mr-1 align-[-1px]" aria-hidden />
+                          {t('advance_required_to_start')}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={payAdvance}
+                        disabled={payingAdvance || !rideId}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-yellow px-3 py-2.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+                      >
+                        {payingAdvance ? (
+                          <>
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" aria-hidden />
+                            {t('processing')}
+                          </>
+                        ) : (
+                          <>
+                            <i className="ri-secure-payment-line text-base" aria-hidden />
+                            {t('pay_advance_upi', { amount: formatPrice(advanceAmount) })}
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Cancel Ride — opens the cancellation sheet, never navigates directly */}
+            <button
+              type="button"
+              onClick={openCancelSheet}
+              disabled={cancelling}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-400 transition active:scale-[0.99] disabled:opacity-50"
+            >
+              {cancelling ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-400 border-t-transparent" aria-hidden />
+                  {t('cancelling')}
+                </>
+              ) : (
+                <>
+                  <i className="ri-close-circle-line text-lg" aria-hidden />
+                  {t('cancel_ride')}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cancellation bottom sheet — shown over the ride screen, never navigates on open */}
+      {cancelSheetOpen && (
+        <div className="absolute inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-[1px]" onClick={closeCancelSheet} aria-hidden />
+          <div className="relative flex max-h-[85dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.5)]">
+            <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-muted" aria-hidden />
+
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-2">
+              <button
+                type="button"
+                onClick={closeCancelSheet}
+                aria-label={t('back')}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-theme bg-theme-card text-theme-primary active:scale-95"
+              >
+                <i className="ri-arrow-left-line text-lg" aria-hidden />
+              </button>
+              <h2 className="text-base font-bold text-theme-primary">{t('cancel_trip')}</h2>
+              {/* Spacer keeps "Cancel trip?" centred opposite the back button — the old
+                  "Skip" shortcut cancelled the ride with no reason and is gone. */}
+              <span className="w-10" aria-hidden />
+            </div>
+
+            {/* Scrollable content */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="mt-2">
+                <h3 className="text-base font-semibold text-theme-primary">{t('why_cancel')}</h3>
+                <p className="mt-0.5 text-xs text-theme-muted">{t('optional')}</p>
+              </div>
+
+              {cancelError && (
+                <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                  {cancelError}
+                </div>
+              )}
+
+              {/* Selectable reasons */}
+              <div className="mt-3 divide-y divide-theme overflow-hidden rounded-2xl border border-theme bg-theme-card">
+                {CANCEL_REASONS.map((r) => {
+                  const selected = cancelReason === r.label
+                  return (
+                    <button
+                      key={r.label}
+                      type="button"
+                      onClick={() => setCancelReason(r.label)}
+                      className={[
+                        'flex w-full items-center gap-3 px-3.5 py-3 text-left transition active:scale-[0.99]',
+                        selected ? 'bg-brand-yellow/10' : 'bg-transparent',
+                      ].join(' ')}
+                    >
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${selected ? 'bg-brand-yellow text-black' : 'bg-brand-yellow/10 text-brand-yellow'}`}>
+                        <i className={`${r.icon} text-base`} aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm font-medium text-theme-primary">{t(r.key)}</span>
+                      {selected && <i className="ri-check-line text-brand-yellow" aria-hidden />}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Proceed with selected reason */}
+              <button
+                type="button"
+                onClick={() => performCancel()}
+                disabled={!cancelReason || cancelling}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-400 transition active:scale-[0.99] disabled:opacity-50"
+              >
+                {cancelling ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-400 border-t-transparent" aria-hidden />
+                    {t('cancelling')}
+                  </>
+                ) : (
+                  <>
+                    <i className="ri-close-circle-line text-lg" aria-hidden />
+                    {t('cancel_ride')}
+                  </>
+                )}
+              </button>
+
+              {/* Keep my trip — closes the sheet without cancelling */}
+              <button
+                type="button"
+                onClick={closeCancelSheet}
+                disabled={cancelling}
+                className="mt-3 w-full rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+              >
+                {t('keep_my_trip')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2-Minute Timeout Popup Modal: Search ride again */}
+      {searchAgainModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+            onClick={handleCloseSearchAgainModal}
+            aria-hidden
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-theme bg-theme-card p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+                <i className="ri-car-line text-3xl" aria-hidden />
+              </div>
+              <h3 className="mt-4 text-lg font-bold text-theme-primary">
+                No Driver Found
+              </h3>
+              <p className="mt-2 text-sm text-theme-secondary">
+                All drivers nearby are currently busy. Would you like to search for a ride again?
+              </p>
+              <div className="mt-6 flex w-full flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleSearchAgain}
+                  className="w-full rounded-2xl bg-brand-yellow py-3.5 text-sm font-bold text-black shadow transition active:scale-[0.98]"
+                >
+                  <i className="ri-refresh-line mr-1.5 align-[-1px]" aria-hidden />
+                  Search ride again
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseSearchAgainModal}
+                  className="w-full rounded-2xl border border-theme bg-theme-bg py-3 text-sm font-semibold text-theme-primary transition active:scale-[0.98]"
+                >
+                  Back to Home
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default SearchingForDriver

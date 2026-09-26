@@ -4,6 +4,7 @@ import axios from 'axios'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getAdminToken } from '../utils/authTokens'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 
 const getAuthHeader = () => ({ Authorization: `Bearer ${getAdminToken() || ''}` })
 
@@ -475,9 +476,9 @@ const AdminDashboard = () => {
                           <span className="block text-xs text-slate-500">{r.captain?.vehicleNumber || r.captain?.phone || ''}</span>
                         </td>
                         <td className="max-w-xs px-4 py-3 text-slate-400">
-                          <span className="line-clamp-2">{r.pickupLocation}</span>
+                          <span className="line-clamp-2">{normalizeLocationText(r.pickupLocation)}</span>
                           <span className="text-slate-600"> → </span>
-                          <span className="line-clamp-2">{r.dropLocation}</span>
+                          <span className="line-clamp-2">{normalizeLocationText(r.dropLocation)}</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium text-slate-200">₹{r.price ?? '—'}</td>
                         <td className="px-4 py-3">

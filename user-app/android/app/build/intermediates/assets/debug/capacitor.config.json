@@ -20,6 +20,15 @@
 			"splashFullScreen": true,
 			"splashImmersive": true,
 			"layoutName": "splash_screen"
+		},
+		"Keyboard": {
+			"resize": "native",
+			"resizeOnFullScreen": true
+		},
+		"StatusBar": {
+			"overlaysWebView": false,
+			"style": "DARK",
+			"backgroundColor": "#05070A"
 		}
 	}
 }

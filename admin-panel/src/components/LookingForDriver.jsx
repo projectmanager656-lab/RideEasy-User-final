@@ -1,5 +1,6 @@
 import React from 'react'
 import RideStatusStepper from './RideStatusStepper'
+import { normalizeLocationText } from '../utils/locationText'
 
 function rideStatusNorm(s) {
     return String(s || '').trim().toLowerCase()
@@ -8,18 +9,18 @@ function rideStatusNorm(s) {
 const LookingForDriver = (props) => {
     const st = rideStatusNorm(props.ride?.status)
     const isSearching = !st || st === 'searching'
-    const pickupText =
-        props.ride?.pickupLocation
-        || props.ride?.pickup?.address
-        || props.pickup
-        || 'Pickup not available'
-    const dropText =
+    const pickupText = normalizeLocationText(
+        props.ride?.pickupLocation ?? props.ride?.pickup ?? props.pickup,
+        'Pickup not available',
+    )
+    const dropText = normalizeLocationText(
         props.ride?.dropLocation
-        || props.ride?.destinationLocation
-        || props.ride?.drop?.address
-        || props.ride?.destination?.address
-        || props.destination
-        || 'Drop-off not available'
+        ?? props.ride?.destinationLocation
+        ?? props.ride?.drop
+        ?? props.ride?.destination
+        ?? props.destination,
+        'Drop-off not available',
+    )
     const showOtp =
         Boolean(props.passengerOtp)
         || st === 'accepted'

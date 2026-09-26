@@ -92,6 +92,7 @@ const CaptainSignup = () => {
         if (cap && token) {
           setCaptain(cap)
           localStorage.setItem('captainToken', token)
+          window.dispatchEvent(new Event('rideeasy:session-changed'))
           navigate('/captain-home', { replace: true })
         } else {
           setFormError(t('registration_response_missing'))

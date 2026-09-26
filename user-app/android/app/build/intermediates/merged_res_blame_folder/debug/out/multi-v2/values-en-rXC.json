@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.rideeasy.passenger.app-mergeDebugResources-24:/values-en-rXC/values-en-rXC.xml",
+            "outputFile": "com.rideeasy.passenger.app-mergeDebugResources-31:/values-en-rXC/values-en-rXC.xml",
             "map": [
                 {
                     "source": "/Users/jaid/.gradle/caches/transforms-3/4f7b0d764f8b5d0d84c4d0344e1adc27/transformed/core-1.12.0/res/values-en-rXC/values-en-rXC.xml",

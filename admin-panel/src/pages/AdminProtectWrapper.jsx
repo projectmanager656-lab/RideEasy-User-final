@@ -19,6 +19,7 @@ const AdminProtectWrapper = ({ children }) => {
     if (!isAdminRoleToken(token)) {
       try {
         localStorage.removeItem('adminToken')
+        window.dispatchEvent(new Event('rideeasy:session-changed'))
       } catch { /* ignore */ }
       navigate('/admin', { replace: true })
     }

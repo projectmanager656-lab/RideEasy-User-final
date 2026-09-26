@@ -1,0 +1,11 @@
+# Taste
+- Before editing, inspect the existing implementation end-to-end (models, controllers, routes, services, config, frontend screens) and reuse the project's existing architecture and naming conventions rather than creating a parallel/duplicate subsystem. Confidence: 0.9
+- Make the minimum necessary changes: do not redesign unrelated screens, rename or add routes unnecessarily, or touch flows outside the requested scope. Confidence: 0.9
+- After implementing, provide a concise summary: every file changed, what changed in each file, how it works, and any environment variables / credentials / configuration the user must supply. Confidence: 0.85
+- Verify work by running the project's tests, build, and lint, and confirm there are no new failures (compare against a baseline of pre-existing failures when the suite is already red). Confidence: 0.8
+- Never invent or hard-code fake values (UPI IDs, merchant credentials, order/transaction IDs, payment details, placeholder secrets); if the required configuration/credentials are missing, STOP and report exactly what is missing instead of guessing. Confidence: 0.9
+- Do not fabricate success: a provider/gateway handoff or a frontend flag is not proof — only server-side/provider verification may mark something as done. Confidence: 0.9
+- Treat the backend as the source of truth: never trust amounts, success flags, transaction IDs, or payment status supplied by the frontend; recompute/validate on the server. Confidence: 0.9
+- Keep gateway secrets and merchant credentials on the backend / environment variables only, never in client (React/Vite) code. Confidence: 0.9
+- Money-handling operations must be idempotent and reuse existing pending orders so repeated taps or retries cannot cause duplicate charges; failures/cancellations should leave state pending and retryable. Confidence: 0.75
+- Treat user-provided reference assets (screenshots, QR images, videos) as reference-only: do not copy, store, import, or display them inside the project (src, public, assets, or backend). Confidence: 0.65

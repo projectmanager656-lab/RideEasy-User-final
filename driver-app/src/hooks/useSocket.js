@@ -5,3 +5,8 @@ export function useSocket () {
   const v = useContext(SocketContext)
   return v?.socket
 }
+
+export function useSocketAuth () {
+  const v = useContext(SocketContext)
+  return v?.ensureSocketAuth
+}

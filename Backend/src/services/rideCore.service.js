@@ -1,11 +1,11 @@
 const rideModel = require('../models/rideCore.model');
 const captainModel = require('../models/captain.model');
 const mapService = require('./maps.service');
-const crypto = require('crypto');
-const { expiresInMinutes } = require('../utils/otp');
+const { expiresInMinutes, randomSixDigit } = require('../utils/otp');
 const { encryptOtp, hashOtp, verifyOtp } = require('../utils/otpSecure');
 const pricingService = require('./pricing.service');
 const paymentService = require('./payment.service');
+const ratingService = require('./rating.service');
 const ALLOWED_VEHICLE_TYPES = [ 'BIKE', 'AUTO', 'CAR' ];
 
 function rideError(message, statusCode = 400) {
@@ -14,21 +14,50 @@ function rideError(message, statusCode = 400) {
     return err;
 }
 
-function getOtp(num) {
-    return crypto.randomInt(Math.pow(10, num - 1), Math.pow(10, num)).toString();
+const ACTIVE_RIDE_STATUSES = [ 'accepted', 'arrived', 'started' ];
+
+async function releaseCaptainBusyIfAvailable(captainRef) {
+    if (!captainRef) return;
+    const captainId = captainRef?._id || captainRef;
+    const activeRideQuery = rideModel.findOne({
+        captain: captainId,
+        status: { $in: ACTIVE_RIDE_STATUSES },
+    });
+    const activeRide = typeof activeRideQuery?.select === 'function'
+        ? await activeRideQuery.select('_id').lean()
+        : await activeRideQuery;
+    if (!activeRide) {
+        await captainModel.updateOne(
+            { _id: captainId, busy: true },
+            { $set: { busy: false } },
+        );
+    }
 }
 
-function normalizePaymentMethod(pm) {
-    const s = String(pm || 'Cash').trim().toLowerCase();
-    if (s === 'wallet') return 'WALLET';
-    if (s === 'upi' || s === 'online') return 'UPI';
-    if (s === 'qr') return 'QR';
+module.exports.releaseCaptainBusyIfAvailable = releaseCaptainBusyIfAvailable;
+
+function normalizePaymentMethod(method) {
+    const m = String(method || '').trim();
+    if (m === 'UPI') return 'UPI';
+    if (m === 'Online') return 'Online';
+    if (m === 'Wallet') return 'Wallet';
     return 'Cash';
 }
 module.exports.normalizePaymentMethod = normalizePaymentMethod;
 
 /** Re-export for backward compatibility — prefer `payment.service`. */
 module.exports.settleRidePaymentIfNeeded = paymentService.settleRidePaymentIfNeeded;
+
+/** Pre-ride advance: the one shared 25% split, always recomputed from the stored fare. */
+const { ADVANCE_PERCENTAGE, computeAdvanceSplit } = paymentService;
+module.exports.ADVANCE_PERCENTAGE = ADVANCE_PERCENTAGE;
+module.exports.computeAdvanceSplit = computeAdvanceSplit;
+
+/**
+ * Payment rails that collect the 25% advance online before the trip may start.
+ * Cash and Wallet keep their existing behaviour untouched.
+ */
+const ADVANCE_REQUIRED_METHODS = [ 'UPI', 'Online' ];
 
 async function buildFarePayload(pickup, destination, coordOpts = null) {
     if (!pickup || !destination) throw new Error('Pickup and destination are required');
@@ -77,10 +106,25 @@ module.exports.createRide = async ({
     distanceKm,
     customerName,
     customerPhone,
+    discountAmount,
+    discountReason,
+    couponCode,
     pickupCoordinates,
     dropCoordinates,
+    bookingType = 'now',
+    scheduledPickupAt = null,
+    dispatchAt = null,
 }) => {
-    /** OTP is created only when a driver accepts (see confirmRide) — shared start-ride code. */
+    /** Book Now searches straight away; a scheduled booking waits for `dispatchAt`. */
+    const isScheduled = bookingType === 'scheduled';
+    const method = normalizePaymentMethod(paymentMethod);
+    /**
+     * The 25% advance is fixed at booking time from the fare the server itself
+     * computed, so every later screen and the payment gateway read the SAME split.
+     */
+    const advanceRequired = ADVANCE_REQUIRED_METHODS.includes(method);
+    const advanceSplit = computeAdvanceSplit({ price, discountAmount });
+    /** OTP is created only when the driver arrives. */
     const ride = await rideModel.create({
         user,
         pickupLocation,
@@ -91,22 +135,32 @@ module.exports.createRide = async ({
         vehicleType: normalizeVehicleType(vehicleType),
         distance: distanceKm,
         price,
-        status: 'searching',
-        paymentMethod: normalizePaymentMethod(paymentMethod),
+        discountAmount: Number(discountAmount || 0),
+        discountReason: discountReason || '',
+        couponCode: couponCode || '',
+        originalFare: Math.round(Number(price || 0) * 100) / 100,
+        finalFare: advanceSplit.payable,
+        chargedAmount: advanceSplit.payable,
+        status: isScheduled ? 'scheduled' : 'searching',
+        bookingType: isScheduled ? 'scheduled' : 'now',
+        scheduledPickupAt: isScheduled ? scheduledPickupAt : null,
+        dispatchAt: isScheduled ? dispatchAt : null,
+        searchStartedAt: isScheduled ? null : new Date(),
+        paymentMethod: method,
         paymentStatus: 'pending',
+        advancePaymentRequired: advanceRequired,
+        advancePercentage: ADVANCE_PERCENTAGE,
+        advanceAmount: advanceRequired ? advanceSplit.advanceAmount : 0,
+        remainingAmount: advanceRequired ? advanceSplit.remainingAmount : 0,
+        advancePaymentState: 'pending',
         customerName,
         customerPhone,
     });
     return { ride };
 };
 
-/** First driver wins — atomic claim while status is searching and no captain. Issues a fresh OTP for passenger + driver. */
+/** First driver wins — atomic claim while status is searching and no captain. */
 module.exports.confirmRide = async ({ rideId, captain }) => {
-    const plain = getOtp(6);
-    const [ otpHash, otpCipher ] = await Promise.all([
-        hashOtp(plain),
-        Promise.resolve(encryptOtp(plain)),
-    ]);
     const ride = await rideModel.findOneAndUpdate(
         {
             _id: rideId,
@@ -118,9 +172,11 @@ module.exports.confirmRide = async ({ rideId, captain }) => {
                 captain: captain._id,
                 status: 'accepted',
                 acceptedAt: new Date(),
-                otpHash,
-                otpCipher,
-                otpExpiresAt: expiresInMinutes(5),
+            },
+            $unset: {
+                otpHash: 1,
+                otpCipher: 1,
+                otpExpiresAt: 1,
             },
         },
         { new: true }
@@ -131,16 +187,44 @@ module.exports.confirmRide = async ({ rideId, captain }) => {
         if (!exists) throw rideError('Ride not found', 404);
         throw rideError('Ride already assigned or no longer available', 409);
     }
-    return { ride, otpPlain: plain };
+
+    const busyUpdate = await captainModel.updateOne(
+        { _id: captain._id, busy: { $ne: true } },
+        { $set: { busy: true } },
+    );
+    if (!busyUpdate?.matchedCount) {
+        await rideModel.updateOne(
+            { _id: ride._id, captain: captain._id, status: 'accepted' },
+            {
+                $set: { captain: null, status: 'searching' },
+                $unset: {
+                    acceptedAt: 1,
+                    otpHash: 1,
+                    otpCipher: 1,
+                    otpExpiresAt: 1,
+                },
+            },
+        );
+        throw rideError('Captain already has an active ride.', 409);
+    }
+    return { ride };
 };
 
 module.exports.rejectRide = async ({ rideId, captain }) => {
-    const ride = await rideModel.findOne({ _id: rideId, status: 'searching' });
-    if (!ride) throw rideError('Ride not found or already assigned', 409);
-    await rideModel.updateOne(
-        { _id: rideId },
+    const result = await rideModel.updateOne(
+        {
+            _id: rideId,
+            status: 'searching',
+            $or: [ { captain: null }, { captain: { $exists: false } } ],
+        },
         { $addToSet: { declinedBy: captain._id } }
     );
+    if (!result?.matchedCount) {
+        const ride = await rideModel.findById(rideId);
+
+        if (!ride) throw rideError('Ride not found', 404);
+        throw rideError('Ride already assigned or no longer available', 409);
+    }
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };
 
@@ -149,15 +233,28 @@ module.exports.markArrived = async ({ rideId, captain }) => {
         .populate('user')
         .populate('captain');
     if (!current) throw rideError('Ride not found', 404);
-    if (current.status === 'arrived') return current;
+    if (current.status === 'arrived') return { ride: current, otpPlain: null };
     if (current.status !== 'accepted') throw rideError('Ride not found / not accepted', 409);
+    const otpPlain = randomSixDigit();
+    const [ otpHash, otpCipher ] = await Promise.all([
+        hashOtp(otpPlain),
+        Promise.resolve(encryptOtp(otpPlain)),
+    ]);
     const ride = await rideModel.findOneAndUpdate(
         { _id: rideId, captain: captain._id, status: 'accepted' },
-        { status: 'arrived', arrivedAt: new Date() },
+        {
+            $set: {
+                status: 'arrived',
+                arrivedAt: new Date(),
+                otpHash,
+                otpCipher,
+                otpExpiresAt: expiresInMinutes(5),
+            },
+        },
         { new: true }
     ).populate('user').populate('captain');
     if (!ride) throw rideError('Ride not found / not accepted', 409);
-    return ride;
+    return { ride, otpPlain };
 };
 
 module.exports.startRide = async ({ rideId, otp, captain }) => {
@@ -170,6 +267,14 @@ module.exports.startRide = async ({ rideId, otp, captain }) => {
     const ok = await verifyOtp(String(otp || '').trim(), ride.otpHash);
     if (!ok) throw rideError('Invalid OTP', 400);
     if (ride.otpExpiresAt && ride.otpExpiresAt < new Date()) throw rideError('OTP expired — ask passenger for new code', 400);
+    /**
+     * The 25% advance has to be verified by the payment provider before the trip
+     * may start — a valid OTP alone is not proof of payment. Only the online rails
+     * carry the requirement, so Cash and Wallet keep their existing behaviour.
+     */
+    if (ride.advancePaymentRequired && ride.advancePaymentStatus !== 'success') {
+        throw rideError('Passenger must complete the 25% advance payment before this ride can start', 402);
+    }
     await rideModel.updateOne({ _id: rideId }, { status: 'started', startedAt: new Date() });
     return rideModel.findById(rideId).populate('user').populate('captain');
 };
@@ -188,17 +293,28 @@ module.exports.endRide = async ({ rideId, captain }) => {
         );
     }
 
-    const norm = normalizePaymentMethod(ride.paymentMethod);
+    const payable = ride.chargedAmount != null
+        ? Number(ride.chargedAmount)
+        : Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
+    const isFullyPaidByCoupon = payable === 0 && Number(ride.discountAmount || 0) > 0;
+
     const patch = {
         status: 'completed',
         completedAt,
         ...(durationSec != null ? { duration: durationSec } : {}),
-        ...(norm === 'Cash' ? { paymentStatus: 'success' } : {}),
+        ...(isFullyPaidByCoupon ? { paymentStatus: 'success', chargedAmount: 0 } : {}),
     };
     await rideModel.updateOne({ _id: rideId }, patch);
-    if (norm === 'Cash') {
-        await paymentService.settleRidePaymentIfNeeded(rideId);
+    await releaseCaptainBusyIfAvailable(captain._id);
+
+    if (isFullyPaidByCoupon) {
+        try {
+            await paymentService.settleRidePaymentIfNeeded(rideId);
+        } catch (e) {
+            console.warn('[endRide] zero-payable coupon settlement warning:', e?.message);
+        }
     }
+    // Cash is settled only when the assigned captain confirms receipt.
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };
 
@@ -216,6 +332,14 @@ module.exports.rateRide = async ({ rideId, user, rating, comment }) => {
     ride.rating = r;
     ride.ratingComment = (comment || '').slice(0, 500);
     await ride.save();
+    await ratingService.recordRating({
+        rideId: ride._id,
+        fromUserId: ride.user,
+        toUserId: ride.captain || null,
+        fromRole: 'USER',
+        rating: r,
+        comment: ride.ratingComment,
+    });
     if (ride.captain) {
         await captainModel.findByIdAndUpdate(ride.captain, { $inc: { ratingSum: r, ratingCount: 1 } });
     }

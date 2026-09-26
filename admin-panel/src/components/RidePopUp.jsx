@@ -1,5 +1,6 @@
 import React from 'react'
 import { getExternalMapsDirBase, getPlaceholderAvatarUrl } from '../config/externalEndpoints'
+import { normalizeLocationText } from '../utils/locationText'
 
 const RidePopUp = (props) => {
     return (
@@ -20,13 +21,13 @@ const RidePopUp = (props) => {
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="ri-map-pin-user-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.pickupLocation || props.ride?.pickup}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.pickupLocation || props.ride?.pickup)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="text-lg ri-map-pin-2-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.dropLocation || props.ride?.destination}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.dropLocation || props.ride?.destination)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3'>
@@ -42,7 +43,7 @@ const RidePopUp = (props) => {
                             type="button"
                             className="text-sm text-emerald-700 underline"
                             onClick={() => {
-                                const pickup = props.ride?.pickupLocation || props.ride?.pickup;
+                                const pickup = normalizeLocationText(props.ride?.pickupLocation || props.ride?.pickup, '');
                                 if (!pickup) return;
                                 const mapsUrl = `${getExternalMapsDirBase()}/?api=1&destination=${encodeURIComponent(pickup)}`;
                                 window.open(mapsUrl, '_blank');

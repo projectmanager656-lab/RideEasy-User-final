@@ -20,7 +20,7 @@ const PasswordInput = ({
 
   return (
     <div className="mb-4">
-      {label ? <label htmlFor={name} className={labelClass}>{label}</label> : null}
+      {label ? <label htmlFor={name} className={labelClass}>{label} {required ? <span className="text-red-500" aria-hidden>*</span> : null}</label> : null}
       <div className="relative">
         <input
           id={name}

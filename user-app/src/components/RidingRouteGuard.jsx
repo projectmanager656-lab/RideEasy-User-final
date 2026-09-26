@@ -1,5 +1,6 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { readRideSessionId } from '../utils/rideSession'
 
 /** Only these rides belong on the full-screen /riding flow (after trip has started). */
 const ALLOWED = new Set([ 'started', 'completed' ])
@@ -10,7 +11,9 @@ function normalizeStatus (s) {
 
 /**
  * Prevents opening /riding from bookmarks, stale history, or the tab bar
- * unless navigation included a ride in `started` or `completed` state.
+ * unless navigation included a ride in `started`/`completed` state — or the
+ * session still references an active ride (the Riding page then fetches the
+ * ride itself and redirects to the right screen when it is not live).
  */
 export default function RidingRouteGuard ({ children }) {
   const location = useLocation()
@@ -19,7 +22,11 @@ export default function RidingRouteGuard ({ children }) {
   const st = normalizeStatus(ride?.status)
 
   if (!id) {
-    return <Navigate to="/home" replace />
+    if (!readRideSessionId()) {
+      return <Navigate to="/home" replace />
+    }
+    // No ride in navigation state but the session has one — let Riding hydrate.
+    return children
   }
   if (!ALLOWED.has(st)) {
     return <Navigate to="/home" replace />

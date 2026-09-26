@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useSocket } from '../hooks/useSocket'
+import { normalizeLocationText } from '../utils/locationText'
 import RideMap from '../components/RideMap'
 import LiveTracking from '../components/LiveTracking'
 import RideStatusStepper from '../components/RideStatusStepper'
@@ -10,15 +11,28 @@ import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { readRideSessionId, clearRideSession, isRideStatusFinal, isRideGenuinelyActive } from '../utils/rideSession'
 import { useLanguage } from '../i18n'
+import { haversineKm } from '../utils/serviceArea'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
+
+/** Digits (plus a leading +) a phone dialer understands; '' when there is nothing to dial. */
+function dialablePhone (phone) {
+    return String(phone || '').replace(/[^+\d]/g, '')
+}
 
 const Riding = () => {
     const { t } = useLanguage()
     const location = useLocation()
     const { ride: initialRide } = location.state || {}
-    const [ride, setRide] = useState(initialRide)
+    // When the page is opened without ride state (Live tab, refresh, bookmark)
+    // the session key still points at the active ride — hydrate it below.
+    const [ride, setRide] = useState(() => {
+        if (initialRide?._id) return initialRide
+        const id = readRideSessionId()
+        return id ? { _id: id } : null
+    })
     const [pickupCoords, setPickupCoords] = useState(null)
     const [dropCoords, setDropCoords] = useState(null)
     const [driverCoords, setDriverCoords] = useState(() => {
@@ -45,12 +59,47 @@ const Riding = () => {
             navigate('/login', { replace: true })
             return
         }
-        const st = String(initialRide?.status || '').trim().toLowerCase()
-        const allowed = st === 'started' || st === 'completed'
-        if (!initialRide?._id || !allowed) {
+        const st = String(ride?.status || '').trim().toLowerCase()
+        if (st === 'started' || st === 'completed') return
+        if (!ride?._id || st) {
+            // Not a live/completed ride — the guard already rejects invalid
+            // state entries, so anything else simply goes back home.
             navigate('/home', { replace: true })
+            return
         }
-    }, [ initialRide?._id, initialRide?.status, navigate ])
+        // Session-only entry (Live tab / refresh): fetch the ride and let the
+        // server decide where this ride actually belongs.
+        let cancelled = false
+        axios
+            .get(`${API_BASE_URL}/rides/${ride._id}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then((res) => {
+                if (cancelled) return
+                const doc = res.data
+                const next = String(doc?.status || '').trim().toLowerCase()
+                if (next === 'started' || next === 'completed') {
+                    setRide(doc)
+                    return
+                }
+                /** A terminal or dead-search ride must never open live tracking. */
+                if (isRideStatusFinal(next) || !isRideGenuinelyActive(doc)) {
+                    clearRideSession()
+                    navigate('/home', { replace: true })
+                    return
+                }
+                // searching / accepted / arrived → belongs on the driver-search screen.
+                // Hand over the ride the backend just confirmed, so that screen never
+                // has to trust a bare id from session storage.
+                navigate('/searching-for-driver', { replace: true, state: { ride: doc } })
+            })
+            .catch(() => {
+                if (cancelled) return
+                clearRideSession()
+                navigate('/home', { replace: true })
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [ ride?._id, ride?.status, navigate ])
     const [paying, setPaying] = useState(false)
     const [payError, setPayError] = useState('')
     const [rateError, setRateError] = useState('')
@@ -179,9 +228,11 @@ const Riding = () => {
     }, [ride?._id])
 
     useEffect(() => {
-        if (!ride?.pickupLocation?.trim()) return
+        // normalizeLocationText tolerates both string and { address } locations.
+        const address = normalizeLocationText(ride?.pickupLocation, '')
+        if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.pickupLocation.trim() },
+            params: { address },
             headers: { Authorization: `Bearer ${getPassengerToken()}` }
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
@@ -189,9 +240,10 @@ const Riding = () => {
     }, [ride?.pickupLocation])
 
     useEffect(() => {
-        if (!ride?.dropLocation?.trim()) return
+        const address = normalizeLocationText(ride?.dropLocation, '')
+        if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
-            params: { address: ride.dropLocation.trim() },
+            params: { address },
             headers: { Authorization: `Bearer ${getPassengerToken()}` }
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setDropCoords({ lat: res.data.lat, lng: res.data.lng })
@@ -247,8 +299,10 @@ const Riding = () => {
     }, [ride?._id, ride?.status, t])
 
     const openInGoogleMaps = () => {
-        const dest = dropCoords || (ride?.dropLocation ? encodeURIComponent(ride.dropLocation) : null)
-        const origin = driverCoords ? `${driverCoords.lat},${driverCoords.lng}` : (ride?.pickupLocation ? encodeURIComponent(ride.pickupLocation) : '')
+        const dropText = normalizeLocationText(ride?.dropLocation, '')
+        const pickupText = normalizeLocationText(ride?.pickupLocation, '')
+        const dest = dropCoords || (dropText ? encodeURIComponent(dropText) : null)
+        const origin = driverCoords ? `${driverCoords.lat},${driverCoords.lng}` : (pickupText ? encodeURIComponent(pickupText) : '')
         if (!dest) return
         const destStr = typeof dest === 'string' ? dest : `${dest.lat},${dest.lng}`
         const url = `${getExternalMapsDirBase()}/?api=1&destination=${destStr}&origin=${origin || ''}&travelmode=driving`
@@ -266,12 +320,38 @@ const Riding = () => {
         return m
     }, [ride?.paymentMethod, t])
 
+    /** Monotonic floor for tripProgress — GPS jitter must never walk the bar backwards. */
+    const tripProgressRef = useRef({ rideId: null, value: 0 })
+    /**
+     * How much of the trip is done, for the "Live ride" stepper leg: the share of the
+     * pickup → drop distance the driver has already covered, straight-line (haversine)
+     * from the live driver position. Null when there is no usable GPS yet, which keeps
+     * the stepper static exactly as before.
+     */
+    const tripProgress = useMemo(() => {
+        if (ride?.status !== 'started') return null
+        if (!pickupCoords || !dropCoords || !driverCoords) return null
+        const total = haversineKm(pickupCoords.lat, pickupCoords.lng, dropCoords.lat, dropCoords.lng)
+        if (!(total > 0.05)) return null
+        const remaining = haversineKm(driverCoords.lat, driverCoords.lng, dropCoords.lat, dropCoords.lng)
+        const raw = 1 - remaining / total
+        if (!Number.isFinite(raw)) return null
+        const clamped = Math.max(0, Math.min(1, raw))
+        const floor = tripProgressRef.current
+        if (floor.rideId !== ride?._id) {
+            floor.rideId = ride?._id ?? null
+            floor.value = 0
+        }
+        floor.value = Math.max(floor.value, clamped)
+        return floor.value
+    }, [ride?.status, ride?._id, pickupCoords, dropCoords, driverCoords])
+
     const confirmRidePayment = useCallback(async (method) => {
         if (!ride?._id) return
         setPaying(true)
         setPayError('')
         try {
-            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method }, {
+            const { data } = await axios.post(`${API_BASE_URL}/rides/pay-mock`, { rideId: ride._id, method, part: 'remaining' }, {
                 headers: { Authorization: `Bearer ${getPassengerToken()}` }
             })
             if (data?.ride) setRide(data.ride)
@@ -304,14 +384,23 @@ const Riding = () => {
     }, [ride?._id, t])
 
     const goHome = useCallback(() => {
+        clearRideSession()
         navigate('/home', { replace: true })
     }, [navigate])
 
+    /*
+     * Completion redirect: the old fixed 2.5s timer kicked the user home before
+     * they could rate the driver or open the invoice. The RideCompletionFlow
+     * handles its own countdown + "Book another ride" once completed; we keep a
+     * long safety net here so a user who leaves the completion flow open still
+     * ends up back on Home — without being yanked mid-interaction.
+     */
     useEffect(() => {
         if (ride?.status !== 'completed') return
         const t = setTimeout(() => {
+            clearRideSession()
             navigate('/home', { replace: true })
-        }, 2500)
+        }, 120000)
         return () => clearTimeout(t)
     }, [ride?.status, navigate])
 
@@ -334,16 +423,17 @@ const Riding = () => {
     }
 
     return (
-        <div className='h-screen'>
-            <Link to='/home' className='fixed right-2 top-2 z-10 h-10 w-10 bg-zinc-900 border border-zinc-700 text-white flex items-center justify-center rounded-full shadow'>
+        <div className='flex min-h-dvh flex-col'>
+            <Link to='/home' className='fixed right-2 top-2 z-10 h-10 w-10 bg-theme-bg/90 border border-theme text-theme-primary flex items-center justify-center rounded-full shadow'>
                 <i className="text-lg font-medium ri-home-5-line"></i>
             </Link>
-            <div className='h-1/2 relative'>
+            <div className='relative h-[38dvh] min-h-[240px] shrink-0'>
                 {showRideMap ? (
                     <RideMap
                         pickupCoords={pickupCoords}
                         dropCoords={dropCoords}
                         driverCoords={driverCoords}
+                        driverVehicleType={ride?.captain?.vehicleType || ride?.vehicleType}
                         passengerLiveCoords={passengerLiveCoords}
                         showRoute
                         trackingFrom={trackingDriverToDrop ? driverCoords : null}
@@ -356,54 +446,54 @@ const Riding = () => {
                     <button
                         type="button"
                         onClick={openInGoogleMaps}
-                        className="absolute bottom-3 left-3 right-3 z-10 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
+                        className="absolute bottom-3 left-3 right-3 z-10 bg-brand-yellow hover:bg-brand-light text-brand-dark font-semibold py-2 px-4 rounded-lg shadow flex items-center justify-center gap-2"
                     >
                         <i className="ri-navigation-line" />
                         {t('open_google_maps')}
                     </button>
                 )}
             </div>
-            <div className='h-1/2 p-4 bg-zinc-950 border-t border-zinc-800 text-zinc-100 overflow-y-auto rounded-t-3xl'>
+            <div className='min-h-0 flex-1 overflow-y-auto scrollbar-hide rounded-t-3xl border-t border-theme bg-theme-bg p-4 text-theme-primary'>
                 {rideFetchError ? (
                     <div role="alert" className="mb-3 rounded-lg border border-red-800/80 bg-red-950/50 px-3 py-2 text-sm text-red-200">
                         {rideFetchError}
                     </div>
                 ) : null}
                 <div className="mb-4">
-                    <RideStatusStepper status={ride?.status || 'accepted'} />
+                    <RideStatusStepper status={ride?.status || 'accepted'} progress={tripProgress} />
                 </div>
                 <div className='flex items-center justify-between gap-3'>
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-900/60 text-lg font-semibold text-emerald-200 ring-1 ring-emerald-700/50" aria-hidden>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-lg font-semibold text-brand-yellow ring-1 ring-brand-yellow/40" aria-hidden>
                         {(ride?.captain?.name || ride?.captain?.fullname?.firstname || 'D').toString().charAt(0)}
                     </div>
                     <div className='text-right min-w-0'>
-                        <h2 className='text-lg font-medium capitalize text-white'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
-                        <h4 className='text-xl font-semibold -mt-1 -mb-1 text-zinc-100'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
-                        <p className='text-sm text-zinc-400 capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
+                        <h2 className='text-lg font-medium capitalize text-theme-primary'>{ride?.captain?.name || ride?.captain?.fullname?.firstname}</h2>
+                        <h4 className='text-xl font-semibold -mt-1 -mb-1 text-theme-primary'>{ride?.captain?.vehicleNumber || ride?.captain?.vehicle?.plate}</h4>
+                        <p className='text-sm text-theme-secondary capitalize'>{ride?.captain?.vehicleType ? String(ride.captain.vehicleType).toLowerCase() : t('vehicle')}</p>
                     </div>
                 </div>
 
                 <div className='flex gap-2 justify-between flex-col items-center'>
-                    <div className='w-full mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden'>
-                        <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
-                            <i className="text-lg ri-map-pin-user-fill text-emerald-400" aria-hidden />
+                    <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card overflow-hidden'>
+                        <div className='flex items-center gap-5 p-3 border-b border-theme'>
+                            <i className="text-lg ri-map-pin-user-fill text-brand-yellow" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>{t('pickup')}</h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{ride?.pickupLocation || '—'}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('pickup')}</h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{normalizeLocationText(ride?.pickupLocation)}</p>
                             </div>
                         </div>
-                        <div className='flex items-center gap-5 p-3 border-b border-zinc-800'>
+                        <div className='flex items-center gap-5 p-3 border-b border-theme'>
                             <i className="text-lg ri-map-pin-2-fill text-rose-400" aria-hidden />
                             <div className="min-w-0">
-                                <h3 className='text-lg font-medium text-white'>{t('drop')}</h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{ride?.dropLocation || ride?.destination}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('drop')}</h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{normalizeLocationText(ride?.dropLocation || ride?.destination)}</p>
                             </div>
                         </div>
                         <div className='flex items-center gap-5 p-3'>
-                            <i className="ri-currency-line text-emerald-400"></i>
+                            <i className="ri-currency-line text-brand-yellow"></i>
                             <div>
-                                <h3 className='text-lg font-medium text-white'>₹{ride?.price ?? ride?.fare} </h3>
-                                <p className='text-sm -mt-1 text-zinc-400'>{paymentLabel}</p>
+                                <h3 className='text-lg font-medium text-theme-primary'>₹{ride?.price ?? ride?.fare} </h3>
+                                <p className='text-sm -mt-1 text-theme-secondary'>{paymentLabel}</p>
                             </div>
                         </div>
                     </div>
@@ -411,22 +501,26 @@ const Riding = () => {
                 
                 {/* Emergency Contact Section */}
                 {ride?.status === 'started' && (
-                    <div className='w-full mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40'>
+                    <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card'>
                         <div className='flex items-center gap-4 p-4'>
                             <div className='flex-1'>
-                                <h3 className='text-lg font-medium text-white'>{t('emergency_contact')}</h3>
+                                <h3 className='text-lg font-medium text-theme-primary'>{t('emergency_contact')}</h3>
                                 {ecLoading ? (
-                                    <p className='text-sm text-zinc-400'>{t('loading')}</p>
+                                    <p className='text-sm text-theme-secondary'>{t('loading')}</p>
                                 ) : ecError ? (
                                     <p className='text-sm text-red-500'>{ecError}</p>
                                 ) : emergencyContact ? (
-                                    <>
-                                        <p className='text-sm font-semibold text-white mb-1'>{emergencyContact.name}</p>
-                                        <p className='text-sm text-zinc-300'>{emergencyContact.phone}</p>
-                                        <p className='text-xs text-zinc-400'>{emergencyContact.relationship}</p>
-                                    </>
+                                    /* Tapping the saved contact opens the native dialer with their number. */
+                                    <a
+                                        href={dialablePhone(emergencyContact.phone) ? `tel:${dialablePhone(emergencyContact.phone)}` : undefined}
+                                        className='-m-1 block rounded-lg p-1 transition hover:bg-theme-card-muted active:scale-[0.99]'
+                                    >
+                                        <p className='text-sm font-semibold text-theme-primary mb-1'>{emergencyContact.name}</p>
+                                        <p className='text-sm font-medium text-brand-yellow'>{emergencyContact.phone}</p>
+                                        <p className='text-xs text-theme-secondary'>{emergencyContact.relationship}</p>
+                                    </a>
                                 ) : (
-                                    <p className='text-sm text-zinc-400'>{t('emergency_contact_sub')}</p>
+                                    <p className='text-sm text-theme-secondary'>{t('emergency_contact_sub')}</p>
                                 )}
                             </div>
                             <div className='flex space-x-3'>
@@ -449,8 +543,8 @@ const Riding = () => {
                                                     const rideDetails = {
                                                         driverName: ride?.captain?.name || 'Driver',
                                                         vehicleInfo: `${ride?.captain?.vehicleType || 'Vehicle'} ${ride?.captain?.vehicleNumber || ''}`,
-                                                        pickup: ride?.pickupLocation || '—',
-                                                        destination: ride?.dropLocation || ride?.destination || '—',
+                                                        pickup: normalizeLocationText(ride?.pickupLocation),
+                                                        destination: normalizeLocationText(ride?.dropLocation || ride?.destination),
                                                         status: ride?.status || '—',
                                                         eta: ride?.eta || 'Calculating...',
                                                         rideId: ride?._id || '—'
@@ -479,9 +573,6 @@ const Riding = () => {
                     </div>
                 )}
                 
-                <button className='w-full mt-5 rounded-xl border border-zinc-700 bg-zinc-900/60 text-zinc-400 font-semibold p-3' disabled>
-                    {t('payment_receipt_when_ends')}
-                </button>
             </div>
         </div>
     )

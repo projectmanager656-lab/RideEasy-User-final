@@ -59,7 +59,7 @@ function isPrivateLanDevOrigin(origin) {
  */
 function isCapacitorWebViewOrigin(origin) {
     if (!origin) return false;
-    if (/^https:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
     if (/^capacitor:\/\/localhost/i.test(origin)) return true;
     if (/^ionic:\/\/localhost/i.test(origin)) return true;
     return false;
