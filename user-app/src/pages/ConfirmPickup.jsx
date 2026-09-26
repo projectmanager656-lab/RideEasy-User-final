@@ -286,7 +286,6 @@ export default function ConfirmPickup() {
 
                     pickupCoords,
                     dropCoords,
-
                     pickup,
                     destination: state.destination,
 
