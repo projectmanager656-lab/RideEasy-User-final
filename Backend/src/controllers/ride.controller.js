@@ -26,14 +26,17 @@ const {
   inferServiceCityKeyOrNearest,
   ridePickupInServiceArea,
   logServiceAreaDistances,
+  captainServingCityMatch,
+  cityKey,
   SERVICE_AREA_ERROR,
 } = require("../utils/serviceArea");
 
 const {
   emitToUser,
   emitToCaptain,
-  emitToOnlineDrivers,
   emitStandardRidePhase,
+  driverRoomHyphen,
+  driverRoomSocketIds,
 } = require("../socket");
 const {
   RIDE_REQUEST,
@@ -41,6 +44,10 @@ const {
   RIDE_STARTED,
   RIDE_COMPLETED,
 } = require("../socket/rideSocket.events");
+const {
+  recordDispatchAttemptSafe,
+  markRideDispatchesStatusSafe,
+} = require("../services/rideDispatch.service");
 
 /** Driver search radius in metres. Override with RIDE_SEARCH_RADIUS_M when testing locally. */
 const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
@@ -215,6 +222,8 @@ function publicRide(ride) {
   delete o.otpHash;
   delete o.otpCipher;
   delete o.otp;
+  /* Server-side delivery bookkeeping — never part of the client ride contract. */
+  delete o.offerAcks;
   return o;
 }
 
@@ -364,6 +373,8 @@ async function findNearbyDriverIds({
   pickupLat,
 }) {
   if (pickupLng == null || pickupLat == null) return [];
+  const cityMatch = captainServingCityMatch(rideCity);
+  if (!cityMatch) return [];
   try {
     const drivers = await captainModel
       .find({
@@ -373,7 +384,7 @@ async function findNearbyDriverIds({
           subscriptionNotExpiredMatch(),
           driverPresenceMatch(),
           await captainWalletMatch(),
-          { servingCity: rideCity },
+          cityMatch,
           { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
         ],
         location: {
@@ -399,6 +410,8 @@ async function findNearbyDriverIds({
 
 /** When no one is within 5km (GPS mismatch / dev), still notify online drivers in same city + vehicle type. */
 async function findCityFallbackDriverIds({ rideCity, vehicleType }) {
+  const cityMatch = captainServingCityMatch(rideCity);
+  if (!cityMatch) return [];
   const drivers = await captainModel
     .find({
       $and: [
@@ -406,7 +419,7 @@ async function findCityFallbackDriverIds({ rideCity, vehicleType }) {
         subscriptionNotExpiredMatch(),
         driverPresenceMatch(),
         await captainWalletMatch(),
-        { servingCity: rideCity },
+        cityMatch,
         { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
       ],
     })
@@ -417,6 +430,8 @@ async function findCityFallbackDriverIds({ rideCity, vehicleType }) {
 
 /** Last resort: same city, any vehicle — avoids zero drivers when captain vehicle ≠ requested ride type (accept still allowed). */
 async function findCityAnyVehicleDriverIds({ rideCity }) {
+  const cityMatch = captainServingCityMatch(rideCity);
+  if (!cityMatch) return [];
   const drivers = await captainModel
     .find({
       $and: [
@@ -424,7 +439,7 @@ async function findCityAnyVehicleDriverIds({ rideCity }) {
         subscriptionNotExpiredMatch(),
         driverPresenceMatch(),
         await captainWalletMatch(),
-        { servingCity: rideCity },
+        cityMatch,
       ],
     })
     .limit(40)
@@ -433,7 +448,8 @@ async function findCityAnyVehicleDriverIds({ rideCity }) {
 }
 
 async function countCaptainsMatching(...clauses) {
-  return captainModel.countDocuments(clauses.length ? { $and: clauses } : {});
+  const active = clauses.filter(Boolean);
+  return captainModel.countDocuments(active.length ? { $and: active } : {});
 }
 
 /**
@@ -446,7 +462,7 @@ async function explainNoDrivers({ rideCity, vehicleType, pickupLng, pickupLat })
   const subscription = subscriptionNotExpiredMatch();
   const presence = driverPresenceMatch();
   const wallet = await captainWalletMatch();
-  const city = { servingCity: rideCity };
+  const city = captainServingCityMatch(rideCity);
   const vehicle = { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } };
   const geoWithin5km =
     pickupLng == null || pickupLat == null
@@ -485,15 +501,24 @@ async function explainNoDrivers({ rideCity, vehicleType, pickupLng, pickupLat })
 }
 
 /**
- * TEMP DIAGNOSTIC (ride-dispatch): dumps the same-city driver pool with every field
- * the eligibility query filters on, so the exact blocking reason for `matched=0` is
- * visible (missing servingCity/vehicleType, offline, unapproved, blocked, wallet,
- * stale socketId…). Read-only; never logs credentials. Remove once dispatch is confirmed.
+ * TEMP DIAGNOSTIC (ride-dispatch): dumps the ELIGIBLE driver pool with the city
+ * comparison that gated it. The pool deliberately IGNORES the city filter, so a
+ * city mismatch is visible — filtering by rideCity here would show nothing exactly
+ * when the city is the reason nobody matched. Read-only; never logs credentials.
+ * Remove once dispatch is confirmed.
  */
 async function logDriverCandidates({ rideId, rideCity, vehicleType, pickupLng, pickupLat, eligibleDriverCount }) {
   try {
+    const rideCityKey = cityKey(rideCity);
     const candidates = await captainModel
-      .find({ servingCity: rideCity })
+      .find({
+        $and: [
+          { approved: true, blocked: { $ne: true } },
+          subscriptionNotExpiredMatch(),
+          driverPresenceMatch(),
+          await captainWalletMatch(),
+        ],
+      })
       .select(
         "name vehicleType servingCity status isOnline blocked approved subscriptionStatus subscriptionExpiresAt walletBalance socketId city location",
       )
@@ -505,24 +530,17 @@ async function logDriverCandidates({ rideId, rideCity, vehicleType, pickupLng, p
       pickupLng,
       city: rideCity,
       eligibleDriverCount,
-      candidateCount: candidates.length,
+      eligibleCandidateCount: candidates.length,
     });
     for (const d of candidates) {
-      console.log("[ride dispatch] candidate", {
+      const driverCityKey = cityKey(d.servingCity);
+      console.log("[ride dispatch] DRIVER CITY CHECK", {
         driverId: String(d._id),
-        name: d.name,
-        vehicleType: d.vehicleType,
-        isOnline: d.isOnline,
-        status: d.status,
-        blocked: d.blocked,
-        approved: d.approved,
-        subscriptionStatus: d.subscriptionStatus,
-        subscriptionExpiresAt: d.subscriptionExpiresAt,
-        walletBalance: d.walletBalance,
-        servingCity: d.servingCity,
-        city: d.city,
-        socketId: d.socketId,
-        location: d.location,
+        driverCity: d.servingCity,
+        driverCityKey,
+        rideCity,
+        rideCityKey,
+        sameCity: Boolean(driverCityKey && driverCityKey === rideCityKey),
       });
     }
   } catch (e) {
@@ -530,73 +548,120 @@ async function logDriverCandidates({ rideId, rideCity, vehicleType, pickupLng, p
   }
 }
 
-function broadcastRideNew(rideDoc, driverIds) {
+/** Presence metadata only — never a delivery target. Logged to explain an offline match. */
+async function driverPresenceFor(captainId) {
+  try {
+    const cap = await captainModel
+      .findById(captainId)
+      .select("socketId status isOnline busy")
+      .lean();
+    return {
+      socketId: cap?.socketId || null,
+      status: cap?.status ?? null,
+      isOnline: cap?.isOnline ?? null,
+    };
+  } catch {
+    return { socketId: null, status: null, isOnline: null };
+  }
+}
+
+/**
+ * Deliver the ride offer to each MATCHED driver's own `driver-<id>` room.
+ *
+ * The Socket.IO adapter room is the ONLY authoritative "is this driver connected"
+ * check — a stored `captain.socketId` is presence metadata and is never used as the
+ * delivery target (a stale id makes the emit look successful while nothing arrives).
+ * `delivered` counts the matched drivers whose room actually received the frame, so
+ * `matched=1 delivered=0` truthfully means the matched driver has no live socket.
+ *
+ * There is deliberately NO fallback broadcast to every connected driver: that would
+ * offer a matched ride to drivers the matching rules excluded. An undelivered ride
+ * stays `searching` and is recovered by the driver's `/rides/pending` poll and by
+ * `emitJoinCatchUp` on reconnect.
+ */
+async function broadcastRideNew(rideDoc, driverIds) {
   const ride = publicRide(rideDoc);
   const offeredAt = Date.now();
   const payload = { ride, offeredAt };
   const rid = ride?._id != null ? String(ride._id) : "";
   if (!driverIds.length) {
     console.warn(
-      "[ride broadcast] no drivers matched for ride %s (check city, isOnline, subscription, vehicle)",
+      "[ride dispatch] ZERO drivers matched for ride %s (check city, isOnline, subscription, vehicle)",
       rid,
     );
+    return { matched: 0, delivered: 0 };
   }
   let delivered = 0;
   for (const id of driverIds) {
-    if (emitToCaptain(id, RIDE_REQUEST, payload) > 0) delivered += 1;
-    emitToCaptain(id, "new-ride", payload);
-  }
-  if (driverIds.length) {
-    console.log(
-      "[ride broadcast] ride=%s city=%s matched=%d delivered=%d offline=%d targetDrivers=%s",
-      rid,
-      rideDoc?.city || ride?.city || "",
-      driverIds.length,
-      delivered,
-      driverIds.length - delivered,
-      driverIds.join(","),
-    );
-    if (delivered === 0) {
-      console.warn(
-        "[ride dispatch] ride %s reached 0 connected drivers — offers are only reachable via /rides/pending polling",
-        rid,
-      );
+    const captainId = String(id);
+    const roomName = driverRoomHyphen(captainId);
+    /** Presence from the matched Captain document — diagnostic only, never the target. */
+    const presence = await driverPresenceFor(id);
+    console.log("[DISPATCH DEBUG] MATCHED DRIVER", {
+      rideId: rid,
+      captainId,
+      driverSocketIdFromDB: presence.socketId,
+      driverStatus: presence.status,
+      driverIsOnline: presence.isOnline,
+    });
+    const roomSocketIds = driverRoomSocketIds(id);
+    /**
+     * THE decisive check: matched=1 with socketCount=0 means the matched driver has no
+     * live socket in its room (registration/reconnect issue OR the driver is genuinely
+     * offline). matched=1 with socketCount>0 means delivery should succeed.
+     */
+    console.log("[DISPATCH DEBUG] LIVE DRIVER ROOM", {
+      captainId,
+      roomName,
+      socketCount: roomSocketIds.length,
+      socketIds: roomSocketIds,
+    });
+    /* `emitToCaptain` targets the live room and returns the live socket count. */
+    const socketCount = emitToCaptain(id, RIDE_REQUEST, payload);
+    console.log("[ride dispatch] room check", { rideId: rid, roomName, socketCount });
+    /**
+     * Durable per-(ride, captain) record of what the attempt actually did. Live room
+     * membership is the only honest "delivered" signal — recorded here so a matched
+     * driver with no live socket is `failed`, never falsely `delivered`.
+     */
+    recordDispatchAttemptSafe({ rideId: rid, captainId, roomName, socketIds: roomSocketIds });
+    if (socketCount > 0) {
+      delivered += 1;
+      console.log("[ride dispatch] socket offer sent", { rideId: rid, captainId, roomName, socketCount });
+      emitToCaptain(id, "new-ride", payload);
+      continue;
     }
+    console.warn("[ride dispatch] DRIVER SOCKET OFFLINE", {
+      rideId: rid,
+      captainId,
+      roomName,
+      storedSocketId: presence.socketId,
+      driverIsOnline: presence.isOnline,
+    });
   }
+  console.log(
+    "[ride dispatch] ride=%s city=%s matched=%d delivered=%d offline=%d targetDrivers=%s",
+    rid,
+    rideDoc?.city || ride?.city || "",
+    driverIds.length,
+    delivered,
+    driverIds.length - delivered,
+    driverIds.join(","),
+  );
   return { matched: driverIds.length, delivered };
 }
 
-/**
- * Offer a searching ride to the matched drivers AND guarantee a live socket
- * actually receives it.
- *
- * `broadcastRideNew` targets each matched driver's `driver-<id>` room. A driver
- * whose document still carries `isOnline: true` / `status: "active"` from an
- * earlier session (those flags are deliberately not cleared on disconnect so the
- * `/rides/pending` poll keeps working) is matched but has no room, so the offer
- * reaches nobody in real time. In that case fall back to every connected driver
- * socket — the same `online-drivers` room the zero-match case already uses. A
- * genuinely offline driver still ignores the frame client-side.
- */
-function offerRideToDrivers(rideDoc, driverIds) {
-  const dispatch = broadcastRideNew(rideDoc, driverIds);
-  if (dispatch.delivered > 0) return dispatch;
-
-  const fallbackPayload = { ride: publicRide(rideDoc), offeredAt: Date.now() };
-  const fallbackSockets = emitToOnlineDrivers(RIDE_REQUEST, fallbackPayload);
-  emitToOnlineDrivers("new-ride", fallbackPayload);
-  console.warn(
-    "[ride dispatch] ride %s matched %d driver(s) but none had a live socket — broadcast fallback reached %d connected driver socket(s)",
-    String(rideDoc?._id ?? ""),
-    driverIds.length,
-    fallbackSockets,
-  );
-  return {
-    ...dispatch,
-    fallbackBroadcast: fallbackSockets,
-    /** Sockets that actually received the offer (matched rooms, else the online fallback). */
-    delivered: fallbackSockets,
-  };
+/** Offer a searching ride to the matched drivers (no global broadcast fallback). */
+async function offerRideToDrivers(rideDoc, driverIds) {
+  const dispatch = await broadcastRideNew(rideDoc, driverIds);
+  if (dispatch.delivered === 0 && dispatch.matched > 0) {
+    console.warn(
+      "[ride dispatch] ride %s matched %d driver(s) but no live driver socket received it — the ride stays `searching` and is recoverable by the driver's /rides/pending poll and by emitJoinCatchUp on reconnect",
+      String(rideDoc?._id ?? ""),
+      dispatch.matched,
+    );
+  }
+  return dispatch;
 }
 
 function mergeUniqueIds(...lists) {
@@ -673,10 +738,11 @@ async function startRideDispatch(rideOrId) {
     });
   }
   /**
-   * `offerRideToDrivers` also covers the case where the eligibility query DID
-   * match drivers but none of them has a live socket (stale online flags).
+   * The eligibility query can match drivers that have no live socket (stale online
+   * flags are kept deliberately so `/rides/pending` keeps working). `offerRideToDrivers`
+   * reports that truthfully instead of pretending the offer was delivered.
    */
-  return offerRideToDrivers(populated, driverIds);
+  return await offerRideToDrivers(populated, driverIds);
 }
 
 module.exports.startRideDispatch = startRideDispatch;
@@ -968,7 +1034,7 @@ module.exports.retryAssign = async (req, res) => {
     if (driverIds.length === 0) {
       driverIds = await findCityAnyVehicleDriverIds({ rideCity: ride.city });
     }
-    offerRideToDrivers(ride, driverIds);
+    await offerRideToDrivers(ride, driverIds);
     return res.status(200).json({
       ...publicRide(ride),
       ok: true,
@@ -1325,6 +1391,7 @@ module.exports.cancelRideByUser = async (req, res) => {
     // The ride never happened, so free any coupon reserved for it (no-op when settled).
     await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
+    markRideDispatchesStatusSafe(ride._id, "cancelled");
     const finalRide = await rideModel
       .findById(ride._id)
       .populate("user")
@@ -1394,6 +1461,7 @@ module.exports.cancelRideByCaptain = async (req, res) => {
     // The ride never happened, so free any coupon reserved for it (no-op when settled).
     await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
+    markRideDispatchesStatusSafe(ride._id, "cancelled");
     const penalty = shouldTrackDriverCancel(ride)
       ? await applyDriverCancelPenalty(captainIdOf(req.captain))
       : null;
@@ -1896,9 +1964,16 @@ module.exports.userRideHistory = async (req, res) => {
       : Number.isFinite(limitRaw)
         ? Math.min(100, Math.max(1, Math.floor(limitRaw)))
         : 50;
+    /**
+     * Auto-expired rides (`cancelledBy: 'system'`) never happened and the passenger
+     * never chose to cancel them, so they are hidden from Ride History. A manual
+     * passenger cancel (`cancelledBy: 'user'`) and a driver cancel (`'captain'`)
+     * stay visible. Stored in DB either way — only the listing excludes them.
+     */
+    const notAutoExpired = { cancelledBy: { $ne: "system" } };
     /** OTP fields are select:false — do not use negative select; avoids some Mongoose edge cases. */
     const rides = await rideModel
-      .find({ user: userObjectId })
+      .find({ user: userObjectId, ...notAutoExpired })
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
@@ -1910,9 +1985,9 @@ module.exports.userRideHistory = async (req, res) => {
      */
     const upcomingStatuses = ["scheduled", "searching", "accepted", "arrived", "started"];
     const [total, completed, cancelled, upcoming] = await Promise.all([
-      rideModel.countDocuments({ user: userObjectId }),
+      rideModel.countDocuments({ user: userObjectId, ...notAutoExpired }),
       rideModel.countDocuments({ user: userObjectId, status: "completed" }),
-      rideModel.countDocuments({ user: userObjectId, status: "cancelled" }),
+      rideModel.countDocuments({ user: userObjectId, status: "cancelled", ...notAutoExpired }),
       rideModel.countDocuments({ user: userObjectId, status: { $in: upcomingStatuses } }),
     ]);
 

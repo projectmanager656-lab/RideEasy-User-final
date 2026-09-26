@@ -4,6 +4,20 @@ const rideSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
     captain: { type: mongoose.Schema.Types.ObjectId, ref: 'captain', default: null },
     declinedBy: { type: [ { type: mongoose.Schema.Types.ObjectId, ref: 'captain' } ], default: [] },
+    /**
+     * Drivers that actually RECEIVED this ride's socket offer and acknowledged it.
+     * A live room emit only proves the frame left the server, so this is the durable
+     * receipt (one entry per captain, idempotent). Presence metadata only — delivery
+     * targeting always uses the live `driver-<id>` room.
+     */
+    offerAcks: {
+        type: [ {
+            captain: { type: mongoose.Schema.Types.ObjectId, ref: 'captain' },
+            at: { type: Date },
+            socketId: { type: String },
+        } ],
+        default: [],
+    },
 
     pickupLocation: { type: String, required: true },
     dropLocation: { type: String, required: true },

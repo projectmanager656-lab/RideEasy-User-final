@@ -20,9 +20,14 @@ import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
 import { addRecentSearch, fetchBackendRecentSearches, getRecentSearches } from '../utils/recentSearches'
 import { useLanguage } from '../i18n'
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
-/** Same search window the tracking screen uses before it declares "No Driver Found". */
-const RIDE_SEARCH_TIMEOUT_SECONDS = 120
+import {
+    readRideSessionId,
+    writeRideSessionId,
+    clearRideSession,
+    isRideStatusFinal,
+    isRideSearchExpired,
+    RIDE_SEARCH_TIMEOUT_SECONDS,
+} from '../utils/rideSession'
 const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
@@ -307,14 +312,14 @@ const Home = () => {
     useEffect(() => {
         if (ride?._id) return
         if (chooseRideResult) return
-        const id = sessionStorage.getItem(USER_RIDE_SESSION_KEY)
+        const id = readRideSessionId()
         if (!id || !currentUser?._id) return
         const token = localStorage.getItem('token')
         if (!token) return
         /** Load ride into state (pickup/drop/OTP) but do NOT auto-open sheets — user stays on “Find a trip”. */
         syncRideFromServer(id).then((data) => {
             if (!data) {
-                try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                clearRideSession()
                 return
             }
             const st = normalizeRideStatus(data.status)
@@ -334,7 +339,7 @@ const Home = () => {
                 }
                 if (st === 'completed') {
                     /* Nothing left to resume — drop the stale session pointer. */
-                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                    clearRideSession()
                     return
                 }
                 /* Live ride, passenger chose Home: keep it loaded for the banner. */
@@ -343,23 +348,25 @@ const Home = () => {
                 setWaitingForDriver(false)
                 return
             }
-            /* A search that already ran past the window is dead. Resurrecting it makes
-               Home bounce the rider straight into the "No Driver Found" modal — e.g.
-               right after tapping "Where to go?" from the location screen. */
-            if (st === 'searching') {
-                /** Measure from when the search actually began (dispatch), not row creation. */
-                const baseMs = data.searchStartedAt
-                    ? new Date(data.searchStartedAt).getTime()
-                    : (data.createdAt ? new Date(data.createdAt).getTime() : NaN)
-                const expiredSearch = Number.isFinite(baseMs)
-                    && (Date.now() - baseMs) / 1000 >= RIDE_SEARCH_TIMEOUT_SECONDS
-                if (expiredSearch) {
-                    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-                    return
-                }
+            /**
+             * A search past its window is dead — never resurrect it. Showing it would
+             * put the stale "Looking for a driver" banner back on screen for a ride
+             * that cannot complete. Measured from the dispatch (searchStartedAt), not
+             * row creation, so a scheduled booking is not judged by its booking time.
+             */
+            if (isRideSearchExpired(data)) {
+                clearRideSession()
+                setRide(null)
+                return
+            }
+            if (isRideStatusFinal(st)) {
+                clearRideSession()
+                setRide(null)
+                return
             }
             if (![ 'scheduled', 'searching', 'accepted', 'arrived' ].includes(st)) {
-                try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+                clearRideSession()
+                setRide(null)
                 return
             }
             /**
@@ -384,12 +391,20 @@ const Home = () => {
         if (!socket) return;
 
         const handleRideAccepted = (payload) => {
+            const rideDoc = payload?.ride != null ? payload.ride : (payload?._id ? payload : null)
+            const eventRid = rideDoc?._id != null ? String(rideDoc._id) : ''
+            const currentRid = rideRef.current?._id != null ? String(rideRef.current._id) : ''
+            console.info('[ride socket] event', { event: RIDE_ACCEPTED, rideId: eventRid || currentRid })
+            if (!rideDoc) return
+            /** Never let an old ride's acceptance drive the screen a newer ride owns (Part 7). */
+            if (currentRid && eventRid && currentRid !== eventRid) {
+                console.info('[ride socket] ignored stale ride event', { event: RIDE_ACCEPTED, eventRideId: eventRid, currentRideId: currentRid })
+                return
+            }
             if (!keepSearchFirstRef.current) {
                 setVehicleFound(false);
                 setWaitingForDriver(true);
             }
-            const rideDoc = payload?.ride != null ? payload.ride : (payload?._id ? payload : null)
-            if (!rideDoc) return
             setRide(rideDoc);
             if (payload?.confirmation) {
                 setRideConfirmation(payload.confirmation)
@@ -409,9 +424,7 @@ const Home = () => {
             }
             const rid = rideDoc?._id
             if (rid) {
-                try {
-                    sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(rid))
-                } catch { /* ignore */ }
+                writeRideSessionId(rid)
                 syncRideFromServer(rid)
             }
         };
@@ -421,8 +434,25 @@ const Home = () => {
             const rid = rideRef.current?._id
             const incomingRid = data?.rideId != null ? String(data.rideId) : ''
             const currentRid = rid != null ? String(rid) : ''
-            if (incomingRid && currentRid && incomingRid !== currentRid) return
+            if (incomingRid && currentRid && incomingRid !== currentRid) {
+                console.info('[ride socket] ignored stale ride event', { event: 'ride:status-update', eventRideId: incomingRid, currentRideId: currentRid })
+                return
+            }
             if (data?.status) {
+                const st = data.status
+                console.info('[ride socket] event', { event: 'ride:status-update', rideId: incomingRid || currentRid, status: st })
+                /**
+                 * The backend re-sends the passenger's current ride on every socket join
+                 * (`emitJoinCatchUp`). A `searching` frame past its window is a DEAD ride, so
+                 * it must never repaint the "Looking for a driver" banner. Nothing is
+                 * cancelled or faked here — the stale frame is simply not shown.
+                 */
+                if (st === 'searching' && isRideSearchExpired(data.ride && typeof data.ride === 'object' ? data.ride : rideRef.current)) {
+                    console.info('[ride socket] ignored expired searching ride', { rideId: incomingRid || currentRid })
+                    clearRideSession()
+                    if (normalizeRideStatus(rideRef.current?.status) === 'searching') setRide(null)
+                    return
+                }
                 if (data.confirmation) {
                     setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
                 }
@@ -431,12 +461,7 @@ const Home = () => {
                     if (data.ride) return { ...base, ...data.ride, status: data.status }
                     return { ...base, status: data.status }
                 })
-                const st = data.status
-                if (st === 'completed' || st === 'cancelled') {
-                    try {
-                        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
-                    } catch { /* ignore */ }
-                }
+                if (isRideStatusFinal(st)) clearRideSession()
                 /* Always re-fetch ride+OTP on accepted/arrived — location pings include driverLocation and previously skipped OTP sync */
                 if (st === 'accepted' || st === 'arrived') {
                     const otpRid = incomingRid || currentRid
@@ -471,11 +496,7 @@ const Home = () => {
                         setWaitingForDriver(false)
                     }
                     const sid = incomingRid || (data.ride?._id != null ? String(data.ride._id) : '')
-                    if (sid) {
-                        try {
-                            sessionStorage.setItem(USER_RIDE_SESSION_KEY, sid)
-                        } catch { /* ignore */ }
-                    }
+                    if (sid) writeRideSessionId(sid)
                 }
                 if (st === 'accepted') {
                     if (!keepSearchFirstRef.current) {
@@ -507,9 +528,7 @@ const Home = () => {
                         ...(data.ride || {}),
                         status: 'completed',
                     }
-                    try {
-                        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
-                    } catch { /* ignore */ }
+                    clearRideSession()
                     navigate('/riding', { replace: true, state: { ride: completedRide } })
                     return
                 }
@@ -597,6 +616,7 @@ const Home = () => {
             socket.off(RIDE_COMPLETED, handleRideCompletedEvt)
             socket.off('ride:status-update', handleStatusUpdate)
             socket.off(NOTIFICATION_NEW, handleNotificationNew)
+            console.info('[ride socket] listeners cleaned', { rideId: rideRef.current?._id ?? null })
         }
     }, [socket, navigate, syncRideFromServer]);
 
@@ -1353,11 +1373,7 @@ const Home = () => {
                 setVehiclePanel(false)
                 setRide(null)
                 setScheduledRide(ridePayload)
-                if (ridePayload?._id) {
-                    try {
-                        sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
-                    } catch { /* ignore */ }
-                }
+                if (ridePayload?._id) writeRideSessionId(ridePayload._id)
                 return ridePayload
             }
             setRide(ridePayload)
@@ -1374,11 +1390,7 @@ const Home = () => {
                 })
                 setRecentSearches(getRecentSearches())
             }
-            if (ridePayload?._id) {
-                try {
-                    sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ridePayload._id))
-                } catch { /* ignore */ }
-            }
+            if (ridePayload?._id) writeRideSessionId(ridePayload._id)
             return ridePayload
         } catch (err) {
             setVehicleFound(false)
@@ -1453,11 +1465,7 @@ const Home = () => {
         if (!incoming || chooseRideConsumedRef.current) return
         chooseRideConsumedRef.current = true
         const { ride, pickupCoords: pu, dropCoords: dr, pickup: p, destination: d, vehicleType, scheduledAt } = incoming
-        if (ride?._id) {
-            try {
-                sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(ride._id))
-            } catch { /* ignore */ }
-        }
+        if (ride?._id) writeRideSessionId(ride._id)
         if (pu) setPickupCoords(pu)
         if (dr) setDropCoords(dr)
         if (p) setPickup(p)

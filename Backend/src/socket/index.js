@@ -4,6 +4,7 @@ const jwtConfig = require("../config/jwt.config");
 const { socketIoCorsConfig } = require("../config/cors.config");
 const { LOCATION_UPDATE } = require("./rideSocket.events");
 const { emitJoinCatchUp } = require("./rideJoinCatchUp");
+const { markDispatchAcknowledgedSafe } = require("../services/rideDispatch.service");
 const userModel = require("../models/user.model");
 const captainModel = require("../models/captain.model");
 const adminModel = require("../models/admin.model");
@@ -121,6 +122,26 @@ function joinDriverSocketRooms(socket, driverMongoId, cityKey) {
   });
 }
 
+/**
+ * Room membership is the authoritative "driver is connected" check — a stored
+ * `captain.socketId` is presence metadata only. Called right after every room join so
+ * a registration that silently failed to join `driver-<id>` is visible in the logs.
+ */
+function verifyDriverRoom(socket, captainId, sourceEvent) {
+  const id = normalizeClientId(captainId);
+  const roomName = driverRoomHyphen(id);
+  const room = io?.sockets?.adapter?.rooms?.get(roomName);
+  const socketCount = room ? room.size : 0;
+  console.log("[driver socket] room verified", {
+    captainId: id,
+    socketId: socket.id,
+    roomName,
+    socketCount,
+    sourceEvent,
+  });
+  return socketCount;
+}
+
 function emitToUser(userId, event, data, options = {}) {
   if (!io || userId == null) return;
   const id = roomId(userId);
@@ -188,6 +209,19 @@ function emitToCaptain(captainId, event, data) {
   });
 
   return socketCount;
+}
+
+/**
+ * Live socket ids currently in `driver-<id>`. The adapter room is the authority for
+ * "is this driver connected" — exposed so dispatch can log the exact room contents
+ * instead of inferring delivery from a stored `captain.socketId`.
+ */
+function driverRoomSocketIds(captainId) {
+  if (!io || captainId == null) return [];
+  const id = roomId(captainId);
+  if (!id) return [];
+  const room = io.sockets.adapter.rooms.get(driverRoomHyphen(id));
+  return room ? [ ...room ] : [];
 }
 
 function emitToAdmin(event, data) {
@@ -307,6 +341,14 @@ async function handleDriverPresenceJoin(socket, payload, sourceEvent) {
       captainId,
       cityKey,
     );
+    console.log("[driver socket] registered", {
+      captainId,
+      socketId: socket.id,
+      city: cityKey,
+      sourceEvent,
+    });
+    // Fail loudly if the room join did not take — ride delivery depends on this room.
+    verifyDriverRoom(socket, captainId, sourceEvent);
 
     // Update driver location if valid.
     if (validCoordinates(lat, lng)) {
@@ -433,8 +475,14 @@ function initializeSocket(server, app) {
 
   io.on("connection", (socket) => {
     slog("connection", socket.id);
+    if (socket.data.jwtRole === "captain") {
+      console.log("[driver socket] connected", {
+        socketId: socket.id,
+        captainId: socket.data.jwtUserId,
+      });
+    }
 
-    socket.on("join", async () => {
+    socket.on("join", async (payload) => {
       const id = socket.data.jwtUserId;
       const role = socket.data.jwtRole;
       if (!id || !["user", "captain", "admin"].includes(role)) return;
@@ -452,20 +500,14 @@ function initializeSocket(server, app) {
         slog("join passenger", { userId: id, socket: socket.id });
         void emitJoinCatchUp(socket);
       } else if (role === "captain") {
-        try {
-          await captainModel.findByIdAndUpdate(id, {
-            socketId: socket.id,
-            status: "active",
-            isOnline: true,
-          });
-        } catch (e) {
-          console.warn("[socket join captain] db update:", e?.message || e);
-        }
-        const cap = await captainModel.findById(id).select("servingCity");
-        const cityKey = cap?.servingCity || "Kolhapur";
-        joinDriverSocketRooms(socket, id, cityKey);
-        void emitJoinCatchUp(socket);
-        slog("join captain", { city: cityKey, socket: socket.id });
+        /**
+         * ONE driver-registration path for every join event (`join`, `driver:join`,
+         * `join-driver`) — the driver app emits more than one of them per connection,
+         * so they must all land in `handleDriverPresenceJoin`. That keeps a single
+         * implementation of the authenticated-id lookup, presence flags, room joins,
+         * room verification and reconnect catch-up.
+         */
+        await handleDriverPresenceJoin(socket, payload, "join");
       }
     });
 
@@ -571,7 +613,53 @@ function initializeSocket(server, app) {
     socket.on("driver:location-update", onDriverLocationPayload);
     socket.on("driver-location-update", onDriverLocationPayload);
 
-    socket.on("disconnect", async () => {
+    /**
+     * Driver acknowledges a ride offer it actually received. A successful
+     * `io.to(room).emit()` only proves the frame was handed to the socket, not that
+     * the driver got it — this receipt is the durable proof. Idempotent per captain,
+     * so a reconnect or a repeated offer cannot record the same receipt twice.
+     */
+    socket.on("rideRequest:ack", async (payload) => {
+      if (socket.data.jwtRole !== "captain" || !socket.data.jwtUserId) return;
+      const captainId = String(socket.data.jwtUserId);
+      const rideId = payload?.rideId != null ? String(payload.rideId) : "";
+      if (!mongoose.isValidObjectId(rideId)) return;
+      try {
+        const result = await rideModel.updateOne(
+          { _id: rideId, "offerAcks.captain": { $ne: captainId } },
+          { $push: { offerAcks: { captain: captainId, at: new Date(), socketId: socket.id } } },
+        );
+        console.log("[ride dispatch] driver ACK received", {
+          rideId,
+          captainId,
+          socketId: socket.id,
+          recorded: result.modifiedCount > 0,
+        });
+        markDispatchAcknowledgedSafe({ rideId, captainId, socketId: socket.id });
+      } catch (e) {
+        console.warn("[ride dispatch] driver ACK failed", {
+          rideId,
+          captainId,
+          message: e?.message || String(e),
+        });
+      }
+    });
+
+    socket.on("disconnect", async (reason) => {
+      if (socket.data.jwtRole === "captain") {
+        console.log("[driver socket] disconnected", {
+          socketId: socket.id,
+          captainId: socket.data.jwtUserId,
+          reason,
+        });
+      }
+      /**
+       * Clear the stored socketId ONLY when it still points at the disconnecting
+       * socket — a lingering old socket that disconnects after a reconnect must never
+       * wipe the newer connection's id. `status`/`isOnline` are deliberately left
+       * alone so a matched-but-offline ride stays visible to the `/rides/pending`
+       * poll (a client only opens an offer while it is actually online).
+       */
       await Promise.all([
         captainModel.findOneAndUpdate(
           { socketId: socket.id },
@@ -602,6 +690,7 @@ module.exports = {
   STANDARD_PHASE_EVENTS,
   getIo,
   driverRoomHyphen,
+  driverRoomSocketIds,
   cityRoomFromKey,
   ONLINE_DRIVERS_ROOM,
 };

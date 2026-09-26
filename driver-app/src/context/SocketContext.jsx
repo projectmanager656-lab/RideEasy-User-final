@@ -7,7 +7,8 @@ export const SocketContext = createContext(undefined)
 
 /** Always logged (not DEV-gated): ride-dispatch problems are diagnosed from these lines. */
 function logSocket (msg, detail) {
-  console.info(`[socket] ${msg}`, detail != null ? detail : '')
+  if (detail !== undefined && detail !== null) console.info(`[driver socket] ${msg}`, detail)
+  else console.info(`[driver socket] ${msg}`)
 }
 
 /** Vercel serverless cannot keep Socket.IO connections; set VITE_DISABLE_SOCKET=true there. */
@@ -25,7 +26,11 @@ function createNoOpSocket () {
   }
 }
 
-const socketUrl = getSocketBaseUrl()
+/**
+ * Same backend as the passenger app: `VITE_SOCKET_URL` when set (mirrors
+ * user-app/src/context/SocketContext.jsx), otherwise derived from the REST base.
+ */
+const socketUrl = import.meta.env.VITE_SOCKET_URL || getSocketBaseUrl()
 
 const socket =
   import.meta.env.VITE_DISABLE_SOCKET === 'true'
@@ -73,15 +78,15 @@ if (import.meta.env.VITE_DISABLE_SOCKET !== 'true') {
     lastAuthToken = token
     cb(token ? { token } : {})
   }
-  socket.on('connect', () => logSocket('connected', { id: socket.id }))
-  socket.on('disconnect', (reason) => logSocket('disconnect', reason))
+  socket.on('connect', () => logSocket('connected', { socketId: socket.id }))
+  socket.on('disconnect', (reason) => logSocket('disconnected', { reason }))
   socket.on('connect_error', (err) => {
     const msg = err?.message || String(err)
     if (msg === 'Unauthorized') {
-      console.warn('[socket] handshake rejected — captain token missing/expired; rideRequest will NOT arrive, falling back to /rides/pending polling')
+      console.warn('[driver socket] connect_error — handshake rejected, captain token missing/expired; rideRequest will NOT arrive, falling back to /rides/pending polling')
       return
     }
-    console.warn('[socket] connect_error', msg)
+    console.warn('[driver socket] connect_error', { message: msg })
   })
   socket.io.on('reconnect_attempt', (n) => logSocket('reconnect_attempt', n))
 }
@@ -120,9 +125,9 @@ const SocketProvider = ({ children }) => {
         lastAuthToken = token
         if (socket.connected) socket.disconnect()
       }
+      // One connection per driver session: never call connect() while one is live.
       if (!socket.connected) {
-        logSocket('backend live OK', liveUrl)
-        logSocket('calling socket.connect()', { authenticated: true })
+        logSocket('connecting', { url: socketUrl, backendLive: liveUrl })
         socket.connect()
       }
     }

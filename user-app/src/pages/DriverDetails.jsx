@@ -8,13 +8,12 @@ import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
+import { readRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
 import autoImg from '../assets/Auto-img-ride.png'
 import carImg from '../assets/Car-img-ride.png'
 import luxuryImg from '../assets/luxury-img-ride.png'
-
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
 function normalizeStatus (s) {
   return String(s || '').trim().toLowerCase()
@@ -55,7 +54,7 @@ const DriverDetails = () => {
 
   const [ride, setRide] = useState(() => {
     if (state.ride?._id) return { ...state.ride }
-    const id = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(USER_RIDE_SESSION_KEY) : null
+    const id = readRideSessionId()
     if (id) return { _id: id }
     return null
   })
@@ -93,14 +92,13 @@ const DriverDetails = () => {
     }
   }
 
+  /**
+   * No ride id → nothing to show. Deliberately does NOT write the id back into
+   * session storage: re-seeding a bare id here is what kept a dead ride "active"
+   * across reloads. The ride is only persisted once the backend confirms it below.
+   */
   useEffect(() => {
-    if (!rideId) {
-      navigate('/home', { replace: true })
-      return
-    }
-    try {
-      sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(rideId))
-    } catch { /* ignore */ }
+    if (!rideId) navigate('/home', { replace: true })
   }, [rideId, navigate])
 
   useEffect(() => {
@@ -170,9 +168,7 @@ const DriverDetails = () => {
       if (data.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
       const otpVal = data.confirmation?.otp ?? data.otp
       if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
-      if (data.status === 'completed' || data.status === 'cancelled') {
-        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-      }
+      if (isRideStatusFinal(data.status)) clearRideSession()
       setRide((prev) => {
         const base = { ...(prev || {}) }
         return data.ride
@@ -252,8 +248,8 @@ const DriverDetails = () => {
     if (!rideId) return
     const st = normalizeStatus(ride?.status)
     if (st === 'completed') return
-    if (st === 'cancelled') {
-      try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    if (isRideStatusFinal(st)) {
+      clearRideSession()
       navigateRef.current('/home', { replace: true })
       return
     }

@@ -67,6 +67,17 @@ apiClient.interceptors.response.use(
       } catch {
         /* ignore */
       }
+      /**
+       * The token is gone — tell SocketContext so it drops the now-invalid live
+       * connection instead of staying authenticated on a dead JWT until the reload.
+       */
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new Event('rideeasy:session-changed'))
+        } catch {
+          /* ignore */
+        }
+      }
       const p = typeof window !== 'undefined' ? window.location.pathname : ''
       if (p !== '/login' && p !== '/signup') {
         window.location.replace('/login')

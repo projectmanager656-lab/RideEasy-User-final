@@ -13,20 +13,10 @@ import { apiClient, withAuth } from '../services/http'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { getPassengerToken } from '../utils/authTokens'
-
-/** Same key as Home.jsx — in-progress booking hint (never used to open /riding). */
-const PASSENGER_BOOKING_SESSION_KEY = 'rideeasy_user_ride'
+import { clearRideSession } from '../utils/rideSession'
 
 function notifySessionChanged () {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('rideeasy:session-changed'))
-}
-
-function clearPassengerBookingSessionHint () {
-  try {
-    sessionStorage.removeItem(PASSENGER_BOOKING_SESSION_KEY)
-  } catch {
-    /* ignore */
-  }
 }
 
 export const UserDataContext = createContext(undefined)
@@ -84,7 +74,7 @@ const UserContext = ({ children }) => {
     } catch {
       /* ignore */
     }
-    clearPassengerBookingSessionHint()
+    clearRideSession()
     setToken(null)
     setUser(null)
     setProfileError('')
@@ -186,7 +176,7 @@ const UserContext = ({ children }) => {
       if (!t) {
         // No stored session at all → genuinely signed out.
         setUser(null)
-        clearPassengerBookingSessionHint()
+        clearRideSession()
         if (!cancelled) setAuthLoading(false)
         return
       }

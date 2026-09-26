@@ -1,7 +1,7 @@
 const CaptainOnboarding = require("../models/captainOnboarding.model");
 const captainModel = require("../models/captain.model");
+const { canonicalServiceCity } = require("../utils/serviceArea");
 
-const ALLOWED_CITIES = ["Kolhapur", "Ichalkaranji", "Sangli"];
 const ALLOWED_VEHICLE_TYPES = ["BIKE", "AUTO", "CAR"];
 
 const SECTION_FIELDS = {
@@ -91,7 +91,9 @@ function validateSubmission(onboarding) {
   const personal = onboarding.personalInformation || {};
   const licence = onboarding.drivingLicence || {};
   const vehicle = onboarding.vehicleInformation || {};
-  const servingCity = requiredText(personal.servingCity, "servingCity");
+  const servingCity = canonicalServiceCity(
+    requiredText(personal.servingCity, "servingCity"),
+  );
   const drivingLicenceNumber = requiredText(
     licence.drivingLicenceNumber,
     "drivingLicenceNumber",
@@ -102,7 +104,7 @@ function validateSubmission(onboarding) {
   );
   const vehicleType = requiredText(vehicle.vehicleType, "vehicleType").toUpperCase();
 
-  if (!ALLOWED_CITIES.includes(servingCity)) {
+  if (!servingCity) {
     throw onboardingError("Invalid servingCity", 400);
   }
   if (!ALLOWED_VEHICLE_TYPES.includes(vehicleType)) {

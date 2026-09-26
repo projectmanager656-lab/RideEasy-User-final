@@ -8,7 +8,8 @@ export const SocketContext = createContext(undefined)
 
 /** Always logged (not DEV-gated): ride-dispatch problems are diagnosed from these lines. */
 function logSocket (msg, detail) {
-  console.info(`[socket] ${msg}`, detail != null ? detail : '')
+  if (detail !== undefined && detail !== null) console.info(`[socket] ${msg}`, detail)
+  else console.info(`[socket] ${msg}`)
 }
 
 function createNoOpSocket () {
@@ -39,10 +40,17 @@ const socket =
         reconnectionDelayMax: 10000,
       })
 
+/**
+ * Token the CURRENT handshake was opened with. Comparing it on every session change
+ * is what makes login/account-switch reconnect instead of silently keeping the old
+ * JWT on an already-connected socket.
+ */
+let connectedToken = null
+
 if (import.meta.env.VITE_DISABLE_SOCKET !== 'true') {
-  socket.on('connect', () => logSocket('connected', { id: socket.id }))
-  socket.on('disconnect', (reason) => logSocket('disconnect', reason))
-  socket.on('connect_error', (err) => logSocket('connect_error', err?.message || err))
+  socket.on('connect', () => logSocket('connected', { socketId: socket.id }))
+  socket.on('disconnect', (reason) => logSocket('disconnected', { reason }))
+  socket.on('connect_error', (err) => logSocket('connect_error', { message: err?.message || String(err) }))
 }
 
 const SocketProvider = ({ children }) => {
@@ -57,9 +65,22 @@ const SocketProvider = ({ children }) => {
     const syncConnection = async () => {
       const token = getPassengerToken()
       if (!token) {
+        // Signed out — drop the connection and forget the handshake token.
+        connectedToken = null
+        socket.auth = {}
         if (socket.connected) socket.disconnect()
         return
       }
+      /**
+       * Token changed (login / account switch) while connected: the live handshake still
+       * carries the old JWT, so force a reconnect with the new one instead of reusing it.
+       */
+      if (socket.connected && connectedToken && connectedToken !== token) {
+        socket.disconnect()
+      }
+      // Already connected/handshaking with this exact token — nothing to do (no dupes).
+      if (connectedToken === token && (socket.connected || socket.active)) return
+
       // Brief health probe so we connect once the backend is reachable instead of
       // logging a burst of connect errors. Socket.IO owns reconnection after this.
       for (let i = 0; i < 8 && !cancelled; i++) {
@@ -73,6 +94,8 @@ const SocketProvider = ({ children }) => {
       }
       if (cancelled) return
       socket.auth = { token }
+      connectedToken = token
+      logSocket('connecting', { url: socketUrl })
       if (!socket.connected) socket.connect()
     }
 
@@ -83,6 +106,9 @@ const SocketProvider = ({ children }) => {
     return () => {
       cancelled = true
       window.removeEventListener('rideeasy:session-changed', onSessionChanged)
+      // Clean disconnect on provider unmount / app shutdown — never leave a live socket behind.
+      connectedToken = null
+      try { socket.disconnect() } catch { /* ignore */ }
     }
   }, [])
 

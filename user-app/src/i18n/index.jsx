@@ -113,7 +113,6 @@ const en = {
   profile: 'Account',
 
 // --- Account / Profile ---
-   premium_user: 'Premium User',
    verified: 'Verified',
    rides: 'rides',
    edit: 'Edit',

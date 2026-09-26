@@ -10,14 +10,7 @@ import {
   fetchSafetyPrefs,
   updateSafetyPref,
 } from '../utils/safetyData'
-
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
-
-function activeRideId () {
-  try {
-    return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
-  } catch { return null }
-}
+import { readRideSessionId } from '../utils/rideSession'
 
 /** Live active ride (if any) + driver info, from the same endpoint Home uses. */
 function useActiveRide () {
@@ -33,7 +26,7 @@ function useActiveRide () {
   }, [])
 
   useEffect(() => {
-    const id = activeRideId()
+    const id = readRideSessionId()
     if (!id) {
       setRide(null)
       setLoading(false)

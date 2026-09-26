@@ -11,27 +11,11 @@ import { API_BASE_URL } from '../config/apiBaseUrl'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
 import { getPassengerToken } from '../utils/authTokens'
 import { RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
+import { readRideSessionId, clearRideSession, isRideStatusFinal, isRideGenuinelyActive } from '../utils/rideSession'
 import { useLanguage } from '../i18n'
 import { haversineKm } from '../utils/serviceArea'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
-
-/** Session key written by ChooseRide / SearchingForDriver / Home for the passenger's current ride. */
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
-
-function readSessionRideId () {
-    try {
-        return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
-    } catch {
-        return null
-    }
-}
-
-function clearSessionRide () {
-    try {
-        sessionStorage.removeItem(USER_RIDE_SESSION_KEY)
-    } catch { /* ignore */ }
-}
 
 /** Digits (plus a leading +) a phone dialer understands; '' when there is nothing to dial. */
 function dialablePhone (phone) {
@@ -46,7 +30,7 @@ const Riding = () => {
     // the session key still points at the active ride — hydrate it below.
     const [ride, setRide] = useState(() => {
         if (initialRide?._id) return initialRide
-        const id = readSessionRideId()
+        const id = readRideSessionId()
         return id ? { _id: id } : null
     })
     const [pickupCoords, setPickupCoords] = useState(null)
@@ -96,17 +80,20 @@ const Riding = () => {
                     setRide(doc)
                     return
                 }
-                if (next === 'cancelled') {
-                    clearSessionRide()
+                /** A terminal or dead-search ride must never open live tracking. */
+                if (isRideStatusFinal(next) || !isRideGenuinelyActive(doc)) {
+                    clearRideSession()
                     navigate('/home', { replace: true })
                     return
                 }
                 // searching / accepted / arrived → belongs on the driver-search screen.
-                navigate('/searching-for-driver', { replace: true })
+                // Hand over the ride the backend just confirmed, so that screen never
+                // has to trust a bare id from session storage.
+                navigate('/searching-for-driver', { replace: true, state: { ride: doc } })
             })
             .catch(() => {
                 if (cancelled) return
-                clearSessionRide()
+                clearRideSession()
                 navigate('/home', { replace: true })
             })
         return () => {
@@ -397,7 +384,7 @@ const Riding = () => {
     }, [ride?._id, t])
 
     const goHome = useCallback(() => {
-        clearSessionRide()
+        clearRideSession()
         navigate('/home', { replace: true })
     }, [navigate])
 
@@ -411,7 +398,7 @@ const Riding = () => {
     useEffect(() => {
         if (ride?.status !== 'completed') return
         const t = setTimeout(() => {
-            clearSessionRide()
+            clearRideSession()
             navigate('/home', { replace: true })
         }, 120000)
         return () => clearTimeout(t)

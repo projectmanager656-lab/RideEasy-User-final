@@ -14,6 +14,7 @@ const Coupon = require("../models/coupon.model");
 const { logAdminAction } = require("../services/auditLog.service");
 const refundService = require("../services/refund.service");
 const pricingService = require("../services/pricing.service");
+const { canonicalServiceCity } = require("../utils/serviceArea");
 
 /** Match ride.controller payRide / COMMISSION_PERCENT default (15%). */
 function commissionPct() {
@@ -336,13 +337,16 @@ module.exports.approveDriver = async (req, res) => {
       captainId: id,
     }).select("personalInformation.servingCity vehicleInformation.vehicleType");
 
-    const servingCity = onboarding?.personalInformation?.servingCity;
+    /** Canonicalised so `drivers.servingCity` always equals the value ride dispatch matches on. */
+    const servingCity = canonicalServiceCity(
+      onboarding?.personalInformation?.servingCity,
+    );
     const vehicleType = onboarding?.vehicleInformation?.vehicleType;
     const driver = await Captain.findByIdAndUpdate(
       id,
       {
         approved: true,
-        ...(servingCity !== undefined ? { servingCity } : {}),
+        ...(servingCity ? { servingCity } : {}),
         ...(vehicleType !== undefined ? { vehicleType } : {}),
       },
       { new: true },

@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
-
-/** Ride session marker shared with the ride flow — present while a ride is active. */
-const RIDE_SESSION_KEY = 'rideeasy_user_ride'
+import { readRideSessionId } from '../utils/rideSession'
 
 /** Ride / payment screens where Back must not drop the rider out of the app. */
 const PROTECTED_FLOW_PREFIXES = [
@@ -17,11 +15,7 @@ const PROTECTED_FLOW_PREFIXES = [
 ]
 
 function isProtectedFlow (pathname) {
-  try {
-    if (sessionStorage.getItem(RIDE_SESSION_KEY)) return true
-  } catch {
-    /* storage unavailable */
-  }
+  if (readRideSessionId()) return true
   return PROTECTED_FLOW_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   )

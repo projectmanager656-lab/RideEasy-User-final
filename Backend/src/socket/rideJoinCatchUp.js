@@ -12,6 +12,8 @@ function publicRideForSocket(ride) {
     delete o.otpHash;
     delete o.otpCipher;
     delete o.otp;
+    /* Server-side delivery bookkeeping — never part of the client ride contract. */
+    delete o.offerAcks;
     return o;
 }
 

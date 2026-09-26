@@ -135,7 +135,7 @@ const CaptainHome = () => {
 
         const doJoin = () => {
             ensureSocketAuth()
-            console.info('[socket] registering as driver', { driverId: capId, city, online })
+            console.info('[driver socket] registered', { captainId: capId, socketId: socket.id, city, online })
             socket.emit('join', { userId: capId, userType: 'captain' })
             if (navigator.geolocation) {
                 const emitJoin = (lat, lng) => {
@@ -161,7 +161,12 @@ const CaptainHome = () => {
                 socket.emit('join-driver', { driverId: capId, city, lat: fallback.lat, lng: fallback.lng })
             }
         }
-        doJoin()
+        /**
+         * Register now ONLY when already connected. Emitting before the first connect
+         * would buffer the frame AND fire again from the 'connect' handler below,
+         * registering this one socket twice (duplicate join frames per connection).
+         */
+        if (socket.connected) doJoin()
         socket.on('connect', doJoin)
         const fetchPending = () => apiClient
             .get('/rides/pending', {
@@ -236,6 +241,17 @@ const CaptainHome = () => {
             const cap = r.captain
             if (cap && (cap._id || (typeof cap === 'string' && cap.length > 0))) {
                 console.warn('[RideEasy driver] rideRequest %s ignored — already assigned to a driver', idStr)
+                return
+            }
+            console.log('[ride socket] OFFER RECEIVED', { rideId: idStr })
+            /**
+             * Acknowledge receipt so the backend keeps durable proof the offer reached
+             * this driver — a successful server-side room emit alone does not prove it.
+             */
+            socket.emit('rideRequest:ack', { rideId: idStr })
+            /** Reconnect / catch-up can re-deliver the same offer — never stack it twice. */
+            if (activeRideIdRef.current === idStr && ridePopupOpenRef.current) {
+                console.log('[ride socket] duplicate offer ignored', { rideId: idStr })
                 return
             }
             pollSuppressedRideIdsRef.current.delete(idStr)

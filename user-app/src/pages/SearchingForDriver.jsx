@@ -9,13 +9,19 @@ import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
+import {
+  readRideSessionId,
+  writeRideSessionId,
+  clearRideSession,
+  isRideStatusFinal,
+  isRideGenuinelyActive,
+} from '../utils/rideSession'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
 import autoImg from '../assets/Auto-img-ride.png'
 import carImg from '../assets/Car-img-ride.png'
 import luxuryImg from '../assets/luxury-img-ride.png'
 
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
 const LOOKING_TIMEOUT_SECONDS = 120
 
 /**
@@ -128,14 +134,17 @@ const SearchingForDriver = () => {
   const location = useLocation()
   const state = location.state || {}
 
-  /** Incoming ride from Choose Ride (created ride doc) or the persisted ride id. */
-  const [ride, setRide] = useState(() => {
-    if (state.ride?._id) return { ...state.ride }
-    const id = (typeof sessionStorage !== 'undefined') ? sessionStorage.getItem(USER_RIDE_SESSION_KEY) : null
-    if (id) return { _id: id }
-    return null
-  })
-  const rideId = ride?._id || null
+  /**
+   * A ride handed over by the booking flow is already backend-confirmed, so it may
+   * open tracking immediately. A bare id restored from session storage is only a
+   * HINT — it must be confirmed with GET /rides/:id before this screen may show
+   * "Looking for a driver", and must be cleared when the ride is not genuinely active.
+   */
+  const navRide = state.ride && state.ride._id ? state.ride : null
+  const [rideId] = useState(() => navRide?._id || readRideSessionId() || null)
+  const [ride, setRide] = useState(() => (navRide ? { ...navRide } : null))
+  /** True once the ride is confirmed (handed over by booking, or fetched from the backend). */
+  const [rideResolved, setRideResolved] = useState(Boolean(navRide))
 
   /** Passed-through details from the Choose Ride screen (fall back to ride fields). */
   const pickup = normalizeLocationText(state.pickup || ride?.pickupLocation, '')
@@ -185,13 +194,15 @@ const SearchingForDriver = () => {
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
 
-  /** Persist the ride id under the existing session key so Home can restore it later. */
+  /**
+   * Persist the ride id ONLY once a genuinely active ride has been confirmed, so a
+   * stale id can never re-seed itself into session storage just by opening this
+   * screen (the old mount-time write kept a dead ride alive across reloads).
+   */
   useEffect(() => {
-    if (!rideId) return
-    try {
-      sessionStorage.setItem(USER_RIDE_SESSION_KEY, String(rideId))
-    } catch { /* ignore */ }
-  }, [rideId])
+    if (!rideId || !rideResolved) return
+    writeRideSessionId(rideId)
+  }, [rideId, rideResolved])
 
   /** Join the passenger room so status/location events reach this page (also after a refresh). */
   const { user: currentUser } = useUserData()
@@ -212,29 +223,62 @@ const SearchingForDriver = () => {
     navigate('/home', { replace: true })
   }, [rideId, navigate])
 
-  /** One-shot live fetch so the ride doc + driver/status arrive immediately. */
+  /**
+   * One-shot live fetch. When the ride was handed over by the booking flow it only
+   * refreshes state; when it came from the storage hint it is the CONFIRMATION step —
+   * the tracking screen may only render once the backend reports a genuinely active
+   * ride. A final status, an unconfirmable hint, a 404 or any failed fetch clears the
+   * stale id and leaves tracking, instead of leaving "Looking for a driver" on screen.
+   */
   useEffect(() => {
     if (!rideId) return
     let cancelled = false
+    const fromBooking = Boolean(state.ride?._id)
+    /** Clear the stale pointer and leave tracking — at most once. */
+    const leaveTracking = () => {
+      if (missingRideHandledRef.current) return
+      missingRideHandledRef.current = true
+      clearRideSession()
+      navigateRef.current('/home', { replace: true })
+    }
     apiClient.get(`/rides/${rideId}`, withAuth())
       .then((res) => {
         if (cancelled) return
         const o = stripApiEnvelope(res.data)
+        const status = normalizeStatus(o.status)
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
+        /**
+         * A stored hint must resolve to a GENUINELY active ride (`isRideGenuinelyActive`
+         * already rejects expired searches) before it may keep tracking. A ride handed
+         * over by navigation is already backend-confirmed — a terminal status still ends
+         * tracking, but a live search is left to the existing 120s timeout / "No Driver
+         * Found" fallback rather than being bounced home immediately.
+         */
+        const unresolvedHint = !fromBooking && !isRideGenuinelyActive(o)
+        if (isRideStatusFinal(status) || unresolvedHint) {
+          console.warn('[ride socket] stale ride — leaving tracking', { rideId, status })
+          leaveTracking()
+          return
+        }
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
         if (conf) setRideConfirmation(conf)
         applyGeoFromRide(o)
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        setRideResolved(true)
+        console.info('[ride socket] ride confirmed', { rideId, status })
       })
       .catch((err) => {
-        if (err?.response?.status !== 404 || missingRideHandledRef.current) return
-        missingRideHandledRef.current = true
-        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
-        navigateRef.current('/home', { replace: true })
+        if (cancelled) return
+        const httpStatus = err?.response?.status
+        console.warn('[ride socket] ride fetch failed', { rideId, status: httpStatus || 'network' })
+        // A ride handed over by booking is trusted and may still be retried by polling;
+        // an unconfirmable STORED id must be cleared rather than trusted.
+        if (fromBooking) return
+        leaveTracking()
       })
     return () => { cancelled = true }
-  }, [rideId])
+  }, [rideId, state.ride?._id])
 
   /** Socket status events — mirrors Home.jsx handlers (OTP only arrives via REST). */
   useEffect(() => {
@@ -242,7 +286,15 @@ const SearchingForDriver = () => {
 
     const handleAccepted = (payload) => {
       const rideDoc = payload?.ride != null ? payload.ride : (payload?._id ? payload : null)
-      if (!rideDoc || String(rideDoc._id) !== String(rideIdRef.current)) return
+      const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
+      const eventRid = rideDoc?._id != null ? String(rideDoc._id) : ''
+      console.info('[ride socket] event', { event: RIDE_ACCEPTED, rideId: eventRid || currentRid })
+      if (!rideDoc || eventRid !== currentRid) {
+        if (eventRid && currentRid && eventRid !== currentRid) {
+          console.info('[ride socket] ignored stale ride event', { event: RIDE_ACCEPTED, eventRideId: eventRid, currentRideId: currentRid })
+        }
+        return
+      }
       setRide((prev) => ({ ...(prev || {}), ...rideDoc }))
       if (payload?.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...payload.confirmation }))
       const otpVal = payload?.confirmation?.otp ?? payload?.otp
@@ -253,7 +305,12 @@ const SearchingForDriver = () => {
       if (!data?.status) return
       const incomingRid = data?.rideId != null ? String(data.rideId) : ''
       const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
-      if (incomingRid && currentRid && incomingRid !== currentRid) return
+      console.info('[ride socket] event', { event: 'ride:status-update', rideId: incomingRid || currentRid, status: data.status })
+      /** Never let a different/stale ride drive this screen's UI. */
+      if (incomingRid && currentRid && incomingRid !== currentRid) {
+        console.info('[ride socket] ignored stale ride event', { event: 'ride:status-update', eventRideId: incomingRid, currentRideId: currentRid })
+        return
+      }
       if (data.status === 'started') {
         if (startedHandledRef.current === currentRid) return
         startedHandledRef.current = currentRid
@@ -273,8 +330,15 @@ const SearchingForDriver = () => {
       if (data.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
       const otpVal = data.confirmation?.otp ?? data.otp
       if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
-      if (data.status === 'completed' || data.status === 'cancelled') {
-        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      /** Any terminal status ends tracking here — clear the pointer and move on. */
+      if (isRideStatusFinal(data.status)) {
+        clearRideSession()
+        if (data.status === 'completed') {
+          navigateRef.current('/riding', { state: { ride: { ...(data.ride || { _id: currentRid }), status: 'completed' } } })
+        } else {
+          navigateRef.current('/home', { replace: true })
+        }
+        return
       }
       setRide((prev) => {
         const base = { ...(prev || {}) }
@@ -288,7 +352,10 @@ const SearchingForDriver = () => {
       if (!payload || payload.source === 'passenger') return
       const incomingRid = payload?.rideId != null ? String(payload.rideId) : ''
       const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
-      if (incomingRid && currentRid && incomingRid !== currentRid) return
+      if (incomingRid && currentRid && incomingRid !== currentRid) {
+        console.info('[ride socket] ignored stale ride event', { event: LOCATION_UPDATE, eventRideId: incomingRid, currentRideId: currentRid })
+        return
+      }
       if (payload.lat != null && payload.lng != null) {
         setRideConfirmation((prev) => ({ ...(prev || {}), liveLocation: { lat: Number(payload.lat), lng: Number(payload.lng) } }))
       }
@@ -323,6 +390,7 @@ const SearchingForDriver = () => {
       socket.off(RIDE_COMPLETED, handleRideCompleted)
       socket.off(LOCATION_UPDATE, handleLocationUpdate)
       socket.off('ride:status-update', handleStatusUpdate)
+      console.info('[ride socket] listeners cleaned', { rideId: rideIdRef.current })
     }
   }, [socket, rideId])
 
@@ -361,7 +429,7 @@ const SearchingForDriver = () => {
     const st = normalizeStatus(ride?.status)
     if (st === 'completed') return
     if (st === 'cancelled') {
-      try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      clearRideSession()
       navigateRef.current('/home', { replace: true })
       return
     }
@@ -375,8 +443,13 @@ const SearchingForDriver = () => {
         if (cancelled) return
         const o = stripApiEnvelope(res.data)
         const dst = normalizeStatus(o.status)
-        if (dst === 'cancelled') {
-          try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+        if (dst === 'completed') {
+          clearRideSession()
+          navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'completed' } } })
+          return
+        }
+        if (isRideStatusFinal(dst)) {
+          clearRideSession()
           navigateRef.current('/home', { replace: true })
           return
         }
@@ -395,7 +468,7 @@ const SearchingForDriver = () => {
       } catch (err) {
         if (err?.response?.status !== 404 || missingRideHandledRef.current) return
         missingRideHandledRef.current = true
-        try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+        clearRideSession()
         navigateRef.current('/home', { replace: true })
       }
     }
@@ -428,11 +501,36 @@ const SearchingForDriver = () => {
     try {
       await apiClient.patch(`/rides/${rideId}/cancel`, { reason: cancelReason || 'Cancelled by passenger' }, withAuth())
     } catch (err) {
+      /**
+       * 409 = the ride is no longer cancellable. NEVER retry the cancel; read the real
+       * status once and route by it (final → leave tracking, otherwise show the error).
+       */
+      if (err?.response?.status === 409) {
+        try {
+          const res = await apiClient.get(`/rides/${rideId}`, withAuth())
+          const o = stripApiEnvelope(res.data)
+          const dst = normalizeStatus(o.status)
+          if (isRideStatusFinal(dst)) {
+            clearRideSession()
+            setCancelSheetOpen(false)
+            setCancelling(false)
+            if (dst === 'completed') {
+              navigate('/riding', { replace: true, state: { ride: { ...(o || {}), status: 'completed' } } })
+            } else {
+              navigate('/home', { replace: true })
+            }
+            return
+          }
+          setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        } catch {
+          /* fall through to the error banner */
+        }
+      }
       setCancelError(formatApiError(err))
       setCancelling(false)
       return
     }
-    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    clearRideSession()
     setCancelSheetOpen(false)
     navigate('/home', { replace: true })
   }, [rideId, cancelling, cancelReason, navigate])
@@ -446,9 +544,10 @@ const SearchingForDriver = () => {
   }, [navigate])
 
   const status = normalizeStatus(ride?.status)
-  const isSearching = !status || status === 'searching'
-  const isAssigned = status === 'accepted'
-  const isArrived = status === 'arrived'
+  /** Only a backend-confirmed active ride may render the "Looking for a driver" sheet. */
+  const isSearching = rideResolved && (!status || status === 'searching')
+  const isAssigned = rideResolved && status === 'accepted'
+  const isArrived = rideResolved && status === 'arrived'
 
   // Sync remaining search seconds from when the search actually began.
   // A scheduled ride is created hours earlier, so `createdAt` would make the
@@ -479,14 +578,14 @@ const SearchingForDriver = () => {
   useEffect(() => {
     if (searchTimeLeft === 0 && isSearching && rideId && !searchTimeoutHandledRef.current) {
       searchTimeoutHandledRef.current = true
-      try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+      clearRideSession()
       setCancelSheetOpen(false)
       setSearchAgainModalOpen(true)
     }
   }, [searchTimeLeft, isSearching, rideId])
 
   const handleSearchAgain = useCallback(() => {
-    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    clearRideSession()
     navigate('/choose-ride', {
       replace: true,
       state: {
@@ -501,7 +600,7 @@ const SearchingForDriver = () => {
   }, [navigate, pickup, destination, pickupCoords, dropCoords, vehicleType, rideTierId])
 
   const handleCloseSearchAgainModal = useCallback(() => {
-    try { sessionStorage.removeItem(USER_RIDE_SESSION_KEY) } catch { /* ignore */ }
+    clearRideSession()
     navigate('/home', { replace: true })
   }, [navigate])
 
@@ -767,6 +866,13 @@ const SearchingForDriver = () => {
     : (isArrived ? t('driver_is_at_pickup', { driverName }) : t('driver_on_the_way', { driverName }))
 
   const mapShown = useMemo(() => !!pickupCoords || !!dropCoords, [pickupCoords, dropCoords])
+
+  /**
+   * The ride was only a stored hint and the backend has not confirmed it yet — do NOT
+   * render the tracking sheet (that is the stale "Looking for a driver" screen). The
+   * confirmation effect above either resolves to a real ride or navigates away.
+   */
+  if (!rideResolved) return null
 
   return (
     <div className={`relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary ${isSearching ? '' : 'min-h-0'}`}>

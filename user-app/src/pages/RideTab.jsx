@@ -1,19 +1,12 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../i18n'
-
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
+import { readRideSessionId } from '../utils/rideSession'
 
 const RideTab = () => {
     const { t } = useLanguage()
     const navigate = useNavigate()
-    const [activeRide] = useState(() => {
-        try {
-            return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
-        } catch {
-            return null
-        }
-    })
+    const [activeRide] = useState(readRideSessionId)
 
     return (
         <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">

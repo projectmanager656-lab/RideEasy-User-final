@@ -1,22 +1,12 @@
 import React from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { readRideSessionId } from '../utils/rideSession'
 
 /** Only these rides belong on the full-screen /riding flow (after trip has started). */
 const ALLOWED = new Set([ 'started', 'completed' ])
 
-/** Session key written by ChooseRide / SearchingForDriver / Home for the passenger's current ride. */
-const USER_RIDE_SESSION_KEY = 'rideeasy_user_ride'
-
 function normalizeStatus (s) {
   return String(s || '').trim().toLowerCase()
-}
-
-function sessionRideId () {
-  try {
-    return sessionStorage.getItem(USER_RIDE_SESSION_KEY) || null
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -32,7 +22,7 @@ export default function RidingRouteGuard ({ children }) {
   const st = normalizeStatus(ride?.status)
 
   if (!id) {
-    if (!sessionRideId()) {
+    if (!readRideSessionId()) {
       return <Navigate to="/home" replace />
     }
     // No ride in navigation state but the session has one — let Riding hydrate.
