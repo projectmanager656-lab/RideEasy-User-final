@@ -6,6 +6,7 @@ import { UserDataContext } from '../context/UserContext'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { resolveMediaUrl } from '../utils/mediaUrl'
 import { useLanguage } from '../i18n'
 import ThemeSelector from '../components/ThemeSelector'
 import LanguageSelector from '../components/LanguageSelector'
@@ -399,7 +400,7 @@ const UserProfile = () => {
               <div className="relative h-20 w-20 shrink-0">
                 <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted">
                   {user?.profilePhoto ? (
-                    <img src={user.profilePhoto} alt="Profile" className="h-full w-full object-cover" />
+                    <img src={resolveMediaUrl(user.profilePhoto)} alt="Profile" className="h-full w-full object-cover" />
                   ) : (
                     <i className="ri-user-3-fill text-4xl" />
                   )}
@@ -611,7 +612,7 @@ const UserProfile = () => {
                 className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted disabled:opacity-60"
               >
                 {user?.profilePhoto ? (
-                  <img src={user.profilePhoto} alt="Profile" className="h-full w-full object-cover" />
+                  <img src={resolveMediaUrl(user.profilePhoto)} alt="Profile" className="h-full w-full object-cover" />
                 ) : (
                   <i className="ri-user-3-fill text-3xl" />
                 )}
@@ -628,9 +629,6 @@ const UserProfile = () => {
                 <h2 className="truncate text-lg font-bold text-theme-primary">{user?.name || t('your_name')}</h2>
                 <i className="ri-verified-badge-fill text-sky-500" title={t('verified')} />
               </div>
-              <span className="mt-1 inline-flex items-center rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-bold text-brand">
-                {t('premium_user')}
-              </span>
               <div className="mt-2 flex items-center gap-2 text-sm text-theme-secondary">
                 <i className="ri-star-fill text-brand" />
                 <span className="font-semibold text-theme-primary">{rating || '—'}</span>

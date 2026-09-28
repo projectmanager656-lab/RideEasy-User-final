@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 
@@ -18,6 +18,37 @@ function readInitialTheme () {
 
 export function ThemeProvider ({ children }) {
   const [ theme, setThemeState ] = useState(readInitialTheme)
+
+  /*
+   * Dark ↔ Light handoff. `.theme-transitioning` only enables colour transitions
+   * for the brief window while the theme is actually switching — it is added in a
+   * layout effect (before paint, so the new colours never snap first) and removed
+   * again right after, so normal hover/press feedback stays instant. The theme
+   * itself is applied immediately below; nothing waits on this.
+   */
+  const themeTransitionTimerRef = useRef(null)
+  const prevThemeRef = useRef(theme)
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const previous = prevThemeRef.current
+    prevThemeRef.current = theme
+    if (previous === theme) return
+
+    root.classList.add('theme-transitioning')
+    if (themeTransitionTimerRef.current) clearTimeout(themeTransitionTimerRef.current)
+    themeTransitionTimerRef.current = setTimeout(() => {
+      root.classList.remove('theme-transitioning')
+      themeTransitionTimerRef.current = null
+    }, 240)
+
+    return () => {
+      if (themeTransitionTimerRef.current) {
+        clearTimeout(themeTransitionTimerRef.current)
+        themeTransitionTimerRef.current = null
+      }
+      root.classList.remove('theme-transitioning')
+    }
+  }, [ theme ])
 
   const setTheme = useCallback((next) => {
     if (next !== 'light' && next !== 'dark') return

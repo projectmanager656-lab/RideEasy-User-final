@@ -1,13 +1,15 @@
 import React, { useState } from 'react'
 import { useLanguage } from '../i18n'
+import { useOverlayTransition } from '../hooks/useOverlayTransition'
 
 const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd }) => {
     const { t } = useLanguage()
     const [ adding, setAdding ] = useState(false)
     const [ name, setName ] = useState('')
     const [ phone, setPhone ] = useState('')
+    const { visible, closing, requestClose, onPanelAnimationEnd } = useOverlayTransition(open, onClose)
 
-    if (!open) return null
+    if (!visible) return null
 
     const reset = () => {
         setAdding(false)
@@ -17,7 +19,7 @@ const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd })
 
     const close = () => {
         reset()
-        onClose()
+        requestClose()
     }
 
     const add = () => {
@@ -28,9 +30,16 @@ const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd })
     }
 
     return (
-        <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" onClick={close} aria-hidden />
-            <div className="relative flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-5 sm:rounded-2xl sm:border">
+        <div className={`fixed inset-0 z-[80] flex items-end justify-center sm:items-center ${closing ? 'pointer-events-none' : ''}`}>
+            <div
+                className={`absolute inset-0 bg-black/60 backdrop-blur-[1px] ${closing ? 'modal-backdrop-out' : 'modal-backdrop-in'}`}
+                onClick={close}
+                aria-hidden
+            />
+            <div
+                className={`relative flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-5 sm:rounded-2xl sm:border ${closing ? 'sheet-slide-down' : 'sheet-slide-up'}`}
+                onAnimationEnd={onPanelAnimationEnd}
+            >
                 <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
                 <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('switch_rider')}</h2>

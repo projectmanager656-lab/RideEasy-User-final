@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../i18n'
+import { useOverlayTransition } from '../hooks/useOverlayTransition'
 
 const Svg = ({ children, className = 'h-4 w-4' }) => (
     <svg
@@ -85,28 +86,33 @@ const NAV_OPTIONS = [
 const MoreOptionsModal = ({ open, onClose }) => {
     const navigate = useNavigate()
     const { t } = useLanguage()
+    const { visible, closing, requestClose, onPanelAnimationEnd } = useOverlayTransition(open, onClose)
 
-    if (!open) return null
+    if (!visible) return null
 
     const go = (option) => {
+        // Navigate immediately — closing the sheet must never delay the page change.
         onClose()
         navigate(option.to, option.replace ? { replace: true } : undefined)
     }
 
     return (
-        <div className="absolute inset-0 z-[2000] flex flex-col justify-end">
+        <div className={`absolute inset-0 z-[2000] flex flex-col justify-end ${closing ? 'pointer-events-none' : ''}`}>
             <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-[1px]"
-                onClick={onClose}
+                className={`absolute inset-0 bg-black/60 backdrop-blur-[1px] ${closing ? 'modal-backdrop-out' : 'modal-backdrop-in'}`}
+                onClick={requestClose}
                 aria-hidden
             />
-            <div className="relative max-h-[80vh] overflow-y-auto scrollbar-hide rounded-t-2xl border-t border-theme bg-theme-card p-4">
+            <div
+                className={`relative max-h-[80vh] overflow-y-auto scrollbar-hide rounded-t-2xl border-t border-theme bg-theme-card p-4 ${closing ? 'sheet-slide-down' : 'sheet-slide-up'}`}
+                onAnimationEnd={onPanelAnimationEnd}
+            >
                 <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('more_services')}</h2>
                     <button
                         type="button"
-                        onClick={onClose}
+                        onClick={requestClose}
                         className="rounded-full border border-theme bg-theme-card px-2.5 py-1 text-xs text-theme-secondary active:scale-95"
                     >
                         {t('close')}
@@ -163,7 +169,7 @@ const MoreOptionsModal = ({ open, onClose }) => {
 
                 <button
                     type="button"
-                    onClick={onClose}
+                    onClick={requestClose}
                     className="mt-4 w-full rounded-xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-primary transition active:scale-[0.98]"
                 >
                     {t('done')}

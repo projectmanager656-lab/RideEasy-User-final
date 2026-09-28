@@ -39,6 +39,20 @@ function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+/**
+ * Last-resort process guards. This app runs on Express 4, which does not forward
+ * rejected promises from async route handlers to the error middleware — so a
+ * single un-awaited rejection would otherwise terminate the process (Node 15+
+ * default). Log and keep serving instead of taking the whole backend down for
+ * one bad request.
+ */
+process.on('unhandledRejection', (reason) => {
+    console.error('[process] unhandledRejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[process] uncaughtException:', err?.stack || err?.message || err);
+});
+
 async function start() {
     try {
         await ensureDbConnected();

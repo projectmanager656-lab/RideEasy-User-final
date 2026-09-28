@@ -10,6 +10,9 @@ const en = {
   hindi: 'Hindi',
   marathi: 'Marathi',
   loading: 'Loading…',
+  error_boundary_title: 'Something went wrong',
+  error_boundary_body: 'This screen hit an unexpected problem. Your ride and account are safe — please try again.',
+  error_boundary_retry: 'Try again',
   login: 'Login',
   logging_in: 'Logging in…',
   dashboard: 'Dashboard',
@@ -239,6 +242,9 @@ const hi = {
   hindi: 'हिन्दी',
   marathi: 'मराठी',
   loading: 'लोड हो रहा है…',
+  error_boundary_title: 'कुछ गलत हो गया',
+  error_boundary_body: 'इस स्क्रीन में एक अप्रत्याशित समस्या आई। आपकी राइड और खाता सुरक्षित हैं — कृपया पुनः प्रयास करें।',
+  error_boundary_retry: 'पुनः प्रयास करें',
   login: 'लॉगिन',
   logging_in: 'लॉग इन हो रहा है…',
   dashboard: 'डैशबोर्ड',
@@ -342,7 +348,6 @@ const hi = {
   profile: 'खाता',
 
 // --- Account / Profile ---
-   premium_user: 'प्रीमियम उपयोगकर्ता',
    verified: 'सत्यापित',
    rides: 'राइड्स',
    edit: 'संपादित करें',
@@ -470,6 +475,9 @@ const mr = {
   hindi: 'हिंदी',
   marathi: 'मराठी',
   loading: 'लोड होत आहे…',
+  error_boundary_title: 'काहीतरी चुकले',
+  error_boundary_body: 'या स्क्रीनमध्ये अनपेक्षित समस्या आली. तुमची राइड आणि खाते सुरक्षित आहेत — कृपया पुन्हा प्रयत्न करा.',
+  error_boundary_retry: 'पुन्हा प्रयत्न करा',
   login: 'लॉगिन',
   logging_in: 'लॉगिन होत आहे…',
   dashboard: 'डॅशबोर्ड',
@@ -573,7 +581,6 @@ const mr = {
   profile: 'खाते',
 
 // --- Account / Profile ---
-   premium_user: 'प्रीमियम वापरकर्ता',
    verified: 'सत्यापित',
    rides: 'राइड्स',
    edit: 'संपादित करा',

@@ -16,6 +16,7 @@ import {
   isRideStatusFinal,
   isRideGenuinelyActive,
 } from '../utils/rideSession'
+import { resolveMediaUrl } from '../utils/mediaUrl'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
 import autoImg from '../assets/Auto-img-ride.png'
@@ -611,7 +612,7 @@ const SearchingForDriver = () => {
   const driverPhone = confirmation?.driverPhone || captain?.phone || ''
   const driverRating = confirmation?.driverRating != null ? Number(confirmation.driverRating) : null
   /** Driver photo — only shown when the backend actually provides one. */
-  const driverPhoto = confirmation?.driverPhoto || captain?.photo || captain?.avatar || ''
+  const driverPhoto = resolveMediaUrl(confirmation?.driverPhoto || captain?.photo || captain?.avatar || '')
   /** Vehicle type + number plate — show only what the backend actually provides. */
   const vehicleTypeText = confirmation?.vehicleType || ride?.vehicleType || captain?.vehicleType || ''
   const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || ''

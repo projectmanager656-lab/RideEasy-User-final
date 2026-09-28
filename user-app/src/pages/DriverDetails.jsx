@@ -9,6 +9,7 @@ import { useLanguage } from '../i18n'
 import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
 import { readRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
+import { resolveMediaUrl } from '../utils/mediaUrl'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
 import autoImg from '../assets/Auto-img-ride.png'
@@ -289,7 +290,7 @@ const DriverDetails = () => {
   const driverName = confirmation?.driverName || captain?.name || t('your_driver')
   const driverPhone = confirmation?.driverPhone || captain?.phone || ''
   const driverRating = confirmation?.driverRating != null ? Number(confirmation.driverRating) : null
-  const driverPhoto = confirmation?.driverPhoto || captain?.photo || captain?.avatar || ''
+  const driverPhoto = resolveMediaUrl(confirmation?.driverPhoto || captain?.photo || captain?.avatar || '')
   const vehicleTypeText = confirmation?.vehicleType || ride?.vehicleType || captain?.vehicleType || ''
   const vehicleNumber = confirmation?.vehicleNumber || captain?.vehicleNumber || ''
   const tripCount = confirmation?.tripCount != null ? Number(confirmation.tripCount) : null

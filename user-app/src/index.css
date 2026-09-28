@@ -131,10 +131,95 @@
   to   { opacity: 0; }
 }
 
-.sheet-slide-up   { animation: sheet-slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-.sheet-slide-down { animation: sheet-slide-down 0.28s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-.sheet-backdrop-in  { animation: backdrop-in  0.25s ease forwards; }
-.sheet-backdrop-out { animation: backdrop-out 0.22s ease forwards; }
+.sheet-slide-up   { animation: sheet-slide-up 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+.sheet-slide-down { animation: sheet-slide-down 0.2s ease-in forwards; }
+.sheet-backdrop-in  { animation: backdrop-in  0.2s ease forwards; }
+.sheet-backdrop-out { animation: backdrop-out 0.18s ease forwards; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Page-switch transition
+ * Replayed on the app's scroll container after every route change. The transform
+ * resolves to `none`, so at rest it never leaves a containing block behind for
+ * the fixed-position overlays.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes page-enter-forward {
+  from { opacity: 0; transform: translate3d(14px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes page-enter-back {
+  from { opacity: 0; transform: translate3d(-14px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+.page-enter-forward { animation: page-enter-forward 0.2s ease-out both; }
+.page-enter-back    { animation: page-enter-back    0.2s ease-out both; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Modal / popup panels + their backdrop (fast fade + subtle slide/scale)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes modal-panel-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.98); }
+}
+
+.modal-panel-in  { animation: modal-panel-in  0.2s cubic-bezier(0.32, 0.72, 0, 1) both; }
+.modal-panel-out { animation: modal-panel-out 0.18s ease-in both; }
+
+.modal-backdrop-in  { animation: backdrop-in  0.2s ease both; }
+.modal-backdrop-out { animation: backdrop-out 0.18s ease both; }
+
+/*
+ * Reduced motion: keep the stateful animations resolving almost instantly with a
+ * near-zero duration (not `none`), so any `animationend` cleanup still fires and
+ * an overlay is never left stuck on screen.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-forward,
+  .page-enter-back,
+  .modal-panel-in,
+  .modal-panel-out,
+  .modal-backdrop-in,
+  .modal-backdrop-out,
+  .sheet-slide-up,
+  .sheet-slide-down,
+  .sheet-backdrop-in,
+  .sheet-backdrop-out {
+    animation-duration: 0.001s !important;
+  }
+}
+
+/*
+ * Dark ↔ Light handoff. `.theme-transitioning` is placed on <html> ONLY for the
+ * brief window while the theme is actually switching (see ThemeProvider), so the
+ * theme colours cross-fade instead of snapping. Paint-only properties only — no
+ * layout properties — so nothing moves or reflows during the switch.
+ */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 0.2s !important;
+  transition-timing-function: ease-out !important;
+  transition-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transitioning,
+  .theme-transitioning *,
+  .theme-transitioning *::before,
+  .theme-transitioning *::after {
+    transition-duration: 0.001s !important;
+  }
+}
 
 /*
  * Print output — the invoice page is a clean white printable document.
