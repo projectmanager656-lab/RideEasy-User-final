@@ -39,6 +39,9 @@ const userSchema = new mongoose.Schema({
     blocked: { type: Boolean, default: false },
     loginOtp: { type: String, select: false },
     loginOtpExpiresAt: { type: Date, select: false },
+    /** Forgot-password OTP — bcrypt hash of the 6-digit code, never plaintext. */
+    resetOtpHash: { type: String, select: false },
+    resetOtpExpiresAt: { type: Date, select: false },
 }, { timestamps: true, collection: 'users' });
 
 userSchema.methods.generateAuthToken = function () {

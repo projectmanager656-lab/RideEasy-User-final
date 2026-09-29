@@ -11,6 +11,10 @@ import { useLanguage } from '../i18n'
 import ThemeSelector from '../components/ThemeSelector'
 import LanguageSelector from '../components/LanguageSelector'
 import PasswordInput from '../components/auth/PasswordInput'
+import PhoneInput from '../components/auth/PhoneInput'
+import OtpInputs from '../components/auth/OtpInputs'
+import AuthButton from '../components/auth/AuthButton'
+import { useCountdown } from '../components/auth/useCountdown'
 
 const ProfileStatCard = ({ icon, value, label, accent }) => {
   const accents = {
@@ -108,6 +112,18 @@ const UserProfile = () => {
   const [ pwError, setPwError ] = useState('')
   const [ pwMessage, setPwMessage ] = useState('')
   const [ pwSaving, setPwSaving ] = useState(false)
+  // forgot password (OTP-verified reset)
+  const [ forgotOpen, setForgotOpen ] = useState(false)
+  const [ forgotStep, setForgotStep ] = useState('phone') // phone | otp | reset
+  const [ forgotPhone, setForgotPhone ] = useState('')
+  const [ forgotOtp, setForgotOtp ] = useState('')
+  const [ fpNewPassword, setFpNewPassword ] = useState('')
+  const [ fpConfirmPassword, setFpConfirmPassword ] = useState('')
+  const [ fpError, setFpError ] = useState('')
+  const [ fpDevOtp, setFpDevOtp ] = useState('')
+  const [ fpSaving, setFpSaving ] = useState(false)
+  const [ fpDone, setFpDone ] = useState(false)
+  const { secondsLeft: fpSecondsLeft, reset: fpResetCountdown } = useCountdown(300)
   const [ saving, setSaving ] = useState(false)
   const [ uploadingPhoto, setUploadingPhoto ] = useState(false)
   const photoInputRef = useRef(null)
@@ -329,6 +345,99 @@ const UserProfile = () => {
       setPwError(formatApiError(err))
     } finally {
       setPwSaving(false)
+    }
+  }
+
+  const openForgot = () => {
+    setForgotStep('phone')
+    setForgotPhone('')
+    setForgotOtp('')
+    setFpNewPassword('')
+    setFpConfirmPassword('')
+    setFpError('')
+    setFpDevOtp('')
+    setFpDone(false)
+    setForgotOpen(true)
+  }
+
+  const closeForgot = () => {
+    setForgotOpen(false)
+    setForgotStep('phone')
+    setForgotPhone('')
+    setForgotOtp('')
+    setFpNewPassword('')
+    setFpConfirmPassword('')
+    setFpError('')
+    setFpDevOtp('')
+    setFpDone(false)
+  }
+
+  const sendForgotOtp = async () => {
+    const normalized = String(forgotPhone || '').replace(/\D/g, '').replace(/^91/, '')
+    if (!/^[6-9]\d{9}$/.test(normalized)) {
+      setFpError(t('valid_phone_error'))
+      return
+    }
+    setForgotPhone(normalized)
+    setFpError('')
+    setFpSaving(true)
+    try {
+      const response = await apiClient.post('/users/forgot-password/send-otp', { phone: normalized })
+      const data = stripApiEnvelope(response.data)
+      if (data?.debugOtp) setFpDevOtp(String(data.debugOtp))
+      setForgotOtp('')
+      setForgotStep('otp')
+      fpResetCountdown(300)
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
+    }
+  }
+
+  const verifyForgotOtp = async () => {
+    if (String(forgotOtp).replace(/\D/g, '').length !== 6) return
+    setFpError('')
+    setFpSaving(true)
+    try {
+      await apiClient.post('/users/forgot-password/verify-otp', {
+        phone: forgotPhone,
+        otp: String(forgotOtp).replace(/\D/g, ''),
+      })
+      setForgotStep('reset')
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
+    }
+  }
+
+  const resetForgotPassword = async () => {
+    if (!fpNewPassword) {
+      setFpError(t('new_password_required'))
+      return
+    }
+    if (fpNewPassword.length < 6) {
+      setFpError(t('password_min_length'))
+      return
+    }
+    if (fpConfirmPassword !== fpNewPassword) {
+      setFpError(t('passwords_do_not_match'))
+      return
+    }
+    setFpError('')
+    setFpSaving(true)
+    try {
+      await apiClient.post('/users/forgot-password/reset', {
+        phone: forgotPhone,
+        otp: String(forgotOtp).replace(/\D/g, ''),
+        newPassword: fpNewPassword,
+      })
+      setFpDone(true)
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
     }
   }
 
@@ -567,8 +676,138 @@ const UserProfile = () => {
                 {pwSaving ? t('changing_password') : t('change_password')}
               </button>
             </form>
+            <div className="mt-3 text-right">
+              <button
+                type="button"
+                onClick={openForgot}
+                className="text-sm font-semibold text-brand hover:text-brand-light"
+              >
+                {t('forgot_password')}
+              </button>
+            </div>
           </section>
         </div>
+
+        {forgotOpen ? (
+          <div className="fixed inset-0 z-[1200] flex items-end justify-center sm:items-center">
+            <div className="absolute inset-0 bg-black/60" onClick={closeForgot} aria-hidden />
+            <div className="relative z-[1201] max-h-[88dvh] w-full max-w-[360px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-5 sm:rounded-2xl sm:border">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-bold text-theme-primary">{t('forgot_password')}</h2>
+                <button
+                  type="button"
+                  onClick={closeForgot}
+                  className="rounded-full border border-theme bg-theme-card-muted px-2.5 py-1 text-xs text-theme-secondary active:scale-95"
+                >
+                  {t('close')}
+                </button>
+              </div>
+
+              {fpError ? (
+                <div role="alert" className="mb-4 rounded-xl border border-red-400/50 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-line dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                  {fpError}
+                </div>
+              ) : null}
+
+              {fpDone ? (
+                <>
+                  <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    {t('reset_password_success')}
+                  </div>
+                  <AuthButton type="button" onClick={() => navigate('/user/logout', { replace: true })}>
+                    {t('login')}
+                  </AuthButton>
+                </>
+              ) : forgotStep === 'phone' ? (
+                <>
+                  <p className="mb-4 text-sm text-theme-muted">{t('reset_password_hint')}</p>
+                  <div className="mb-4">
+                    <PhoneInput
+                      value={forgotPhone}
+                      onChange={setForgotPhone}
+                      label={t('phone')}
+                      placeholder={t('enter_phone')}
+                      name="forgot-phone"
+                    />
+                  </div>
+                  <AuthButton type="button" loading={fpSaving} onClick={sendForgotOtp}>
+                    {fpSaving ? t('sending_otp') : t('send_otp')}
+                  </AuthButton>
+                </>
+              ) : forgotStep === 'otp' ? (
+                <>
+                  <p className="mb-4 text-sm text-theme-muted">
+                    {t('otp_sent_to_phone')} +91 {forgotPhone}
+                  </p>
+                  {fpDevOtp ? (
+                    <button
+                      type="button"
+                      onClick={() => setForgotOtp(String(fpDevOtp).replace(/\D/g, '').slice(0, 6))}
+                      className="mb-4 w-full rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-brand/15"
+                      title="Tap to autofill"
+                    >
+                      Temporary OTP: {fpDevOtp}
+                    </button>
+                  ) : null}
+                  <div className="mb-4">
+                    <OtpInputs otp={forgotOtp} onChange={setForgotOtp} disabled={fpSaving} />
+                  </div>
+                  <div className="mb-4 text-center">
+                    {fpSecondsLeft === 0 ? (
+                      <button
+                        type="button"
+                        onClick={sendForgotOtp}
+                        disabled={fpSaving}
+                        className="text-sm font-semibold text-brand hover:text-brand-light disabled:opacity-60"
+                      >
+                        {t('resend_otp')}
+                      </button>
+                    ) : (
+                      <span className="text-sm text-theme-muted">{t('resend_otp_in', { seconds: fpSecondsLeft })}</span>
+                    )}
+                  </div>
+                  <AuthButton
+                    type="button"
+                    loading={fpSaving}
+                    disabled={String(forgotOtp).replace(/\D/g, '').length !== 6}
+                    onClick={verifyForgotOtp}
+                  >
+                    {fpSaving ? t('verifying') : t('verify_continue')}
+                  </AuthButton>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    {t('otp_verified')}
+                  </div>
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={fpNewPassword}
+                      onChange={setFpNewPassword}
+                      label={t('new_password')}
+                      placeholder={t('new_password')}
+                      autoComplete="new-password"
+                      name="forgot-new-password"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={fpConfirmPassword}
+                      onChange={setFpConfirmPassword}
+                      label={t('confirm_new_password')}
+                      placeholder={t('confirm_new_password')}
+                      autoComplete="new-password"
+                      name="forgot-confirm-password"
+                    />
+                  </div>
+                  <AuthButton type="button" loading={fpSaving} onClick={resetForgotPassword}>
+                    {t('reset_password')}
+                  </AuthButton>
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     )
   }

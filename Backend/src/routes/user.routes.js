@@ -126,6 +126,24 @@ router.post('/change-password',
     userController.changePassword
 );
 
+// Forgot password — OTP-verified reset, separate from the login OTP flow
+router.post('/forgot-password/send-otp',
+    loginRateLimit,
+    phoneOtpSendValidators,
+    userController.forgotPasswordSendOtp
+);
+router.post('/forgot-password/verify-otp',
+    loginRateLimit,
+    phoneOtpVerifyValidators,
+    userController.forgotPasswordVerifyOtp
+);
+router.post('/forgot-password/reset',
+    loginRateLimit,
+    phoneOtpVerifyValidators,
+    body('newPassword').isString().isLength({ min: 6, max: 128 }),
+    userController.forgotPasswordReset
+);
+
 // Safety screen toggles
 router.get('/safety-prefs', auth.authUser, userController.getSafetyPrefs);
 router.patch('/safety-prefs', auth.authUser, userController.updateSafetyPrefs);

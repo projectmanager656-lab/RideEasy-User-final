@@ -1,5 +1,6 @@
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 const userModel = require('../models/user.model');
@@ -494,6 +495,84 @@ module.exports.changePassword = async (req, res) => {
     } catch (err) {
         console.error('[users/change-password]', err?.message || err);
         return fail(res, req, 500, 'Could not change password');
+    }
+};
+
+/** Forgot password — send a single-purpose OTP to a registered phone. */
+module.exports.forgotPasswordSendOtp = async (req, res) => {
+    const phone = String(req.body?.phone || '').replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(phone)) return fail(res, req, 400, 'Valid phone required');
+
+    try {
+        const user = await userModel.findOne({ phone }).select('_id');
+        if (!user) return fail(res, req, 404, 'No account found for this phone number');
+
+        const otp = randomSixDigit();
+        const secured = await userModel.findById(user._id).select('+resetOtpHash +resetOtpExpiresAt');
+        secured.resetOtpHash = await userModel.hashPassword(otp);
+        secured.resetOtpExpiresAt = expiresInMinutes(5);
+        await secured.save();
+
+        const exposeOtp = process.env.OTP_DEBUG === 'true' || process.env.NODE_ENV !== 'production';
+        return ok(res, req, 200, exposeOtp ? 'OTP generated (dev)' : 'OTP sent', {
+            expiresIn: 300,
+            ...(exposeOtp ? { debugOtp: otp } : {}),
+        });
+    } catch (err) {
+        console.error('[users/forgot-password/send-otp]', err?.message || err);
+        return fail(res, req, 500, 'Could not send OTP');
+    }
+};
+
+/** Forgot password — verify the OTP without consuming it (the reset call consumes it). */
+module.exports.forgotPasswordVerifyOtp = async (req, res) => {
+    const phone = String(req.body?.phone || '').replace(/\D/g, '');
+    const otp = String(req.body?.otp || '').trim();
+
+    try {
+        const user = await userModel.findOne({ phone }).select('+resetOtpHash +resetOtpExpiresAt');
+        if (!user) return fail(res, req, 404, 'User not found');
+        if (!user.resetOtpHash) return fail(res, req, 400, 'Request an OTP first');
+        if (user.resetOtpExpiresAt < new Date()) return fail(res, req, 400, 'OTP expired. Request a new OTP.');
+
+        const valid = await bcrypt.compare(otp, user.resetOtpHash);
+        if (!valid) return fail(res, req, 400, 'Invalid OTP');
+
+        return ok(res, req, 200, 'OTP verified successfully');
+    } catch (err) {
+        console.error('[users/forgot-password/verify-otp]', err?.message || err);
+        return fail(res, req, 500, 'Could not verify OTP');
+    }
+};
+
+/** Forgot password — re-verify the OTP, reset the password, and burn the OTP. */
+module.exports.forgotPasswordReset = async (req, res) => {
+    const phone = String(req.body?.phone || '').replace(/\D/g, '');
+    const otp = String(req.body?.otp || '').trim();
+    const newPassword = String(req.body?.newPassword || '');
+
+    try {
+        const user = await userModel.findOne({ phone }).select('+resetOtpHash +resetOtpExpiresAt');
+        if (!user) return fail(res, req, 404, 'User not found');
+        if (!user.resetOtpHash) return fail(res, req, 400, 'Request an OTP first');
+        if (user.resetOtpExpiresAt < new Date()) return fail(res, req, 400, 'OTP expired. Request a new OTP.');
+
+        const valid = await bcrypt.compare(otp, user.resetOtpHash);
+        if (!valid) return fail(res, req, 400, 'Invalid OTP');
+
+        if (newPassword.length < 6 || newPassword.length > 128) {
+            return fail(res, req, 400, 'New password must be 6-128 characters');
+        }
+
+        user.password = await userModel.hashPassword(newPassword);
+        user.resetOtpHash = undefined;
+        user.resetOtpExpiresAt = undefined;
+        await user.save();
+
+        return ok(res, req, 200, 'Password reset successfully. Please login with your new password.');
+    } catch (err) {
+        console.error('[users/forgot-password/reset]', err?.message || err);
+        return fail(res, req, 500, 'Could not reset password');
     }
 };
 

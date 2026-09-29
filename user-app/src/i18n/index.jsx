@@ -109,6 +109,9 @@ const en = {
   theme_light: 'Light',
   theme_dark: 'Dark',
   reset_password_hint: 'Choose a new password to log in with.',
+  reset_password: 'Reset Password',
+  otp_verified: 'OTP verified successfully',
+  reset_password_success: 'Password reset successfully. Please login with your new password.',
 
   // --- BottomNav.jsx ---
   book: 'Book',
@@ -342,6 +345,9 @@ const hi = {
   theme_light: 'लाइट',
   theme_dark: 'डार्क',
   reset_password_hint: 'लॉगिन के लिए नया पासवर्ड चुनें।',
+  reset_password: 'पासवर्ड रीसेट करें',
+  otp_verified: 'OTP सत्यापित हो गया',
+  reset_password_success: 'पासवर्ड सफलतापूर्वक रीसेट हो गया। कृपया अपने नए पासवर्ड से लॉगिन करें।',
 
   // --- BottomNav.jsx ---
   book: 'बुक करें',
@@ -576,6 +582,9 @@ const mr = {
   theme_light: 'लाइट',
   theme_dark: 'डार्क',
   reset_password_hint: 'लॉगिनसाठी नवीन पासवर्ड निवडा.',
+  reset_password: 'पासवर्ड रीसेट करा',
+  otp_verified: 'OTP यशस्वीरित्या सत्यापित झाले',
+  reset_password_success: 'पासवर्ड यशस्वीरित्या रीसेट झाला. कृपया नवीन पासवर्डने लॉगिन करा.',
 
   // --- BottomNav.jsx ---
   book: 'बुक करा',
