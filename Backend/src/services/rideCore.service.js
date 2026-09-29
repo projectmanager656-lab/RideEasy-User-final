@@ -76,6 +76,14 @@ async function buildFarePayload(pickup, destination, coordOpts = null) {
         if (!cfg) continue;
         fare[vt] = Math.round(cfg.baseFare + distanceKm * cfg.perKm + cfg.platformFee);
     }
+    console.log(
+        '[FARE API] pickup=%j drop=%j distanceKm=%s pricingSource=%s calculatedFare=%j',
+        pickup,
+        destination,
+        Math.round(distanceKm * 100) / 100,
+        'services.rates(key=global)',
+        fare,
+    );
     return {
         distanceKm: Math.round(distanceKm * 100) / 100,
         distanceMeters: distanceTime.distance.value,

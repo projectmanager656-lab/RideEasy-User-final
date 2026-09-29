@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RideMap from '../components/RideMap'
 import ScheduledRideConfirmation from '../components/ScheduledRideConfirmation'
@@ -8,6 +8,15 @@ import { formatApiError } from '../utils/apiError'
 import { useLanguage } from '../i18n'
 import { useUserData } from '../context/UserContext'
 import { writeRideSessionId } from '../utils/rideSession'
+import { haversineKm } from '../utils/serviceArea'
+
+/**
+ * Fare-protection circle: while the adjusted pickup stays within this distance
+ * of the pickup the displayed fare was computed for, the fare is kept. Beyond
+ * it, a fresh fare is requested from the backend (never computed locally).
+ */
+const PICKUP_FARE_RADIUS_METERS = 200
+const FARE_RECALC_DEBOUNCE_MS = 600
 
 function normalizeCoordinates(value) {
     if (!value || typeof value !== 'object') return null
@@ -43,6 +52,30 @@ export default function ConfirmPickup() {
     const [pickupCoords, setPickupCoords] = useState(initialPickupCoords)
     const [pickup, setPickup] = useState(state.pickup || '')
 
+    /**
+     * The pickup the displayed fare was computed for (the circle's center).
+     * It only moves after a successful backend recalculation for a pickup
+     * outside the circle — never on every marker move.
+     */
+    const [originalPickup, setOriginalPickup] = useState(initialPickupCoords)
+
+    /** Fare shown on this screen; starts from the backend quote ChooseRide passed. */
+    const [fareState, setFareState] = useState({
+        price: state.price ?? null,
+        discountAmount: state.discountAmount ?? 0,
+        finalFare: state.finalFare ?? state.price ?? null,
+        couponCode: state.couponCode || '',
+    })
+    const [fareRecalculating, setFareRecalculating] = useState(false)
+    const [fareNote, setFareNote] = useState('')
+    /**
+     * Quoted-but-not-yet-accepted fare for a pickup outside the 200m circle:
+     * `{ coords, price, discountAmount, finalFare, couponCode }`. The displayed
+     * fare and the circle reference only commit when the passenger accepts it.
+     */
+    const [pendingFare, setPendingFare] = useState(null)
+    const [fareRecalcFailed, setFareRecalcFailed] = useState(false)
+
     const [locationLoading, setLocationLoading] = useState(false)
     const [locationError, setLocationError] = useState('')
 
@@ -52,6 +85,24 @@ export default function ConfirmPickup() {
     const [scheduledRide, setScheduledRide] = useState(null)
 
     const geocodeRequestRef = useRef(0)
+    /** Latest-wins guard for fare recalculations. */
+    const fareRequestRef = useRef(0)
+    const fareDebounceRef = useRef(null)
+    /** Coordinates of the recalculation currently in flight (dedupes settle jitter). */
+    const inFlightFareKeyRef = useRef(null)
+    /** Mirrors originalPickup so rapid map-move events never read stale state. */
+    const originalPickupRef = useRef(initialPickupCoords)
+    /** Latest fare/coupon data for handlers that outlive a render (debounce timers). */
+    const fareStateRef = useRef(fareState)
+    fareStateRef.current = fareState
+    const pickupRef = useRef(pickup)
+    pickupRef.current = pickup
+    /** Inside/outside classification — logged only on change or settle, never per frame. */
+    const lastFareZoneRef = useRef(null)
+    /** Last position quoted outside the circle — target for a manual retry. */
+    const lastOutsideCoordsRef = useRef(null)
+
+    useEffect(() => () => clearTimeout(fareDebounceRef.current), [])
 
     const updatePickupCoords = useCallback((coords) => {
         setPickupCoords(coords)
@@ -99,6 +150,220 @@ export default function ConfirmPickup() {
         }
     }, [])
 
+    /**
+     * Ask the backend to price the ride for a NEW pickup coordinate. The
+     * response always wins over any earlier in-flight request. On success the
+     * quote is STAGED for passenger acceptance — the displayed fare and the
+     * 200m reference/circle only move once they accept (see acceptPendingFare).
+     */
+    const requestFareRecalc = async (coords) => {
+        if (!coords || !dropCoords || !state.vehicleType || booking) return
+
+        const coordKey = `${coords.lat.toFixed(6)},${coords.lng.toFixed(6)}`
+        if (inFlightFareKeyRef.current === coordKey) return
+
+        const requestId = ++fareRequestRef.current
+        inFlightFareKeyRef.current = coordKey
+        setFareRecalculating(true)
+
+        console.info('[PickupFare] request', {
+            fareRequestId: requestId,
+            pickup: coords,
+            dropCoords,
+            vehicleType: state.vehicleType,
+        })
+
+        try {
+            const response = await apiClient.get(
+                '/rides/get-fare',
+                withAuth({
+                    params: {
+                        pickup: pickupRef.current || 'Selected map location',
+                        destination: state.destination,
+                        pickupLat: coords.lat,
+                        pickupLng: coords.lng,
+                        dropLat: dropCoords.lat,
+                        dropLng: dropCoords.lng,
+                    },
+                })
+            )
+
+            if (requestId !== fareRequestRef.current) return
+
+            const fare = stripApiEnvelope(response.data) || {}
+            const price = Number(fare[state.vehicleType])
+
+            if (!Number.isFinite(price) || price <= 0) {
+                console.warn('[PickupFare] response missing vehicle price', {
+                    fareRequestId: requestId,
+                    vehicleType: state.vehicleType,
+                })
+                return
+            }
+
+            /** Coupon amounts depend on the fare — revalidate against the new price. */
+            let discountAmount = 0
+            let finalFare = price
+            let couponCode = ''
+
+            const appliedCode = String(fareStateRef.current.couponCode || '').trim().toUpperCase()
+            if (appliedCode) {
+                try {
+                    const couponRes = await apiClient.post(
+                        '/users/coupons/validate',
+                        { code: appliedCode, fare: price },
+                        withAuth()
+                    )
+                    const couponBody = stripApiEnvelope(couponRes.data)
+                    discountAmount = Number(couponBody?.discountAmount || 0)
+                    finalFare = couponBody?.finalFare != null ? Number(couponBody.finalFare) : price
+                    couponCode = appliedCode
+                } catch {
+                    /** Coupon no longer valid for the new fare — it will be dropped on accept. */
+                }
+            }
+
+            /** The passenger may have come back inside the circle mid-request. */
+            if (requestId !== fareRequestRef.current) return
+
+            console.info('[PickupFare]', {
+                fareRequestId: requestId,
+                pickup: coords,
+                routeKm: fare.distanceKm,
+                oldFare: fareStateRef.current.price,
+                newFare: finalFare,
+            })
+
+            setFareRecalcFailed(false)
+            setFareNote('')
+            setPendingFare({
+                coords: { lat: coords.lat, lng: coords.lng },
+                price,
+                discountAmount,
+                finalFare,
+                couponCode,
+            })
+        } catch (error) {
+            if (requestId !== fareRequestRef.current) return
+            console.warn('[PickupFare] recalc failed', {
+                fareRequestId: requestId,
+                error: formatApiError(error) || error?.message,
+            })
+            setFareRecalcFailed(true)
+            setFareNote('Could not update fare — showing the last confirmed price.')
+        } finally {
+            if (requestId === fareRequestRef.current) {
+                inFlightFareKeyRef.current = null
+                setFareRecalculating(false)
+            }
+        }
+    }
+
+    /**
+     * Single pickup-movement entry point (map panning with the fixed pin).
+     * Inside the 200m circle: keep the fare and drop any pending/in-flight
+     * recalculation. Outside: debounce a fresh backend fare request.
+     */
+    const handlePickupMoved = (coords, { immediate = false } = {}) => {
+        updatePickupCoords(coords)
+
+        const origin = originalPickupRef.current
+        if (!origin || !dropCoords) return
+
+        const distanceFromOriginalPickupMeters =
+            haversineKm(origin.lat, origin.lng, coords.lat, coords.lng) * 1000
+        const inside200m = distanceFromOriginalPickupMeters <= PICKUP_FARE_RADIUS_METERS
+        const zone = inside200m ? 'inside' : 'outside'
+
+        if (immediate || lastFareZoneRef.current !== zone) {
+            console.info('[PickupRadius]', {
+                reference: origin,
+                current: coords,
+                distance: Math.round(distanceFromOriginalPickupMeters),
+                within200m: inside200m,
+            })
+            lastFareZoneRef.current = zone
+        }
+
+        if (inside200m) {
+            clearTimeout(fareDebounceRef.current)
+            /** Back inside the protected area — abandon any staged/unaccepted fare. */
+            fareRequestRef.current += 1
+            inFlightFareKeyRef.current = null
+            setFareRecalculating(false)
+            setPendingFare(null)
+            setFareRecalcFailed(false)
+            setFareNote('')
+            return
+        }
+
+        clearTimeout(fareDebounceRef.current)
+        lastOutsideCoordsRef.current = coords
+        if (immediate) {
+            requestFareRecalc(coords)
+            return
+        }
+        fareDebounceRef.current = setTimeout(
+            () => requestFareRecalc(coords),
+            FARE_RECALC_DEBOUNCE_MS
+        )
+    }
+
+    /**
+     * Stable identities for RideMap's move listeners; the latest logic is
+     * reached through the ref, so closures never go stale.
+     */
+    const pickupMovedRef = useRef(null)
+
+    const handleMapCenterChange = useCallback((coords) => {
+        pickupMovedRef.current?.(coords)
+    }, [])
+
+    const handleMapCenterSettled = useCallback((coords) => {
+        pickupMovedRef.current?.(coords, { immediate: true })
+        updatePickupAddress(coords)
+    }, [updatePickupAddress])
+
+    pickupMovedRef.current = handlePickupMoved
+
+    /**
+     * Commits the staged quote: new fare, new pickup coordinates and the
+     * confirmed reference — which recenters the 200m circle (reference rule).
+     */
+    const acceptPendingFare = () => {
+        if (!pendingFare) return
+
+        console.info('[PickupConfirm]', {
+            accepted: true,
+            pickup: pendingFare.coords,
+            fare: pendingFare.finalFare,
+        })
+
+        /** Drop any in-flight quote — the accepted one is now authoritative. */
+        fareRequestRef.current += 1
+        inFlightFareKeyRef.current = null
+        setFareRecalculating(false)
+
+        setFareState({
+            price: pendingFare.price,
+            discountAmount: pendingFare.discountAmount,
+            finalFare: pendingFare.finalFare,
+            couponCode: pendingFare.couponCode,
+        })
+        originalPickupRef.current = pendingFare.coords
+        setOriginalPickup(pendingFare.coords)
+        setPickupCoords(pendingFare.coords)
+        setPendingFare(null)
+        setFareRecalcFailed(false)
+        setFareNote('Fare updated based on your new pickup location.')
+    }
+
+    /** Manual retry after a failed recalculation for the last outside position. */
+    const retryFareRecalc = () => {
+        if (fareRecalculating) return
+        if (lastOutsideCoordsRef.current) requestFareRecalc(lastOutsideCoordsRef.current)
+    }
+
     const confirmPickup = async () => {
         if (!pickupCoords) {
             setBookingError(t('select_pickup_drop_first'))
@@ -141,13 +406,13 @@ export default function ConfirmPickup() {
                     }
                     : {}),
 
-                ...(state.couponCode
+                ...(fareState.couponCode
                     ? {
-                        couponCode: state.couponCode,
+                        couponCode: fareState.couponCode,
                     }
                     : {}),
 
-                price: state.price,
+                price: fareState.price,
                 distanceKm: state.distanceKm,
 
                 /**
@@ -294,7 +559,7 @@ export default function ConfirmPickup() {
                     tierId: state.tierId,
 
                     paymentMethod: state.paymentMethod,
-                    price: state.price,
+                    price: fareState.price,
 
                     scheduledAt: state.scheduledAt,
                 },
@@ -362,6 +627,22 @@ export default function ConfirmPickup() {
         )
     }
 
+    /**
+     * True while the selected pickup sits outside the confirmed reference's
+     * 200m zone without an accepted fare — booking waits for the new fare
+     * (backend recalculates and revalidates at ride creation regardless).
+     */
+    const pickupOutsideReference = Boolean(
+        originalPickup
+        && pickupCoords
+        && haversineKm(
+            originalPickup.lat,
+            originalPickup.lng,
+            pickupCoords.lat,
+            pickupCoords.lng,
+        ) * 1000 > PICKUP_FARE_RADIUS_METERS
+    )
+
     return (
         <div className="relative flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
             <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -369,8 +650,17 @@ export default function ConfirmPickup() {
                     pickupCoords={pickupCoords}
                     dropCoords={null}
                     fixedPickupPin
-                    onMapCenterChange={updatePickupCoords}
-                    onMapCenterSettled={updatePickupAddress}
+                    pickupCircle={
+                        originalPickup
+                            ? {
+                                lat: originalPickup.lat,
+                                lng: originalPickup.lng,
+                                radiusMeters: PICKUP_FARE_RADIUS_METERS,
+                            }
+                            : null
+                    }
+                    onMapCenterChange={handleMapCenterChange}
+                    onMapCenterSettled={handleMapCenterSettled}
                     showRoute={false}
                     showRouteStatsChip={false}
                     zoomControlPosition="topright"
@@ -424,32 +714,78 @@ export default function ConfirmPickup() {
                         {state.vehicleType || 'Ride'}
                     </span>
 
-                    {Number(state.discountAmount) > 0 ? (
+                    {fareRecalculating ? (
+                        <span className="flex items-center gap-2">
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-yellow border-t-transparent" />
+                            <span className="text-xs text-theme-secondary">
+                                Updating fare…
+                            </span>
+                        </span>
+                    ) : Number(fareState.discountAmount) > 0 ? (
                         <span className="flex items-center gap-2">
                             <span className="text-xs text-theme-muted line-through">
-                                {formatPrice(state.price)}
+                                {formatPrice(fareState.price)}
                             </span>
 
                             <span className="font-semibold text-emerald-400">
-                                {formatPrice(state.finalFare)}
+                                {formatPrice(fareState.finalFare)}
                             </span>
                         </span>
                     ) : (
                         <span className="font-semibold text-theme-primary">
-                            {formatPrice(state.price)}
+                            {formatPrice(fareState.price)}
                         </span>
                     )}
                 </div>
 
-                {state.couponCode &&
-                    Number(state.discountAmount) > 0 && (
+                {fareState.couponCode &&
+                    Number(fareState.discountAmount) > 0 && (
                         <p className="mt-1 text-xs text-emerald-400">
-                            {state.couponCode} applied · −
+                            {fareState.couponCode} applied · −
                             {formatPrice(
-                                state.discountAmount
+                                fareState.discountAmount
                             )}
                         </p>
                     )}
+
+                {!fareRecalculating && fareNote && (
+                    <p className="mt-1 text-xs text-theme-secondary">
+                        {fareNote}
+                        {fareRecalcFailed && pickupOutsideReference && (
+                            <>
+                                {' '}
+                                <button
+                                    type="button"
+                                    onClick={retryFareRecalc}
+                                    className="font-semibold text-brand-yellow underline"
+                                >
+                                    Retry
+                                </button>
+                            </>
+                        )}
+                    </p>
+                )}
+
+                {pendingFare && (
+                    <div className="mt-3 rounded-xl border border-theme bg-theme-card-muted p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-brand-yellow">
+                            Confirm new fare
+                        </p>
+
+                        <p className="mt-1 text-xs text-theme-secondary">
+                            Your total fare was updated to reflect your new pickup point.
+                        </p>
+
+                        <p className="mt-1 text-base font-bold text-theme-primary">
+                            {formatPrice(pendingFare.finalFare)}
+                            {Number(pendingFare.discountAmount) > 0 && (
+                                <span className="ml-2 text-xs font-medium text-theme-muted line-through">
+                                    {formatPrice(pendingFare.price)}
+                                </span>
+                            )}
+                        </p>
+                    </div>
+                )}
 
                 {bookingError && (
                     <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -457,16 +793,26 @@ export default function ConfirmPickup() {
                     </p>
                 )}
 
-                <button
-                    type="button"
-                    onClick={confirmPickup}
-                    disabled={booking}
-                    className="mt-4 w-full rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
-                >
-                    {booking
-                        ? t('booking_ride_dots')
-                        : 'Confirm pickup'}
-                </button>
+                {pendingFare ? (
+                    <button
+                        type="button"
+                        onClick={acceptPendingFare}
+                        className="mt-4 w-full rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99]"
+                    >
+                        Accept fare
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={confirmPickup}
+                        disabled={booking || pickupOutsideReference}
+                        className="mt-4 w-full rounded-2xl bg-brand-yellow px-4 py-3.5 text-sm font-bold text-black transition active:scale-[0.99] disabled:opacity-50"
+                    >
+                        {booking
+                            ? t('booking_ride_dots')
+                            : 'Confirm pickup'}
+                    </button>
+                )}
             </div>
         </div>
     )

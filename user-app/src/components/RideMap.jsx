@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline, useMap, ZoomControl } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap, ZoomControl } from 'react-leaflet'
 import L from 'leaflet'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { nearbyVehiclePoints } from '../utils/nearbyVehicles'
@@ -384,6 +384,12 @@ const RideMap = ({
     fixedPickupPin = false,
     onMapCenterChange,
     onMapCenterSettled,
+    /**
+     * Geographic circle anchored at a fixed reference point (NOT the moving
+     * pickup marker): `{ lat, lng, radiusMeters }`. Rendered as a transparent
+     * green ring — used by the pickup screen to show the fare-protection area.
+     */
+    pickupCircle = null,
 }) => {
     const [routeLine, setRouteLine] = useState([])
     const [routeStats, setRouteStats] = useState(null)
@@ -558,6 +564,20 @@ const RideMap = ({
                                 onPickupChange?.({ lat: point.lat, lng: point.lng })
                             },
                         } : undefined}
+                    />
+                )}
+                {pickupCircle?.lat != null && pickupCircle?.lng != null && Number(pickupCircle.radiusMeters) > 0 && (
+                    <Circle
+                        center={[pickupCircle.lat, pickupCircle.lng]}
+                        radius={Number(pickupCircle.radiusMeters)}
+                        interactive={false}
+                        pathOptions={{
+                            color: '#16C784',
+                            weight: 2,
+                            opacity: 0.9,
+                            fillColor: '#16C784',
+                            fillOpacity: 0.15,
+                        }}
                     />
                 )}
                 {!fixedPickupPin && dropCoords?.lat != null && dropCoords?.lng != null && (
