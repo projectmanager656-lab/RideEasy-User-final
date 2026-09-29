@@ -17,7 +17,7 @@ const registerCaptainValidators = [
 ];
 
 const loginValidators = [
-    body('email').isEmail(),
+    body('email').customSanitizer((value) => String(value || '').trim().toLowerCase()).isEmail(),
     body('password').isString().isLength({ min: 1 }),
 ];
 

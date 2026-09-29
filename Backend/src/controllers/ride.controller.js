@@ -14,8 +14,6 @@ const { decryptOtp, encryptOtp, hashOtp } = require("../utils/otpSecure");
 const { expiresInMinutes, randomSixDigit } = require("../utils/otp");
 const { fail, ok } = require("../utils/apiResponse");
 const notificationService = require("../services/notification.service");
-/** ONE canonical source for the scheduled-ride dispatch lead (also published to clients). */
-const { getScheduledDispatchLeadMinutes } = require("../config/env");
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const invoiceService = require("../services/invoice.service");
@@ -56,6 +54,11 @@ const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
  * Turns the client's `scheduledAt` into the ONE authoritative pair of instants.
  * The client sends an absolute ISO-8601 instant (UTC), so no
  * browser-local string comparison or server-timezone guess is involved.
+ *
+ * Dispatch rule: `dispatchAt === scheduledPickupAt`. Driver searching begins at
+ * exactly the selected pickup instant — never earlier. The scheduler only claims
+ * a ride once `now >= dispatchAt` (see services/scheduledRide.service.js), so
+ * there is no dispatch lead and no early dispatch window.
  */
 function resolveScheduleWindow(raw) {
   if (raw == null || String(raw).trim() === "") {
@@ -66,18 +69,17 @@ function resolveScheduleWindow(raw) {
   if (when.getTime() <= Date.now()) {
     return { error: "Scheduled pickup time must be in the future" };
   }
-  const leadMinutes = getScheduledDispatchLeadMinutes();
-  const dispatchAt = new Date(when.getTime() - leadMinutes * 60 * 1000);
+  const dispatchAt = when;
   return {
     scheduledPickupAt: when,
     dispatchAt,
     /**
-     * Searching starts now only when the dispatch instant has already passed, i.e. the
-     * chosen pickup is inside the lead window. The client uses the same rule (published
-     * via GET /config/scheduling) so a time it offers is never dispatched instantly.
+     * Any chosen future pickup is a scheduled booking: the ride waits for that
+     * exact instant instead of searching now. (The `when <= now` check above is
+     * the only gate — the client mirrors it via GET /config/scheduling.)
      */
-    isFutureSearch: dispatchAt.getTime() > Date.now(),
-    leadMinutes,
+    isFutureSearch: true,
+    leadMinutes: 0,
   };
 }
 
@@ -918,11 +920,10 @@ module.exports.createRide = async (req, res) => {
         });
       }
       console.log(
-        "[createRide] ride=%s SCHEDULED pickup=%s dispatchAt=%s lead=%dmin",
+        "[createRide] ride=%s SCHEDULED pickup=%s dispatchAt=%s",
         String(ride._id),
         scheduledRide.scheduledPickupAt?.toISOString?.() || "",
         scheduledRide.dispatchAt?.toISOString?.() || "",
-        scheduleWindow.leadMinutes,
       );
       /**
        * Exactly ONE schedule-confirmation notification, created from this
