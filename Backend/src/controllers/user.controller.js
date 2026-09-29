@@ -243,12 +243,43 @@ module.exports.uploadProfilePhoto = async (req, res) => {
         if (!user) return fail(res, req, 404, 'User not found');
 
         const baseUrl = `${req.protocol}://${req.get('host')}`;
-        user.profilePhoto = `${baseUrl}/uploads/profile/${req.file.filename}`;
+        const profilePhotoUrl = `${baseUrl}/uploads/profile/${req.file.filename}`;
+        user.profilePhoto = profilePhotoUrl;
         await user.save({ validateModifiedOnly: true });
+
+        // Mirror the photo into user_Profile; upsert creates the profile if missing.
+        await mongoose.connection.collection('user_Profile').updateOne(
+            { userId: oid },
+            {
+                $set: {
+                    profilePhoto: profilePhotoUrl,
+                    updatedAt: new Date(),
+                },
+                $setOnInsert: {
+                    userId: oid,
+                    bio: '',
+                    gender: '',
+                    dateOfBirth: null,
+                    preferences: {
+                        language: 'en',
+                        notifications: true,
+                    },
+                    createdAt: new Date(),
+                },
+            },
+            { upsert: true },
+        );
+
+        console.log('[users/profile/photo] saved successfully', {
+            userId: String(oid),
+            profilePhoto: profilePhotoUrl,
+            usersCollectionUpdated: true,
+            user_ProfileCollectionUpdated: true,
+        });
 
         return ok(res, req, 200, 'Profile photo updated', { user: toPublicDoc(user) });
     } catch (err) {
-        console.error('[users/profile/photo]', err?.message || err);
+        console.error('[users/profile/photo]', err?.message || err, err?.stack);
         return fail(res, req, 500, 'Could not update profile photo');
     }
 };
@@ -433,20 +464,37 @@ module.exports.updateSafetyPrefs = async (req, res) => {
 
 /** Change the signed-in passenger's password. Requires the current password. */
 module.exports.changePassword = async (req, res) => {
+    const oid = toUserObjectId(req.userId || req.user?._id);
+    if (!oid) return fail(res, req, 401, 'Unauthorized');
+
     const currentPassword = String(req.body?.currentPassword || '');
     const newPassword = String(req.body?.newPassword || '');
     if (!currentPassword) return fail(res, req, 400, 'Current password is required');
-    if (newPassword.length < 6) return fail(res, req, 400, 'New password must be at least 6 characters');
 
-    const user = await userModel.findById(req.user?._id).select('+password');
-    if (!user) return fail(res, req, 404, 'User not found');
+    try {
+        const user = await userModel.findById(oid).select('+password');
+        if (!user) return fail(res, req, 404, 'User not found');
 
-    const valid = await user.comparePassword(currentPassword);
-    if (!valid) return fail(res, req, 401, 'Current password is incorrect');
+        const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+        if (!isCurrentPasswordValid) {
+            return fail(res, req, 401, 'Current password is incorrect');
+        }
 
-    user.password = await userModel.hashPassword(newPassword);
-    await user.save();
-    return ok(res, req, 200, 'Password changed successfully');
+        if (!newPassword) return fail(res, req, 400, 'New password is required');
+        if (newPassword.length < 6 || newPassword.length > 128) {
+            return fail(res, req, 400, 'New password must be 6-128 characters');
+        }
+        if (newPassword === currentPassword) {
+            return fail(res, req, 400, 'New password must be different from the current password');
+        }
+
+        user.password = await userModel.hashPassword(newPassword);
+        await user.save();
+        return ok(res, req, 200, 'Password changed successfully');
+    } catch (err) {
+        console.error('[users/change-password]', err?.message || err);
+        return fail(res, req, 500, 'Could not change password');
+    }
 };
 
 module.exports.getEmergencyContact = async (req, res) => {

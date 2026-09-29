@@ -305,6 +305,10 @@ const UserProfile = () => {
       setPwError(t('password_min_length'))
       return
     }
+    if (String(newPassword) === String(currentPassword)) {
+      setPwError(t('new_password_same_as_current'))
+      return
+    }
     if (String(confirmPassword) !== String(newPassword)) {
       setPwError(t('passwords_do_not_match'))
       return
