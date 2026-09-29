@@ -74,15 +74,14 @@ function getLaunchTrialDays() {
 }
 
 /**
- * How long before the requested pickup the backend starts searching for a driver.
- * THE single canonical source for this rule — shared by ride creation and the
- * public client config, so the picker can never offer a time the backend would
- * immediately turn into an instant search.
+ * Scheduled rides dispatch EXACTLY at the selected pickup instant
+ * (`dispatchAt === scheduledPickupAt`) — there is no dispatch lead any more, so
+ * this is always 0. Published to clients via GET /config/scheduling so the
+ * picker mirrors the backend rule: a chosen pickup only has to be in the future.
+ * (SCHEDULED_RIDE_DISPATCH_LEAD_MINUTES is retired and intentionally ignored.)
  */
 function getScheduledDispatchLeadMinutes() {
-    const raw = Number(process.env.SCHEDULED_RIDE_DISPATCH_LEAD_MINUTES);
-    if (Number.isFinite(raw) && raw >= 0) return Math.min(Math.floor(raw), 24 * 60);
-    return 1;
+    return 0;
 }
 
 module.exports = {

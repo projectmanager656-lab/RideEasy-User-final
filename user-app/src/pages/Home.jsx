@@ -370,11 +370,14 @@ const Home = () => {
                 return
             }
             /**
-             * A scheduled booking the backend has already started is the passenger's
-             * live ride — enter the existing searching flow. Book Now keeps its current
-             * behaviour of staying on Home until the user resumes it.
+             * A scheduled booking the backend has already started: only a genuine app
+             * entry (reload / reopen / deep link straight to Home) recovers into the
+             * live searching flow. A passenger who deliberately navigated Home is left
+             * here — a ride being in `searching` must never override their navigation;
+             * the active-ride banner is their way back in, exactly like the
+             * started/completed branch above.
              */
-            if (st !== 'scheduled' && data.bookingType === 'scheduled') {
+            if (st !== 'scheduled' && data.bookingType === 'scheduled' && !arrivedByUserActionRef.current) {
                 navigate('/searching-for-driver', {
                     replace: true,
                     state: { ride: { ...data, status: st } },

@@ -23,22 +23,22 @@ function pad2(n) {
 const LAST_MINUTE_OF_HOUR = '59'
 
 /**
- * Conservative fallback for the dispatch lead, used only until (or if) the backend
- * rule cannot be read. Deliberately LARGER than any expected lead so the picker
- * stays stricter, never looser — it can never offer a time the backend would
- * immediately turn into an instant search.
+ * Fallback for the dispatch lead published by the backend, used only until (or
+ * if) the backend rule cannot be read. The backend dispatches at exactly the
+ * selected pickup instant, so the lead is always 0 — a chosen pickup only has
+ * to be genuinely in the future.
  */
-const FALLBACK_LEAD_MINUTES = 15
+const FALLBACK_LEAD_MINUTES = 0
 
 let dispatchLeadCache = null
 let dispatchLeadPromise = null
 
 /**
- * Read the dispatch lead the backend publishes at GET /config/scheduling.
+ * Read the scheduling rule the backend publishes at GET /config/scheduling.
  * That endpoint is the ONE canonical source of the rule; the picker mirrors it so
- * the frontend can never offer a pickup time the backend would dispatch instantly.
- * Plain `fetch` (no auth) because `/config/*` is intentionally outside the
- * passenger apiClient allow-list.
+ * the frontend can never offer a pickup time the backend would reject or start
+ * searching immediately. Plain `fetch` (no auth) because `/config/*` is
+ * intentionally outside the passenger apiClient allow-list.
  */
 function loadDispatchLeadMinutes() {
     if (dispatchLeadCache != null) return Promise.resolve(dispatchLeadCache)
@@ -86,10 +86,10 @@ function keepsScheduled(pickupMs, leadMinutes, nowMs = Date.now()) {
 }
 
 /**
- * Earliest instant the backend will still keep `scheduled`, dispatch lead
- * included, rounded UP to the next whole minute so the value shown is always
- * submittable. Feeds the validation message only — the picker never moves the
- * user's own selection.
+ * Earliest instant the backend will accept as a scheduled pickup (the lead is
+ * always 0 — the rule is simply "in the future"), rounded UP to the next whole
+ * minute so the value shown is always submittable. Feeds the validation message
+ * only — the picker never moves the user's own selection.
  */
 function earliestValidInstant(leadMinutes, fromMs = Date.now()) {
     const earliest = fromMs + leadMinutes * 60 * 1000
@@ -213,8 +213,9 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     })
 
     /**
-     * Backend dispatch lead. Seeded conservatively, then replaced by the value the
-     * backend publishes (GET /config/scheduling) so the picker mirrors the real rule.
+     * Backend dispatch lead (always 0 — dispatch happens at the selected instant).
+     * Seeded from the fallback, then replaced by the value the backend publishes
+     * (GET /config/scheduling) so the picker mirrors the real rule.
      */
     const [leadMinutes, setLeadMinutes] = useState(FALLBACK_LEAD_MINUTES)
 
@@ -297,9 +298,8 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     /**
      * A grid option is unavailable once its own instant is no longer in the
      * future — the same "must be in the future" rule the backend enforces.
-     * Whether a future time is ALSO far enough ahead to stay `scheduled` (the
-     * dispatch lead) is checked when the passenger submits, so every minute
-     * 00–59 stays selectable and the 5-minute cards stay mere shortcuts.
+     * Every minute 00–59 stays selectable while its instant is still ahead, and
+     * the 5-minute cards stay mere shortcuts.
      */
     const slotPassed = (hour, minute, period) =>
         composeLocal(dateParts, { hour, minute, period }).getTime() <= Date.now()
@@ -356,8 +356,8 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
         const selectionDate = committed?.dateParts ?? dateParts
         const { day, month, year } = selectionDate
         /**
-         * Backend is authoritative. Mirrored here only as a gate: a time inside
-         * the dispatch lead would be turned into an instant search, so the
+         * Backend is authoritative. Mirrored here only as a gate: the pickup must
+         * be genuinely in the future, so a passed/near time is refused and the
          * passenger is asked to pick a later one instead — the selection is left
          * untouched and nothing is converted to Book Now behind their back.
          */

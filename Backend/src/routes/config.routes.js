@@ -8,9 +8,10 @@ const router = express.Router();
 /**
  * Public scheduling rule for clients (no auth).
  *
- * The Schedule picker enforces exactly this lead, so it can never offer a pickup
- * time that `resolveScheduleWindow()` would immediately turn into an instant
- * search. Published from the same config source ride creation uses — one rule.
+ * There is no dispatch lead: a scheduled ride starts searching at exactly the
+ * selected pickup instant (`dispatchAt === scheduledPickupAt`), so the picker
+ * only has to keep the chosen time genuinely in the future. Published from the
+ * same config source ride creation uses — one rule. (0 = no lead.)
  */
 router.get('/scheduling', (req, res) => {
     res.set('Cache-Control', 'public, max-age=300');
