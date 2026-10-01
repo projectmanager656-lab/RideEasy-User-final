@@ -8,6 +8,7 @@ const SubscriptionRecord = require("../models/subscriptionRecord.model");
 const Refund = require("../models/refund.model");
 const { expiresAfterPlan } = require("../services/subscriptionDriver.service");
 const paymentService = require("../services/payment.service");
+const { emitToUser } = require("../socket");
 
 /** Body must be raw Buffer (mounted with express.raw before express.json) */
 module.exports.razorpayWebhook = async (req, res) => {
@@ -77,11 +78,22 @@ module.exports.razorpayWebhook = async (req, res) => {
              * the app never returned to confirm the payment. Idempotent: a repeat
              * delivery only re-writes the same advance ledger row.
              */
-            await paymentService.confirmRideAdvancePaid({
+            const settled = await paymentService.confirmRideAdvancePaid({
               rideId,
               transactionId: paymentEntity.id,
               amount,
             });
+            /** Same passenger notification the app-callback path emits, so a webhook
+             *  settlement still updates an open app. */
+            const uid = settled?.user?._id || settled?.user;
+            if (uid) {
+              emitToUser(String(uid), "ride:status-update", {
+                rideId: settled._id,
+                status: settled.status,
+                paymentStatus: settled.paymentStatus,
+                advancePaymentStatus: settled.advancePaymentStatus,
+              });
+            }
           } else {
             await PaymentRecord.findOneAndUpdate(
               { rideId, paymentType: "ride_fare", paymentPart: part },

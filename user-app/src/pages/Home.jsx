@@ -27,7 +27,6 @@ import {
     clearRideSession,
     isRideStatusFinal,
     isRideSearchExpired,
-    RIDE_SEARCH_TIMEOUT_SECONDS,
 } from '../utils/rideSession'
 const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
@@ -155,23 +154,11 @@ const Home = () => {
     const rideGeocodeOnceRef = useRef({ pick: '', drop: '' })
     /** On app open, keep search form visible until user explicitly resumes/creates a ride. */
     const keepSearchFirstRef = useRef(true)
-    /** True when Home restored an active ride from the session key (refresh / re-entry). */
-    const resumedRideFromSessionRef = useRef(false)
     /** True after the first socket connect — lets reconnects trigger a notification resync. */
     const sawConnectedRef = useRef(false)
 
     const navigate = useNavigate()
     const location = useLocation()
-    /**
-     * True when this Home visit came from a deliberate in-app navigation (the bottom-nav
-     * Home tab, the Home icon on the ride screen, a post-ride "Done", …).
-     *
-     * `location.key` is `'default'` only for the very first location of a page load, so a
-     * `true` here means the passenger explicitly asked for Home and must be left there —
-     * a live ride is never allowed to bounce them back to the ride screen. Recovery of a
-     * live ride still runs on a genuine app entry (reload / reopen / deep link to Home).
-     */
-    const arrivedByUserActionRef = useRef(location.key !== 'default')
     const chooseRideResult = location.state?.chooseRideResult
 
     useEffect(() => {
@@ -320,34 +307,26 @@ const Home = () => {
         if (!id || !currentUser?._id) return
         const token = localStorage.getItem('token')
         if (!token) return
-        /** Load ride into state (pickup/drop/OTP) but do NOT auto-open sheets — user stays on “Find a trip”. */
+        /**
+         * Load the ride into state (pickup/drop/OTP) so the Home active-ride banner is
+         * correct — and NEVER navigate. A restore or a status change must not move the
+         * passenger off the screen they chose; the banner is the only way back in.
+         */
         syncRideFromServer(id).then((data) => {
             if (!data) {
                 clearRideSession()
                 return
             }
             const st = normalizeRideStatus(data.status)
-            /**
-             * Live / completed ride. Only a genuine app entry (reload, reopen, deep link
-             * straight to Home) may open the ride screen; a passenger who deliberately
-             * navigated to Home mid-ride stays here and re-enters through the active-ride
-             * banner. Either way the ride itself is untouched — it keeps running.
-             */
             if (st === 'started' || st === 'completed') {
-                if (!arrivedByUserActionRef.current) {
-                    navigate('/riding', {
-                        replace: true,
-                        state: { ride: { ...data, status: st } },
-                    })
-                    return
-                }
-                if (st === 'completed') {
+                if (st === 'completed' && data.paymentStatus === 'success') {
                     /* Nothing left to resume — drop the stale session pointer. */
                     clearRideSession()
+                    setRide(null)
                     return
                 }
-                /* Live ride, passenger chose Home: keep it loaded for the banner. */
-                resumedRideFromSessionRef.current = true
+                /* Live ride, or a completion with the remaining fare unpaid: keep it
+                   loaded so the active-ride banner can offer the way back in. */
                 setVehicleFound(false)
                 setWaitingForDriver(false)
                 return
@@ -373,26 +352,11 @@ const Home = () => {
                 setRide(null)
                 return
             }
-            /**
-             * A scheduled booking the backend has already started: only a genuine app
-             * entry (reload / reopen / deep link straight to Home) recovers into the
-             * live searching flow. A passenger who deliberately navigated Home is left
-             * here — a ride being in `searching` must never override their navigation;
-             * the active-ride banner is their way back in, exactly like the
-             * started/completed branch above.
-             */
-            if (st !== 'scheduled' && data.bookingType === 'scheduled' && !arrivedByUserActionRef.current) {
-                navigate('/searching-for-driver', {
-                    replace: true,
-                    state: { ride: { ...data, status: st } },
-                })
-                return
-            }
-            resumedRideFromSessionRef.current = true
+            /* scheduled / searching / accepted / arrived: state only, never a screen change. */
             setVehicleFound(false)
             setWaitingForDriver(false)
         })
-    }, [ride, currentUser?._id, syncRideFromServer, navigate, chooseRideResult])
+    }, [ride, currentUser?._id, syncRideFromServer, chooseRideResult])
 
     useEffect(() => {
         if (!socket) return;
@@ -513,21 +477,11 @@ const Home = () => {
                 }
                 if (st === 'arrived' && !keepSearchFirstRef.current) setWaitingForDriver(true)
                 if (st === 'started') {
+                    /* State only — the passenger re-enters the live ride through the
+                       Home active-ride banner, which re-reads the authoritative status. */
                     setWaitingForDriver(false)
                     setVehicleFound(false)
                     setPassengerOtp('')
-                    /* Jump to the live-ride screen when the passenger is actively
-                       in this booking flow (created here) or resumed it from the
-                       session key (refresh / re-entry mid-ride). An idle Home
-                       tab never hijacks navigation — the ride stays recoverable
-                       from the Live tab via the session key. A passenger who
-                       deliberately opened Home mid-ride is likewise left alone;
-                       the active-ride banner is the way back in. */
-                    if (!arrivedByUserActionRef.current
-                        && (!keepSearchFirstRef.current || resumedRideFromSessionRef.current)) {
-                        const r = data.ride || rideRef.current
-                        navigate('/riding', { state: { ride: { ...(r || {}), status: 'started' } } })
-                    }
                 }
                 if (st === 'completed') {
                     const completedRide = {
@@ -535,8 +489,20 @@ const Home = () => {
                         ...(data.ride || {}),
                         status: 'completed',
                     }
-                    clearRideSession()
-                    navigate('/riding', { replace: true, state: { ride: completedRide } })
+                    /**
+                     * State only. A completion with the remaining fare unpaid stays
+                     * reachable through the Home banner ("Complete payment"); once it is
+                     * settled there is nothing left to resume. Navigation is never forced.
+                     */
+                    if (completedRide.paymentStatus === 'success') {
+                        clearRideSession()
+                        setRide(null)
+                    } else {
+                        if (completedRide._id) writeRideSessionId(completedRide._id)
+                        setRide(completedRide)
+                    }
+                    setWaitingForDriver(false)
+                    setVehicleFound(false)
                     return
                 }
                 if (st === 'cancelled') {
@@ -871,34 +837,9 @@ const Home = () => {
         }
     }, [ride?._id, ride?.status, ride?.captain, syncRideFromServer, t]);
 
-    /**
-     * Search expiry on Home. The tracking screen owns the "No Driver Found" modal, but
-     * the rider can come back here while a search is still running — without this the
-     * ride stays `searching` forever, the top banner never clears and the search hangs.
-     * Hand off to the tracking screen, which cancels the ride and shows the modal.
-     *
-     * A passenger who deliberately opened Home stays here — the active-ride banner is
-     * their way back into the search, the same rule the started/completed handoffs use.
-     * Only a genuine app entry (reload / reopen / deep link to Home) keeps the handoff.
-     */
-    useEffect(() => {
-        if (rideStatus !== 'searching' || !ride?._id) return
-        if (arrivedByUserActionRef.current) return
-        const openSearchOutcome = () => {
-            navigate('/searching-for-driver', { replace: true, state: { ride } })
-        }
-        const startedMs = ride?.createdAt ? new Date(ride.createdAt).getTime() : NaN
-        const elapsedSec = Number.isFinite(startedMs)
-            ? Math.max(0, Math.floor((Date.now() - startedMs) / 1000))
-            : 0
-        const remainingMs = Math.max(0, (RIDE_SEARCH_TIMEOUT_SECONDS - elapsedSec) * 1000)
-        if (remainingMs === 0) {
-            openSearchOutcome()
-            return
-        }
-        const id = setTimeout(openSearchOutcome, remainingMs)
-        return () => clearTimeout(id)
-    }, [ride, rideStatus, navigate]);
+    /* The old search-expiry handoff to /searching-for-driver is gone on purpose:
+       a background search keeps running (backend expiry owns cancellation) and the
+       passenger re-enters through the active-ride banner only when they choose to. */
 
 
     /** Debounced prefix search with stale-response protection and graceful 429 handling. */
@@ -1511,12 +1452,16 @@ const Home = () => {
     }, [ location.state, location.pathname, navigate ])
 
     const activeRideStatus = normalizeRideStatus(ride?.status)
-    /** SEARCHING / ACCEPTED / ARRIVED / started (ongoing ride). Everything else — cancelled,
-     *  completed, or a failed search — leaves the banner hidden. */
+    /**
+     * SEARCHING / ACCEPTED / ARRIVED / STARTED (ongoing ride), plus a COMPLETED ride whose
+     * remaining fare is still unpaid — the banner is the passenger's way to the receipt and
+     * the payment. A settled completion, a cancelled ride or a failed search leaves it hidden.
+     */
     const hasActiveRide = activeRideStatus === 'searching'
         || activeRideStatus === 'accepted'
         || activeRideStatus === 'arrived'
         || activeRideStatus === 'started'
+        || (activeRideStatus === 'completed' && ride?.paymentStatus !== 'success')
 
     /** Drives the bell badge; kept in sync by the socket event and by each load. */
     const unreadNotificationCount = notifications.filter((n) => !n.isRead).length
@@ -1560,7 +1505,9 @@ const Home = () => {
                                             ? t('driver_has_arrived')
                                             : activeRideStatus === 'started'
                                                 ? (t('live_ride_in_progress') || 'Live Ride in Progress')
-                                                : t('driver_assigned_track')}
+                                                : activeRideStatus === 'completed'
+                                                    ? (t('complete_payment') || 'Complete payment')
+                                                    : t('driver_assigned_track')}
                                 </p>
                                 <p className="text-[11px] text-theme-secondary">
                                     {activeRideStatus === 'searching'

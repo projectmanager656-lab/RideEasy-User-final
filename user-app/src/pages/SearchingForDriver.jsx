@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { loadRazorpayCheckout } from '../utils/loadRazorpay'
 import { normalizeLocationText } from '../utils/locationText'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
 import { useUserData } from '../context/UserContext'
@@ -705,7 +706,10 @@ const SearchingForDriver = () => {
       return
     }
 
-    if (!window.Razorpay) {
+    /** The checkout SDK is lazy-loaded: a fresh session has no window.Razorpay yet. */
+    try {
+      await loadRazorpayCheckout()
+    } catch {
       setAdvancePayError(t('advance_gateway_missing'))
       return
     }
