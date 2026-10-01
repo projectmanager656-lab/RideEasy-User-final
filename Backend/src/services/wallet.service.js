@@ -6,6 +6,7 @@ const PaymentRecord = require('../models/paymentRecord.model');
 const WalletTransaction = require('../models/walletTransaction.model');
 const CouponUsage = require('../models/couponUsage.model');
 const pricingService = require('./pricing.service');
+const { computeAdvanceSplit } = require('./payment.service');
 const { validateCoupon } = require('./coupon.service');
 
 function walletError(message, statusCode = 400) {
@@ -27,9 +28,9 @@ async function payRideFromWallet({ rideId, userId, part }) {
             if (ride.status !== 'accepted' && ride.status !== 'arrived' && ride.status !== 'started' && ride.status !== 'completed') {
                 throw walletError('Ride is not ready for payment', 409);
             }
-            const total = Math.max(0, Number(ride.price || 0) - Number(ride.discountAmount || 0));
-            const advance = Math.round(total * 0.25);
-            const amount = paymentPart === 'remaining' ? Math.max(0, total - advance) : advance;
+            /** Same authoritative split as the gateway rail — one source for the 25%. */
+            const { payable: total, advanceAmount: advance, remainingAmount } = computeAdvanceSplit(ride);
+            const amount = paymentPart === 'remaining' ? remainingAmount : advance;
             if (amount <= 0) throw walletError('Invalid payment amount');
             const existing = await WalletTransaction.findOne({ userId, rideId, direction: 'debit', description: { $regex: paymentPart } }).session(session);
             if (existing?.status === 'success') {

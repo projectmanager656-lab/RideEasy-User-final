@@ -1256,10 +1256,15 @@ module.exports.arriveRide = async (req, res) => {
       });
     }
 
+    /**
+     * The passenger's OTP is deliberately NOT returned to the driver — it must come
+     * from the passenger. The emit above already delivered it to the passenger.
+     */
+    const driverConfirmation = { ...confirmation };
+    delete driverConfirmation.otp;
     return res.status(200).json({
       ...publicRide(full),
-      ...(otpPlain ? { otp: String(otpPlain) } : {}),
-      confirmation,
+      confirmation: driverConfirmation,
       ok: true,
       message: "Driver marked arrived",
       requestId: req.requestId,
@@ -1544,9 +1549,13 @@ module.exports.getRideById = async (req, res) => {
       return fail(res, req, 403, "Forbidden");
     }
 
+    /** Same validity rule as getPassengerOtp/startRide: never surface a stale code. */
+    const otpWindowValid =
+      ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
     let otpPlain = null;
     if (
       ride.status === "arrived" &&
+      otpWindowValid &&
       (isPassenger || isAssignedCaptain)
     ) {
       const withCipher = await rideModel.findById(rideId).select("+otpCipher");
@@ -1604,6 +1613,13 @@ module.exports.getPassengerOtp = async (req, res) => {
       });
     }
 
+    /**
+     * The cipher is keyed to JWT_SECRET, so it can be unreadable while the ride
+     * itself is fine: the secret rotated, or a different backend instance (a
+     * stale deployment, a second server on the same DB) wrote this ride's OTP.
+     * Reissue instead of failing — the passenger must always see the code that
+     * matches the stored hash, which is what the driver verifies.
+     */
     const hasValidOtpWindow =
       ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
 
@@ -1616,8 +1632,8 @@ module.exports.getPassengerOtp = async (req, res) => {
         // markArrived and now) or a corrupted record — the stored OTP is
         // unusable for BOTH sides. Regenerate below instead of 500 so the
         // ride is not stuck for the rest of the window.
-        console.error(
-          "[getPassengerOtp] decrypt failed — regenerating OTP",
+        console.warn(
+          "[getPassengerOtp] stored cipher undecryptable (rotated key or another instance wrote it) ride=%s — reissuing: %s",
           String(rideId),
           e?.message || e,
         );
@@ -2226,7 +2242,9 @@ async function buildRideInvoice(ride) {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
   };
-  const advance = Math.round(num(r.price) * 0.25);
+  /** ONE source for the split — the same helper the collection flow uses, so the
+   *  invoice advance row can never disagree with the amount actually paid. */
+  const { advanceAmount: advance } = paymentService.computeAdvanceSplit(r);
   const totalPaid = num(r.chargedAmount) > 0 ? num(r.chargedAmount) : num(r.price);
   const paymentStatus = r.paymentStatus === "success" ? "success" : "pending";
   let serverRef = null;

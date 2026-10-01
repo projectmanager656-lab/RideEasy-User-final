@@ -332,4 +332,44 @@ describe("ride offer and first-accept flow", () => {
     );
   });
 
+  test("reissues a passenger OTP when the stored cipher cannot be decrypted", async () => {
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    rideModel.findById.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        populate: jest.fn().mockResolvedValue({
+          _id: "64d1d2d0b9f7a1234567890b",
+          user: { _id: "user-1" },
+          captain: { _id: "captain-1" },
+          status: "arrived",
+          otpCipher: "not-a-valid-aes-gcm-cipher",
+          otpExpiresAt: new Date(Date.now() + 4 * 60 * 1000),
+        }),
+      }),
+    });
+    rideModel.updateOne.mockResolvedValue({ acknowledged: true, matchedCount: 1 });
+
+    await rideController.getPassengerOtp(
+      { params: { id: "64d1d2d0b9f7a1234567890b" }, user: { _id: "user-1" } },
+      response,
+    );
+
+    const payload = response.json.mock.calls[0][0];
+    expect(payload.ok).toBe(true);
+    expect(payload.otp).toMatch(/^\d{6}$/);
+    expect(rideModel.updateOne).toHaveBeenCalledWith(
+      { _id: "64d1d2d0b9f7a1234567890b" },
+      {
+        $set: expect.objectContaining({
+          otpExpiresAt: expect.any(Date),
+          otpHash: expect.any(String),
+          otpCipher: expect.any(String),
+        }),
+      },
+    );
+  });
+
 });
