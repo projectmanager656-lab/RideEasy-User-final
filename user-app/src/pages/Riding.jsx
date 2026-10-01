@@ -17,11 +17,6 @@ import { haversineKm } from '../utils/serviceArea'
 
 const UPI_PAYEE = import.meta.env.VITE_UPI_PAYEE_NAME || 'RideEasy'
 
-/** Digits (plus a leading +) a phone dialer understands; '' when there is nothing to dial. */
-function dialablePhone (phone) {
-    return String(phone || '').replace(/[^+\d]/g, '')
-}
-
 const Riding = () => {
     const { t } = useLanguage()
     const location = useLocation()
@@ -43,9 +38,6 @@ const Riding = () => {
         return null
     })
     const [passengerLiveCoords, setPassengerLiveCoords] = useState(null)
-    const [emergencyContact, setEmergencyContact] = useState(null) // { name, phone, relationship }
-    const [ecLoading, setEcLoading] = useState(true)
-    const [ecError, setEcError] = useState('')
     const socket = useSocket()
     const navigate = useNavigate()
     const rideIdRef = useRef(null)
@@ -195,37 +187,6 @@ const Riding = () => {
             navigator.geolocation.clearWatch(watchId)
         }
     }, [socket, ride?.status])
-
-    // Fetch emergency contact
-    useEffect(() => {
-        const fetchEmergencyContact = async () => {
-            if (!ride?._id) {
-                setEcLoading(false)
-                return
-            }
-            
-            setEcLoading(true)
-            setEcError('')
-            try {
-                const token = getPassengerToken()
-                const response = await axios.get(`${API_BASE_URL}/users/emergency-contact`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-                setEmergencyContact(response.data.emergencyContact ?? null)
-            } catch (err) {
-                // If no emergency contact exists, that's okay
-                if (err.response?.status === 404) {
-                    setEmergencyContact(null)
-                } else {
-                    setEcError(err.response?.data?.message || err.message || 'Failed to load emergency contact')
-                }
-            } finally {
-                setEcLoading(false)
-            }
-        }
-
-        fetchEmergencyContact()
-    }, [ride?._id])
 
     useEffect(() => {
         // normalizeLocationText tolerates both string and { address } locations.
@@ -499,78 +460,16 @@ const Riding = () => {
                     </div>
                 </div>
                 
-                {/* Emergency Contact Section */}
+                {/* Emergency Support */}
                 {ride?.status === 'started' && (
-                    <div className='w-full mt-5 rounded-xl border border-theme bg-theme-card'>
-                        <div className='flex items-center gap-4 p-4'>
-                            <div className='flex-1'>
-                                <h3 className='text-lg font-medium text-theme-primary'>{t('emergency_contact')}</h3>
-                                {ecLoading ? (
-                                    <p className='text-sm text-theme-secondary'>{t('loading')}</p>
-                                ) : ecError ? (
-                                    <p className='text-sm text-red-500'>{ecError}</p>
-                                ) : emergencyContact ? (
-                                    /* Tapping the saved contact opens the native dialer with their number. */
-                                    <a
-                                        href={dialablePhone(emergencyContact.phone) ? `tel:${dialablePhone(emergencyContact.phone)}` : undefined}
-                                        className='-m-1 block rounded-lg p-1 transition hover:bg-theme-card-muted active:scale-[0.99]'
-                                    >
-                                        <p className='text-sm font-semibold text-theme-primary mb-1'>{emergencyContact.name}</p>
-                                        <p className='text-sm font-medium text-brand-yellow'>{emergencyContact.phone}</p>
-                                        <p className='text-xs text-theme-secondary'>{emergencyContact.relationship}</p>
-                                    </a>
-                                ) : (
-                                    <p className='text-sm text-theme-secondary'>{t('emergency_contact_sub')}</p>
-                                )}
-                            </div>
-                            <div className='flex space-x-3'>
-                                {!ecLoading && !ecError && emergencyContact ? (
-                                    <>
-                                        <button
-                                            onClick={() => {
-                                                if (emergencyContact.phone) {
-                                                    window.location.href = `tel:${emergencyContact.phone}`
-                                                }
-                                            }}
-                                            className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
-                                        >
-                                            <i className="ri-phone-line text-lg" />
-                                            {t('call')}
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                if (emergencyContact.phone) {
-                                                    const rideDetails = {
-                                                        driverName: ride?.captain?.name || 'Driver',
-                                                        vehicleInfo: `${ride?.captain?.vehicleType || 'Vehicle'} ${ride?.captain?.vehicleNumber || ''}`,
-                                                        pickup: normalizeLocationText(ride?.pickupLocation),
-                                                        destination: normalizeLocationText(ride?.dropLocation || ride?.destination),
-                                                        status: ride?.status || '—',
-                                                        eta: ride?.eta || 'Calculating...',
-                                                        rideId: ride?._id || '—'
-                                                    }
-                                                    const message = `RideEasy Emergency Alert: I'm currently in a ride and need to share my ride details for safety.\n\nDriver: ${rideDetails.driverName}\nVehicle: ${rideDetails.vehicleInfo}\nPickup: ${rideDetails.pickup}\nDestination: ${rideDetails.destination}\nStatus: ${rideDetails.status}\nETA: ${rideDetails.eta}\nRide ID: ${rideDetails.rideId}\n\nPlease check on me if needed.`
-                                                    window.location.href = `https://wa.me/${emergencyContact.phone}?text=${encodeURIComponent(message)}`
-                                                }
-                                            }}
-                                            className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
-                                        >
-                                            <i className="ri-chat-3-line text-lg" />
-                                            {t('share')}
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button
-                                        onClick={() => navigate('/emergency-contact')}
-                                        className='flex items-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted'
-                                    >
-                                        <i className="ri-add-line text-lg" />
-                                        {t('add_contact')}
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                    <button
+                        type='button'
+                        onClick={() => navigate('/emergency-contact')}
+                        className='mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500 px-4 py-3 text-base font-bold text-white transition hover:bg-rose-600 active:scale-[0.99]'
+                    >
+                        <i className="ri-alarm-warning-line text-xl" />
+                        {t('emergency_support')}
+                    </button>
                 )}
                 
             </div>

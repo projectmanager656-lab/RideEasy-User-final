@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { adminApi } from '../services/adminApi'
 import { displayName } from '../admin/adminUtils'
 import {
@@ -9,6 +9,7 @@ import {
   RidesTab,
   PaymentsTab,
   PricingTab,
+  NotificationsTab,
 } from '../admin/tabs'
 import { useLanguage, LANGUAGE_OPTIONS } from '../i18n'
 
@@ -19,6 +20,7 @@ const TAB_LABELS = {
   rides: 'rides',
   payments: 'payments',
   pricing: 'pricing',
+  notifications: 'notifications',
 }
 
 const AdminDashboard = () => {
@@ -510,7 +512,7 @@ const AdminDashboard = () => {
         </div>
 
         <div className="mb-4 sm:mb-6 flex flex-wrap gap-2 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0 sm:pb-0">
-          {['analytics', 'users', 'drivers', 'rides', 'payments', 'pricing'].map((tabId) => (
+          {['analytics', 'users', 'drivers', 'rides', 'payments', 'pricing', 'notifications'].map((tabId) => (
             <button
               key={tabId}
               type="button"
@@ -621,6 +623,10 @@ const AdminDashboard = () => {
             savePricing={savePricing}
             pricingLoading={pricingLoading}
           />
+        )}
+
+        {tab === 'notifications' && (
+          <NotificationsTab />
         )}
       </div>
     </div>

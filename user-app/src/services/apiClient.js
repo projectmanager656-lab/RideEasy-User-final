@@ -87,7 +87,7 @@ apiClient.interceptors.response.use(
   }
 )
 
-/** Passenger app: users, rides, maps, health only (no captain/admin namespaces). */
+/** Passenger app: users, rides, maps, health, public config only (no captain/admin namespaces). */
 const PASSENGER_ALLOWED = [
   /^\/users(\/|$)/i,
   /^\/rides(\/|$)/i,
@@ -95,6 +95,7 @@ const PASSENGER_ALLOWED = [
   /^\/health(\/|$)/i,
   /^\/support-tickets(\/|$)/i,
   /^\/chat(\/|$)/i,
+  /^\/config(\/|$)/i,
 ]
 
 apiClient.interceptors.request.use((config) => {

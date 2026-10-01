@@ -1237,6 +1237,23 @@ module.exports.arriveRide = async (req, res) => {
         confirmation,
         driverLocation: confirmation.liveLocation || undefined,
       });
+
+      // Ride-arrived notification — idempotent per ride (repeated arrive events
+      // never duplicate push/SMS). SMS follows the configured policy.
+      void notificationService.createIdempotent({
+        receiverId: uid,
+        receiverType: "user",
+        title: "Ride Arrived",
+        message: "Your RideEasy driver has arrived.",
+        type: "ride_arrived",
+        meta: { rideId: String(ride._id) },
+        dedupeKey: `${ride._id}_RIDE_ARRIVED`,
+        channels: {
+          inApp: true,
+          push: true,
+          sms: process.env.SMS_RIDE_ARRIVED === "true",
+        },
+      });
     }
 
     return res.status(200).json({

@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 import UserContext from './context/UserContext';
 import CaptainContext from './context/CaptainContext';
 import SocketProvider from './context/SocketContext';
+import ConfigProvider from './context/ConfigContext';
 import { initSentry } from './initSentry';
 import { LanguageProvider } from './i18n'
 import { ThemeProvider } from './context/ThemeContext'
@@ -111,17 +112,19 @@ if (!Capacitor.isNativePlatform()) {
 createRoot(document.getElementById('root')).render(
 
   <SocketProvider>
-    <CaptainContext>
-      <UserContext>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <LanguageProvider>
-            <ThemeProvider>
-              <App />
-            </ThemeProvider>
-          </LanguageProvider>
-        </BrowserRouter>
-      </UserContext>
-    </CaptainContext>
+    <ConfigProvider>
+      <CaptainContext>
+        <UserContext>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <LanguageProvider>
+              <ThemeProvider>
+                <App />
+              </ThemeProvider>
+            </LanguageProvider>
+          </BrowserRouter>
+        </UserContext>
+      </CaptainContext>
+    </ConfigProvider>
   </SocketProvider>
 
 )

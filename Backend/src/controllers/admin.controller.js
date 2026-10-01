@@ -14,6 +14,11 @@ const Coupon = require("../models/coupon.model");
 const { logAdminAction } = require("../services/auditLog.service");
 const refundService = require("../services/refund.service");
 const pricingService = require("../services/pricing.service");
+const notificationService = require("../services/notification.service");
+const Notification = require("../models/notification.model");
+const RideeasySupport = require("../models/rideeasySupport.model");
+const { emitToAll } = require("../socket");
+const { FARE_CONFIG_UPDATED, RIDEEASY_SUPPORT_UPDATED } = require("../socket/rideSocket.events");
 const { canonicalServiceCity } = require("../utils/serviceArea");
 
 /** Match ride.controller payRide / COMMISSION_PERCENT default (15%). */
@@ -650,6 +655,16 @@ module.exports.updatePricing = async (req, res) => {
       pricingService.ensureServiceDoc(),
     ]);
 
+    // Push the new fare config to every connected client only after the save above
+    // succeeded — clients compare `version` and ignore stale events.
+    if (rates && typeof rates === "object") {
+      emitToAll(FARE_CONFIG_UPDATED, {
+        version: svcDoc?.updatedAt ? new Date(svcDoc.updatedAt).toISOString() : null,
+        updatedAt: svcDoc?.updatedAt ? new Date(svcDoc.updatedAt).toISOString() : null,
+        rates: mergedRates,
+      });
+    }
+
     return ok(res, req, 200, "Pricing updated", {
       rates: mergedRates,
       driverPlans: mergedPlans,
@@ -1034,6 +1049,177 @@ module.exports.updateConfig = async (req, res) => {
     });
   } catch (err) {
     return fail(res, req, 500, err.message || "Failed to update config");
+  }
+};
+
+/** RideEasy Support hotline (collection `rideeasy_support`). */
+module.exports.getSupport = async (req, res) => {
+  try {
+    const doc = await RideeasySupport
+      .findOne({ type: "EMERGENCY_SUPPORT" })
+      .sort({ priority: -1, updatedAt: -1 })
+      .lean();
+    return ok(res, req, 200, "Support", {
+      support: doc
+        ? {
+            id: String(doc._id),
+            name: doc.name || "",
+            phone: doc.phone || "",
+            description: doc.description || "",
+            isActive: Boolean(doc.isActive),
+            updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+          }
+        : null,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to load support config");
+  }
+};
+
+module.exports.updateSupport = async (req, res) => {
+  try {
+    const { name, phone, description, isActive } = req.body || {};
+
+    const update = {};
+    if (name != null) update.name = String(name).trim().slice(0, 80);
+    if (description != null) update.description = String(description).trim().slice(0, 160);
+    if (isActive != null) update.isActive = Boolean(isActive);
+    if (phone != null) {
+      const p = String(phone).trim();
+      if (p !== "" && !/^\+?[\d\s-]{7,15}$/.test(p)) {
+        return fail(res, req, 400, "Invalid phone — use an international number like +919876543210");
+      }
+      update.phone = p;
+    }
+
+    const doc = await RideeasySupport
+      .findOne({ type: "EMERGENCY_SUPPORT" })
+      .sort({ priority: -1, updatedAt: -1 });
+    if (!doc) {
+      return fail(res, req, 404, "No RideEasy Support record found — create one in the rideeasy_support collection first");
+    }
+
+    Object.assign(doc, update);
+    await doc.save();
+
+    // Broadcast to every connected client only after the save succeeded.
+    emitToAll(RIDEEASY_SUPPORT_UPDATED, {
+      name: doc.name,
+      phone: doc.phone,
+      description: doc.description,
+      isActive: Boolean(doc.isActive),
+      version: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+    });
+
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "update_support",
+      targetType: "support",
+      targetId: String(doc._id),
+      newValue: update,
+      req,
+    });
+
+    return ok(res, req, 200, "Support updated", {
+      support: {
+        id: String(doc._id),
+        name: doc.name,
+        phone: doc.phone,
+        description: doc.description,
+        isActive: Boolean(doc.isActive),
+        updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+      },
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to update support config");
+  }
+};
+
+const NOTIFICATION_TYPES = [
+  "ride", "payment", "subscription", "admin", "system",
+  "ride_arrived", "new_feature", "promotion", "important_update", "system_alert",
+];
+
+/**
+ * Compose & send a notification (POST). Audience: one user (userId) or every
+ * non-blocked user (allUsers: true). Channels default to in-app only; push and
+ * SMS must be opted in. Fan-out failures never fail this API.
+ */
+module.exports.createNotification = async (req, res) => {
+  try {
+    const { userId, allUsers, type, title, message, channels } = req.body || {};
+    const cleanTitle = String(title || "").trim();
+    const cleanMessage = String(message || "").trim();
+    if (!cleanTitle) return fail(res, req, 400, "title is required");
+    if (cleanTitle.length > 200) return fail(res, req, 400, "title too long (max 200)");
+    if (!cleanMessage) return fail(res, req, 400, "message is required");
+    if (cleanMessage.length > 2000) return fail(res, req, 400, "message too long (max 2000)");
+
+    const nType = NOTIFICATION_TYPES.includes(type) ? type : "admin";
+    const ch = {
+      inApp: channels?.inApp !== false,
+      push: channels?.push === true,
+      sms: channels?.sms === true,
+    };
+
+    let receivers;
+    if (allUsers) {
+      receivers = await User.find({ blocked: { $ne: true } }).select("_id").lean();
+    } else {
+      const uid = String(userId || "");
+      if (!mongoose.Types.ObjectId.isValid(uid)) {
+        return fail(res, req, 400, "Valid userId or allUsers:true is required");
+      }
+      const user = await User.findById(uid).select("_id");
+      if (!user) return fail(res, req, 404, "User not found");
+      receivers = [user];
+    }
+
+    let created = 0;
+    for (const r of receivers) {
+      const notif = await notificationService.createPersisted({
+        receiverId: r._id,
+        receiverType: "user",
+        title: cleanTitle,
+        message: cleanMessage,
+        type: nType,
+        meta: { sentBy: String(req.admin?._id || "") },
+        channels: ch,
+      });
+      if (notif) created += 1;
+    }
+
+    void logAdminAction({
+      adminId: req.admin?._id,
+      action: "send_notification",
+      targetType: "notification",
+      targetId: allUsers ? "all_users" : String(userId),
+      newValue: { type: nType, title: cleanTitle, channels: ch, recipients: receivers.length },
+      req,
+    });
+
+    return ok(res, req, 200, "Notification sent", {
+      recipients: receivers.length,
+      created,
+      channels: ch,
+      type: nType,
+    });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Notification send failed");
+  }
+};
+
+/** Recent user notifications with per-channel delivery status. */
+module.exports.listNotifications = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query?.limit) || 25, 100);
+    const docs = await Notification.find({ receiverType: "user" })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    return ok(res, req, 200, "Notifications", { notifications: docs });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to list notifications");
   }
 };
 

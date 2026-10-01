@@ -15,6 +15,7 @@ import rideEasyCity from '../assets/rideeasy-city.png';
 import ScheduleModal from '../components/ScheduleModal';
 import ScheduledRideConfirmation from '../components/ScheduledRideConfirmation';
 import NotificationSheet from '../components/NotificationSheet';
+import { registerPushNotifications } from '../utils/pushRegistration';
 import { SERVICE_AREAS } from '../utils/serviceArea'
 import { findRideTier, findTierByBackendType } from '../constants/rideTiers'
 import { searchServiceAreaPlaces } from '../constants/serviceAreaPlaces'
@@ -135,6 +136,9 @@ const Home = () => {
     /** In-app notifications for this passenger (Home bell + sheet). */
     const [ notifications, setNotifications ] = useState([])
     const [ notificationsLoading, setNotificationsLoading ] = useState(false)
+    /** Transient popup shown when a notification arrives while the app is open. */
+    const [ notificationToast, setNotificationToast ] = useState(null)
+    const notificationToastTimerRef = useRef(null)
     const [ scheduledAt, setScheduledAt ] = useState(null)
     const [ assignmentError, setAssignmentError ] = useState('')
     const [ pickupSelection, setPickupSelection ] = useState(null)
@@ -609,6 +613,10 @@ const Home = () => {
                     ? prev
                     : [ payload, ...prev ]
             ))
+            // Instant popup while the app is open — history/badge update above.
+            setNotificationToast(payload)
+            clearTimeout(notificationToastTimerRef.current)
+            notificationToastTimerRef.current = setTimeout(() => setNotificationToast(null), 5000)
         }
         socket.on(NOTIFICATION_NEW, handleNotificationNew)
 
@@ -644,6 +652,7 @@ const Home = () => {
     useEffect(() => {
         if (!currentUser?._id) return
         void loadNotifications()
+        void registerPushNotifications()
     }, [loadNotifications, currentUser?._id])
 
     /** Reconcile whenever the sheet is opened. */
@@ -1722,6 +1731,23 @@ const Home = () => {
                 loading={notificationsLoading}
                 onSelect={openNotification}
             />
+
+            {notificationToast ? (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setNotificationToast(null)
+                        setNotificationsOpen(true)
+                    }}
+                    className="fixed inset-x-3 top-3 z-50 flex items-start gap-3 rounded-2xl border border-theme bg-theme-card/95 p-3.5 text-left shadow-xl backdrop-blur active:scale-[0.99]"
+                >
+                    <i className="ri-notification-3-line mt-0.5 text-lg text-brand" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-bold text-theme-primary">{notificationToast.title}</span>
+                        <span className="mt-0.5 block text-xs text-theme-secondary">{notificationToast.message}</span>
+                    </span>
+                </button>
+            ) : null}
         </div>
     )
 }

@@ -36,6 +36,12 @@ const en = {
   sos_confirm_body: 'Are you sure you want to activate Emergency SOS?',
   activate_sos: 'Activate SOS',
 
+  // --- Emergency Support (call flow) ---
+  emergency_support: 'Emergency Support',
+  rideeasy_support: 'RideEasy Support',
+  rideeasy_support_sub: 'For RideEasy emergency assistance',
+  phone_not_available: 'Phone number is not available.',
+
   // --- Safety: Share trip ---
   share_trip: 'Share Trip',
   share_trip_hint: 'Share your current trip information with someone you trust.',
@@ -161,6 +167,12 @@ const hi = {
   sos_confirm_body: 'क्या आप वाकई आपातकालीन SOS सक्रिय करना चाहते हैं?',
   activate_sos: 'SOS सक्रिय करें',
 
+  // --- Emergency Support (call flow) ---
+  emergency_support: 'आपातकालीन सहायता',
+  rideeasy_support: 'RideEasy सहायता',
+  rideeasy_support_sub: 'RideEasy आपातकालीन सहायता के लिए',
+  phone_not_available: 'फ़ोन नंबर उपलब्ध नहीं है।',
+
   share_trip: 'ट्रिप साझा करें',
   share_trip_hint: 'अपनी वर्तमान ट्रिप की जानकारी किसी विश्वसनीय व्यक्ति के साथ साझा करें।',
   no_active_ride_to_share: 'साझा करने के लिए कोई सक्रिय राइड नहीं है।',
@@ -278,6 +290,12 @@ const mr = {
   sos_confirm_title: 'आपत्कालीन SOS सक्रिय करायचा?',
   sos_confirm_body: 'तुम्हाला खरोखर आपत्कालीन SOS सक्रिय करायचा आहे का?',
   activate_sos: 'SOS सक्रिय करा',
+
+  // --- Emergency Support (call flow) ---
+  emergency_support: 'आपत्कालीन मदत',
+  rideeasy_support: 'RideEasy मदत',
+  rideeasy_support_sub: 'RideEasy आपत्कालीन मदतीसाठी',
+  phone_not_available: 'फोन नंबर उपलब्ध नाही.',
 
   share_trip: 'ट्रिप शेअर करा',
   share_trip_hint: 'तुमच्या सध्याच्या ट्रिपची माहिती तुमच्या विश्वासू व्यक्तीसोबत शेअर करा.',

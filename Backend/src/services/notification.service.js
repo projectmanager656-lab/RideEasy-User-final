@@ -1,9 +1,16 @@
 /**
- * Socket emits + Mongo persistence + Push notification tokens.
+ * Notifications: Mongo persistence + Socket.IO + Push (FCM/APNs) + SMS.
+ *
+ * Delivery is per-channel tracked on the notification doc (`delivery`), never
+ * blocks or fails the calling ride/admin flow, and duplicate events are
+ * collapsed via `dedupeKey` (`${rideId}_${TYPE}`-style) so the same event can
+ * never send twice.
  */
 const Notification = require('../models/notification.model');
 const DeviceToken = require('../models/deviceToken.model');
+const userModel = require('../models/user.model');
 const logger = require('../utils/logger');
+const smsService = require('./sms.service');
 
 function getSocketModule () {
     try {
@@ -41,6 +48,109 @@ function publicNotificationPayload (notif) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Push (FCM / APNs via firebase-admin). Real sends activate when the backend
+// has `firebase-admin` installed AND one of:
+//   FIREBASE_SERVICE_ACCOUNT_JSON   (raw service-account JSON in env)
+//   GOOGLE_APPLICATION_CREDENTIALS  (path to a service-account file)
+// Without them, push is recorded as `{ sent: false, error: 'push_not_configured' }`.
+// ---------------------------------------------------------------------------
+let fcmApp = null;
+let fcmReady = false;
+
+function getFcmMessaging () {
+    if (fcmReady) return fcmApp;
+    fcmReady = true;
+    try {
+        const admin = require('firebase-admin');
+        if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+            const creds = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            fcmApp = admin.apps?.length ? admin.app() : admin.initializeApp({ credential: admin.credential.cert(creds) });
+        } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+            fcmApp = admin.apps?.length ? admin.app() : admin.initializeApp();
+        }
+    } catch (e) {
+        // firebase-admin not installed or bad credentials — stay in log-only mode.
+        if (e?.code !== 'MODULE_NOT_FOUND') {
+            logger.warn('notification.push init failed', { message: e?.message });
+        }
+        fcmApp = null;
+    }
+    return fcmApp;
+}
+
+/** Send push to all active devices of the receiver. Resolves a status object — never rejects. */
+async function sendPushNotification ({ receiverId, receiverType, title, message, meta }) {
+    if (!receiverId) return { sent: false, error: 'push_no_receiver' };
+    const query = {
+        active: true,
+        ...(receiverType === 'captain' ? { captainId: receiverId } : { userId: receiverId }),
+    };
+    let tokens = [];
+    try {
+        tokens = await DeviceToken.find(query).lean();
+    } catch (e) {
+        return { sent: false, error: `push_token_lookup_failed: ${e?.message}` };
+    }
+    if (!tokens.length) return { sent: false, error: 'push_no_devices' };
+
+    const messaging = getFcmMessaging();
+    if (!messaging) {
+        logger.info('[push notification] (no FCM configured — log only)', {
+            receiverId: String(receiverId),
+            receiverType,
+            title,
+            tokenCount: tokens.length,
+        });
+        return { sent: false, error: 'push_not_configured' };
+    }
+
+    const results = await Promise.allSettled(tokens.map(async (t) => {
+        const res = await messaging.send({
+            token: t.token,
+            notification: { title: String(title || '').slice(0, 200), body: String(message || '').slice(0, 500) },
+            ...(meta?.rideId ? { data: { rideId: String(meta.rideId), type: String(meta.notificationType || '') } } : {}),
+            android: { priority: 'high' },
+            apns: { payload: { aps: { sound: 'default' } } },
+        });
+        return res;
+    }));
+    const sentCount = results.filter((r) => r.status === 'fulfilled').length;
+    const firstError = results.find((r) => r.status === 'rejected')?.reason?.message;
+
+    // Deactivate tokens FCM reports as invalid so retries stop hitting them.
+    const invalidTokens = [];
+    results.forEach((r, i) => {
+        if (r.status === 'rejected' && /not-registered|invalid-registration|unregistered/i.test(String(r.reason?.message))) {
+            invalidTokens.push(tokens[i].token);
+        }
+    });
+    if (invalidTokens.length) {
+        void DeviceToken.updateMany({ token: { $in: invalidTokens } }, { $set: { active: false } }).catch(() => {});
+    }
+
+    if (sentCount === 0) {
+        return { sent: false, error: String(firstError || 'push_send_failed').slice(0, 200) };
+    }
+    return { sent: true, error: sentCount < tokens.length ? String(firstError || 'partial').slice(0, 200) : null };
+}
+
+/** Send SMS for a user receiver (looks up the stored phone). Never rejects. */
+async function sendSmsForNotification ({ receiverId, receiverType, message }) {
+    if (receiverType !== 'user') return { sent: false, error: 'sms_user_only' };
+    try {
+        const user = await userModel.findById(receiverId).select('phone').lean();
+        if (!user?.phone) return { sent: false, error: 'sms_no_phone' };
+        return smsService.sendSms({ phone: user.phone, message });
+    } catch (e) {
+        return { sent: false, error: `sms_lookup_failed: ${e?.message}` };
+    }
+}
+
+/**
+ * Create + persist + fan out on the requested channels.
+ * Returns the created notification (or null on persistence failure).
+ */
 async function createPersisted ({
     receiverId,
     receiverType,
@@ -48,6 +158,8 @@ async function createPersisted ({
     message,
     type = 'system',
     meta,
+    dedupeKey = null,
+    channels = { inApp: true, push: true, sms: false },
 }) {
     try {
         const notif = await Notification.create({
@@ -57,23 +169,66 @@ async function createPersisted ({
             message,
             type,
             meta,
+            dedupeKey,
             isRead: false,
         });
-        // Dispatch push notification to registered device tokens
-        void sendPushNotification({ receiverId, receiverType, title, message, meta }).catch(() => {});
-        /**
-         * Realtime in-app delivery. Emitted only to the passenger's own private
-         * `user:{id}` room, so an open app updates its notification list and unread
-         * badge without a refresh. Persistence above is the source of truth.
-         */
-        if (receiverType === 'user' && receiverId) {
+
+        // Per-channel fan-out — every failure is recorded, none propagates.
+        const delivery = {
+            inApp: { sent: false },
+            push: { sent: false, error: null },
+            sms: { sent: false, error: null },
+        };
+
+        if (channels?.inApp !== false && receiverType === 'user' && receiverId) {
             emitToUser(receiverId, NOTIFICATION_EVENT, publicNotificationPayload(notif));
+            delivery.inApp.sent = true;
         }
+
+        if (channels?.push) {
+            const push = await sendPushNotification({
+                receiverId,
+                receiverType,
+                title,
+                message,
+                meta: { ...(meta || {}), notificationType: type },
+            });
+            delivery.push.sent = Boolean(push.sent);
+            delivery.push.error = push.error || null;
+        }
+
+        if (channels?.sms) {
+            const sms = await sendSmsForNotification({ receiverId, receiverType, message });
+            delivery.sms.sent = Boolean(sms.sent);
+            delivery.sms.error = sms.error || null;
+        }
+
+        void Notification.updateOne({ _id: notif._id }, { delivery }).catch(() => {});
+        notif.delivery = delivery;
         return notif;
     } catch (e) {
+        // Duplicate-key on dedupeKey = the same event already processed — treat as success (no re-send).
+        if (e?.code === 11000 && e?.keyPattern?.dedupeKey) {
+            logger.info('notification.dedupe.hit', { dedupeKey });
+            return null;
+        }
         logger.warn('notification.persist failed', { message: e?.message });
         return null;
     }
+}
+
+/**
+ * Idempotent create: checks the dedupe key BEFORE doing any work so repeated
+ * ride-arrived / scheduled-dispatch events never send duplicate SMS or push.
+ */
+async function createIdempotent (params) {
+    if (!params?.dedupeKey) return createPersisted(params);
+    const existing = await Notification.findOne({ dedupeKey: params.dedupeKey }).lean();
+    if (existing) {
+        logger.info('notification.dedupe.existing', { dedupeKey: params.dedupeKey });
+        return null;
+    }
+    return createPersisted(params);
 }
 
 /** Ride lifecycle helper — persists + socket. */
@@ -128,30 +283,13 @@ async function removeDeviceToken(token) {
     return DeviceToken.findOneAndDelete({ token });
 }
 
-async function sendPushNotification({ receiverId, receiverType, title, message, meta }) {
-    if (!receiverId) return;
-    const query = {
-        active: true,
-        ...(receiverType === 'captain' ? { captainId: receiverId } : { userId: receiverId }),
-    };
-    const tokens = await DeviceToken.find(query).lean();
-    if (!tokens.length) return;
-    
-    // In production, FCM/APNS would be called here. We log securely without printing tokens.
-    logger.info('[push notification]', {
-        receiverId: String(receiverId),
-        receiverType,
-        title,
-        tokenCount: tokens.length,
-    });
-}
-
 module.exports = {
     emitToUser,
     emitToCaptain,
     NOTIFICATION_EVENT,
     publicNotificationPayload,
     createPersisted,
+    createIdempotent,
     notifyRidePersist,
     listForReceiver,
     markRead,

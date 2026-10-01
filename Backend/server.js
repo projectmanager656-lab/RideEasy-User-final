@@ -61,8 +61,8 @@ async function start() {
         process.exit(1);
     }
 
-    server.listen(port, () => {
-        const base = `http://localhost:${port}`;
+    server.listen(port, '0.0.0.0', () => {
+        const base = `http://0.0.0.0:${port}`;
         console.log(`REST + Socket.IO: ${base}`);
         console.log(`Server is running on port ${port}`);
         console.log(`[CORS] NODE_ENV=${process.env.NODE_ENV || 'development'}`);

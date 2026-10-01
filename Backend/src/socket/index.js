@@ -229,6 +229,12 @@ function emitToAdmin(event, data) {
   io.to("admin").emit(event, data);
 }
 
+/** Broadcast to every connected client (admin config pushes). */
+function emitToAll(event, data) {
+  if (!io) return;
+  io.emit(event, data);
+}
+
 /**
  * Emit standardized ride phase events (in addition to legacy events).
  * Enable with RIDEEASY_STANDARD_SOCKET_EVENTS=true
@@ -686,6 +692,7 @@ module.exports = {
   emitToCaptain,
   emitToOnlineDrivers,
   emitToAdmin,
+  emitToAll,
   emitStandardRidePhase,
   STANDARD_PHASE_EVENTS,
   getIo,

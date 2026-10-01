@@ -1,5 +1,6 @@
 const express = require('express');
 const pricingService = require('../services/pricing.service');
+const RideeasySupport = require('../models/rideeasySupport.model');
 const { SERVICE_AREAS } = require('../config/serviceAreas');
 const { getScheduledDispatchLeadMinutes } = require('../config/env');
 
@@ -47,6 +48,77 @@ router.get('/service-areas', async (req, res) => {
                 tier: z.tier || null,
             })),
             message: 'Service areas',
+            requestId: req.requestId,
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            ok: false,
+            error: err?.message || 'Config failed',
+            message: err?.message || 'Config failed',
+            code: 'CONFIG_ERROR',
+            requestId: req.requestId,
+        });
+    }
+});
+
+/**
+ * Public fare config for clients (no auth). Same shape the
+ * `fareConfigUpdated` socket event carries — the API is the source of
+ * truth on startup/reconnect, socket events keep it fresh in between.
+ */
+router.get('/fare', async (req, res) => {
+    try {
+        const [rates, doc] = await Promise.all([
+            pricingService.getRates(),
+            pricingService.ensureServiceDoc(),
+        ]);
+        const version = doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null;
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.status(200).json({
+            success: true,
+            ok: true,
+            fareConfig: { version, rates },
+            message: 'Fare config',
+            requestId: req.requestId,
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            ok: false,
+            error: err?.message || 'Config failed',
+            message: err?.message || 'Config failed',
+            code: 'CONFIG_ERROR',
+            requestId: req.requestId,
+        });
+    }
+});
+
+/**
+ * Public emergency-support config for clients (no auth — read-only).
+ * Serves the active RideEasy Support record from the `rideeasy_support`
+ * collection (managed in Atlas). Empty phone = not configured yet.
+ */
+router.get('/rideeasy-support', async (req, res) => {
+    try {
+        const doc = await RideeasySupport
+            .findOne({ isActive: true, type: 'EMERGENCY_SUPPORT' })
+            .sort({ priority: -1 })
+            .lean();
+        res.set('Cache-Control', 'public, max-age=300');
+        return res.status(200).json({
+            success: true,
+            ok: true,
+            rideeasySupport: doc
+                ? {
+                    name: doc.name || 'RideEasy Support',
+                    phone: String(doc.phone || '').trim(),
+                    description: doc.description || '',
+                    isActive: Boolean(doc.isActive),
+                    version: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+                }
+                : null,
+            message: 'RideEasy Support',
             requestId: req.requestId,
         });
     } catch (err) {

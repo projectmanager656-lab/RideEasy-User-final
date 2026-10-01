@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import RideMap from '../components/RideMap'
 import ScheduleModal from '../components/ScheduleModal'
@@ -8,6 +8,7 @@ import { apiClient, withAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
+import { ConfigContext } from '../context/ConfigContext'
 import { useLanguage } from '../i18n'
 import logoAuto from '../assets/logo-auto.png'
 import logoCar from '../assets/logo-car.png'
@@ -74,6 +75,7 @@ const ChooseRide = () => {
     const navigate = useNavigate()
     const location = useLocation()
     const { t } = useLanguage()
+    const { fareConfig } = useContext(ConfigContext)
     const state = location.state || {}
 
     const pickupCoords = normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
@@ -247,16 +249,14 @@ const ChooseRide = () => {
     }, [ sheetAnimating, sheetSnap ])
 
     /** Load fare from backend unless Home already passed it through. */
-    useEffect(() => {
-        if (fare && Object.keys(fare).length > 0) return
+    const fetchFare = useCallback((signal) => {
         if (!hasRoute || !pickup || !destination) {
             setFareLoading(false)
-            return
+            return Promise.resolve()
         }
-        let cancelled = false
         setFareLoading(true)
         setFareError('')
-        apiClient
+        return apiClient
             .get('/rides/get-fare', withAuth({
                 params: {
                     pickup,
@@ -268,21 +268,51 @@ const ChooseRide = () => {
                 },
             }))
             .then((res) => {
-                if (cancelled) return
+                if (signal.cancelled) return
                 setFare(stripApiEnvelope(res.data) || {})
             })
             .catch((err) => {
-                if (cancelled) return
+                if (signal.cancelled) return
                 setFareError(fareErrorMessage(err, t('fare_fetch_failed')))
             })
             .finally(() => {
-                if (!cancelled) setFareLoading(false)
+                if (!signal.cancelled) setFareLoading(false)
             })
-        return () => {
-            cancelled = true
-        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ hasRoute, pickup, destination ])
+
+    useEffect(() => {
+        if (fare && Object.keys(fare).length > 0) return
+        const signal = { cancelled: false }
+        void fetchFare(signal)
+        return () => {
+            signal.cancelled = true
+        }
+    }, [ fetchFare, fare ])
+
+    /**
+     * Admin pushed a new fare config (`fareConfigUpdated`) while this screen is
+     * open → recalculate the displayed estimate without a refresh. The first
+     * version seen is the initial load, which the mount effect above handles.
+     */
+    const fareConfigVersion = fareConfig?.version || null
+    const appliedFareVersionRef = useRef(null)
+    const initialFareVersionSeenRef = useRef(false)
+    useEffect(() => {
+        if (!fareConfigVersion) return
+        if (!initialFareVersionSeenRef.current) {
+            initialFareVersionSeenRef.current = true
+            appliedFareVersionRef.current = fareConfigVersion
+            return
+        }
+        if (appliedFareVersionRef.current === fareConfigVersion) return
+        appliedFareVersionRef.current = fareConfigVersion
+        const signal = { cancelled: false }
+        void fetchFare(signal)
+        return () => {
+            signal.cancelled = true
+        }
+    }, [ fareConfigVersion, fetchFare ])
 
     /** Fetch route distance + duration for the summary chip. */
     useEffect(() => {
