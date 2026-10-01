@@ -8,9 +8,6 @@ export default {
   theme: {
     extend: {
       colors: {
-        // RideEasy auth theme: black / white / orange-yellow.
-        // `night` stays for legacy dark-only fallback values; the real theme
-        // switching happens via the CSS variables + theme-* aliases below.
         night: {
           950: '#05070A',
           900: '#080B10',
@@ -20,9 +17,15 @@ export default {
         },
         brand: {
           DEFAULT: '#FFA800',
-          dark: '#E69500',
+          yellow: '#FFC800',
+          dark: '#050505',
           light: '#FFB000',
           soft: '#FFC033',
+          card: '#111315',
+          cardSoft: '#17191B',
+          border: '#2A2A2A',
+          pickup: '#16C784',
+          drop: '#FF4D4D',
         },
         // Theme-aware tokens — resolve from the CSS variables defined in
         // index.css and switch instantly with the data-theme attribute.

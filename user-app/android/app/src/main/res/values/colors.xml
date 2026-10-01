@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      App-level colors override the library defaults (indigo #3F51B5) that were
+      previously leaking into the status bar. Values mirror the web theme tokens
+      in src/index.css so the native window/status/navigation bars match the app.
+    -->
+    <color name="colorPrimary">#FFA800</color>
+    <color name="colorPrimaryDark">#05070A</color>
+    <color name="colorAccent">#FFA800</color>
+
+    <!-- Dark app shell background (matches the boot splash and the dark theme bg). -->
+    <color name="rideeasy_window_bg">#05070A</color>
+</resources>

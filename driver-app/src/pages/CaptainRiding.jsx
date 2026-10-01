@@ -4,6 +4,7 @@ import FinishRide from '../components/FinishRide'
 import RideMap from '../components/RideMap'
 import LiveTracking from '../components/LiveTracking'
 import { getExternalMapsDirBase } from '../config/externalEndpoints'
+import { normalizeLocationText } from '../utils/locationText'
 import { useSocket } from '../hooks/useSocket'
 import { CaptainDataContext } from '../context/CaptainContext'
 import { RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
@@ -91,8 +92,10 @@ const CaptainRiding = () => {
     const [ currentLocation, setCurrentLocation ] = useState(null)
 
     useEffect(() => {
-        if (!rideData?.pickupLocation?.trim()) return
-        const q = new URLSearchParams({ address: rideData.pickupLocation.trim() }).toString()
+        // normalizeLocationText tolerates both string and { address } locations.
+        const address = normalizeLocationText(rideData?.pickupLocation, '')
+        if (!address) return
+        const q = new URLSearchParams({ address }).toString()
         driverBackendJson(`/maps/get-coordinates?${q}`)
             .then((data) => {
                 if (data?.lat != null && data?.lng != null) setPickupCoords({ lat: data.lat, lng: data.lng })
@@ -101,8 +104,9 @@ const CaptainRiding = () => {
     }, [ rideData?.pickupLocation ])
 
     useEffect(() => {
-        if (!rideData?.dropLocation?.trim()) return
-        const q = new URLSearchParams({ address: rideData.dropLocation.trim() }).toString()
+        const address = normalizeLocationText(rideData?.dropLocation, '')
+        if (!address) return
+        const q = new URLSearchParams({ address }).toString()
         driverBackendJson(`/maps/get-coordinates?${q}`)
             .then((data) => {
                 if (data?.lat != null && data?.lng != null) setDropCoords({ lat: data.lat, lng: data.lng })
@@ -150,8 +154,10 @@ const CaptainRiding = () => {
     // Replaced GSAP with Tailwind transitions for better reliability.
 
     const openInGoogleMaps = () => {
-        const dest = dropCoords || (rideData?.dropLocation ? encodeURIComponent(rideData.dropLocation) : null)
-        const origin = currentLocation ? `${currentLocation.lat},${currentLocation.lng}` : (rideData?.pickupLocation ? encodeURIComponent(rideData.pickupLocation) : '')
+        const dropText = normalizeLocationText(rideData?.dropLocation, '')
+        const pickupText = normalizeLocationText(rideData?.pickupLocation, '')
+        const dest = dropCoords || (dropText ? encodeURIComponent(dropText) : null)
+        const origin = currentLocation ? `${currentLocation.lat},${currentLocation.lng}` : (pickupText ? encodeURIComponent(pickupText) : '')
         if (!dest) return
         const destStr = typeof dest === 'string' ? dest : `${dest.lat},${dest.lng}`
         const waypoints = pickupCoords && currentLocation ? `&waypoints=${pickupCoords.lat},${pickupCoords.lng}` : ''

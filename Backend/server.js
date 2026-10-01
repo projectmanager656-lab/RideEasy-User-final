@@ -2,6 +2,9 @@ require('dotenv').config();
 const http = require('http');
 const app = require('./src/app');
 const { ensureDbConnected, disconnectDb } = require('./src/config/db');
+const { releaseStaleCouponReservations } = require('./src/services/coupon.service');
+const { startScheduledRideScheduler, stopScheduledRideScheduler } = require('./src/services/scheduledRide.service');
+const { startRideExpiryScheduler, stopRideExpiryScheduler } = require('./src/services/rideExpiry.service');
 const { initializeSocket } = require('./src/socket');
 const { getAllowedOriginsList } = require('./src/config/cors.config');
 
@@ -17,6 +20,8 @@ initializeSocket(server, app);
 
 function gracefulShutdown(signal) {
     console.log(`[shutdown] ${signal}`);
+    stopScheduledRideScheduler();
+    stopRideExpiryScheduler();
     server.close(async () => {
         try {
             await disconnectDb();
@@ -34,6 +39,20 @@ function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
+/**
+ * Last-resort process guards. This app runs on Express 4, which does not forward
+ * rejected promises from async route handlers to the error middleware — so a
+ * single un-awaited rejection would otherwise terminate the process (Node 15+
+ * default). Log and keep serving instead of taking the whole backend down for
+ * one bad request.
+ */
+process.on('unhandledRejection', (reason) => {
+    console.error('[process] unhandledRejection:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
+process.on('uncaughtException', (err) => {
+    console.error('[process] uncaughtException:', err?.stack || err?.message || err);
+});
+
 async function start() {
     try {
         await ensureDbConnected();
@@ -42,8 +61,8 @@ async function start() {
         process.exit(1);
     }
 
-    server.listen(port, () => {
-        const base = `http://localhost:${port}`;
+    server.listen(port, '0.0.0.0', () => {
+        const base = `http://0.0.0.0:${port}`;
         console.log(`REST + Socket.IO: ${base}`);
         console.log(`Server is running on port ${port}`);
         console.log(`[CORS] NODE_ENV=${process.env.NODE_ENV || 'development'}`);
@@ -51,6 +70,36 @@ async function start() {
             console.log('[CORS] Socket.IO + REST allow origins:', getAllowedOriginsList());
         }
     });
+
+    /**
+     * One-shot, non-fatal, idempotent data repair: free coupons held by rides stuck in
+     * `searching` past PENDING_RIDE_MAX_AGE_MIN. There is no scheduler in this codebase,
+     * so this runs once per boot; if a recurring sweep is ever wanted, call the same
+     * exported function from a cron/maintenance job (it is safe to run repeatedly).
+     */
+    void releaseStaleCouponReservations()
+        .then(({ staleRides, released }) => {
+            if (released > 0) {
+                console.log(`[coupon] released ${released} stale reservation(s) from ${staleRides} stale searching ride(s)`);
+            }
+        })
+        .catch((err) => {
+            console.warn('[coupon] stale reservation sweep skipped:', err?.message || err);
+        });
+
+    /**
+     * Scheduled-ride dispatcher: flips `scheduled` rides to `searching` once their
+     * `dispatchAt` passes and reuses the normal driver matching. DB-driven, so it
+     * recovers rides whose dispatch time elapsed while the process was down.
+     */
+    startScheduledRideScheduler();
+
+    /**
+     * Search auto-expiry: a ride left `searching` past the search window is expired
+     * (`cancelledBy: 'system'`) so it is NOT listed in Ride History, unlike a manual
+     * passenger cancel (`cancelledBy: 'user'`). Atomic + idempotent, DB-driven.
+     */
+    startRideExpiryScheduler();
 }
 
 start();

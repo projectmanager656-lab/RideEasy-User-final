@@ -1,5 +1,6 @@
 import React from 'react'
 import RideStatusStepper from './RideStatusStepper'
+import { normalizeLocationText } from '../utils/locationText'
 
 /**
  * Passenger ride confirmation: driver + vehicle + fare + OTP + ETA (from `confirmation` API/socket DTO).
@@ -101,14 +102,14 @@ export default function RideConfirmationPanel ({
           <i className="ri-map-pin-user-fill text-xl text-emerald-600" />
           <div>
             <h3 className="text-base font-medium">Pickup</h3>
-            <p className="text-sm text-slate-600">{ride?.pickupLocation || ride?.pickup}</p>
+            <p className="text-sm text-slate-600">{normalizeLocationText(ride?.pickupLocation || ride?.pickup)}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 p-3 border-b border-slate-200">
           <i className="ri-map-pin-2-fill text-xl text-rose-600" />
           <div>
             <h3 className="text-base font-medium">Drop</h3>
-            <p className="text-sm text-slate-600">{ride?.dropLocation || ride?.destination}</p>
+            <p className="text-sm text-slate-600">{normalizeLocationText(ride?.dropLocation || ride?.destination)}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 p-3">

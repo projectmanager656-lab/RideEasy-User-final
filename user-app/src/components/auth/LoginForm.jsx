@@ -8,6 +8,7 @@ import AuthButton from './AuthButton'
 import PasswordInput from './PasswordInput'
 import PhoneInput from './PhoneInput'
 import OtpInputs from './OtpInputs'
+import OtpVerification from './OtpVerification'
 import SocialLoginButtons from './SocialLoginButtons'
 import { useCountdown } from './useCountdown'
 
@@ -42,9 +43,24 @@ const LoginForm = ({
   // Forgot-password: new password chosen after the OTP is verified.
   const [ newPassword, setNewPassword ] = useState('')
   const [ confirmPassword, setConfirmPassword ] = useState('')
+  const [ phoneLoginOpen, setPhoneLoginOpen ] = useState(false)
+  const [ phoneLoginOtpOpen, setPhoneLoginOtpOpen ] = useState(false)
+  const [ phoneLogin, setPhoneLogin ] = useState('')
+  const [ phoneLoginError, setPhoneLoginError ] = useState('')
   const { secondsLeft, reset } = useCountdown(300)
 
   const canResend = secondsLeft === 0
+
+  const startPhoneLogin = () => {
+    const normalized = String(phoneLogin || '').replace(/\D/g, '').replace(/^91/, '')
+    if (!/^[6-9]\d{9}$/.test(normalized)) {
+      setPhoneLoginError(t('valid_phone_error'))
+      return
+    }
+    setPhoneLogin(normalized)
+    setPhoneLoginError('')
+    setPhoneLoginOtpOpen(true)
+  }
 
   const sendOtp = async () => {
     if (!/^[6-9]\d{9}$/.test(forgotPhone)) {
@@ -198,6 +214,34 @@ const LoginForm = ({
     )
   }
 
+  if (phoneLoginOtpOpen) {
+    return (
+      <OtpVerification
+        loginIdentifier={phoneLogin}
+        phoneLogin
+        autoSend
+        onBack={() => setPhoneLoginOtpOpen(false)}
+        onVerified={onForgotVerified}
+      />
+    )
+  }
+
+  if (phoneLoginOpen) {
+    return (
+      <div className="mx-auto w-full max-w-md px-6 pb-10">
+        <div className="rounded-2xl border border-theme bg-theme-card p-6 shadow-xl">
+          <button type="button" onClick={() => setPhoneLoginOpen(false)} className="mb-4 flex items-center gap-2 text-sm font-medium text-theme-secondary">
+            <i className="ri-arrow-left-line" aria-hidden /> {t('back_to_login')}
+          </button>
+          <h2 className="text-xl font-semibold">{t('phone')} {t('login')}</h2>
+          {phoneLoginError ? <div role="alert" className={errorBoxClass}>{phoneLoginError}</div> : null}
+          <PhoneInput value={phoneLogin} onChange={setPhoneLogin} label={t('phone')} placeholder={t('enter_phone')} name="phone-login" />
+          <AuthButton onClick={startPhoneLogin}>{t('send_otp')}</AuthButton>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto w-full max-w-md px-6 pb-10">
       <h1 className="text-2xl font-bold">{t('welcome_back')}</h1>
@@ -207,7 +251,7 @@ const LoginForm = ({
         <form onSubmit={onSubmit} noValidate>
           {error ? <div role="alert" className={errorBoxClass}>{error}</div> : null}
           <div className="mb-4">
-            <label htmlFor="auth-identifier" className={labelClass}>{t('email')}</label>
+            <label htmlFor="auth-identifier" className={labelClass}>{t('email')} <span className="text-red-500" aria-hidden>*</span></label>
             <input
               id="auth-identifier"
               name="identifier"
@@ -271,7 +315,7 @@ const LoginForm = ({
           )}
         </form>
 
-        <SocialLoginButtons onAuthenticated={onForgotVerified} />
+        <SocialLoginButtons onAuthenticated={onForgotVerified} onPhoneLogin={() => setPhoneLoginOpen(true)} />
       </div>
 
       <p className="mt-6 text-center text-sm text-theme-secondary">

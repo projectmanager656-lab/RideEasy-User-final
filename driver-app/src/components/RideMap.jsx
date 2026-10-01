@@ -41,7 +41,7 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
     const map = useMap()
     useEffect(() => {
         if (driverCoords?.lat != null && driverCoords?.lng != null) {
-            map.setView([driverCoords.lat, driverCoords.lng], Math.max(map.getZoom(), 14), { animate: true })
+            map.setView([driverCoords.lat, driverCoords.lng], Math.max(map.getZoom(), 14), { animate: false })
             return
         }
         const pts = []
@@ -56,10 +56,10 @@ function MapBoundsSync({ pickupCoords, dropCoords, driverCoords, passengerLiveCo
         }
         if (pts.length === 0) return
         if (pts.length === 1) {
-            map.setView(pts[0], 14, { animate: true })
+            map.setView(pts[0], 14, { animate: false })
             return
         }
-        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: true })
+        map.fitBounds(L.latLngBounds(pts), { padding: [56, 56], maxZoom: 16, animate: false })
     }, [
         map,
         pickupCoords?.lat,

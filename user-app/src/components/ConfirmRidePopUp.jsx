@@ -3,10 +3,13 @@ import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 import { getCaptainToken } from '../utils/authTokens'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
+import { useLanguage } from '../i18n'
 
 const ConfirmRidePopUp = (props) => {
+    const { t } = useLanguage()
     const [ otp, setOtp ] = useState('')
     const [arrived, setArrived] = useState(() => props.ride?.status === 'arrived')
     const [markingArrived, setMarkingArrived] = useState(false)
@@ -70,7 +73,7 @@ const ConfirmRidePopUp = (props) => {
             <h5 className='p-1 text-center w-[93%] absolute top-0' onClick={() => {
                 props.setRidePopupPanel(false)
             }}><i className="text-3xl text-gray-200 ri-arrow-down-wide-line"></i></h5>
-            <h3 className='text-2xl font-semibold mb-5'>Confirm this ride to Start</h3>
+            <h3 className='text-2xl font-semibold mb-5'>{t('confirm_this_ride_to_start')}</h3>
             <div className='flex items-center justify-between p-3 border-2 border-yellow-400 rounded-lg mt-4'>
                 <div className='flex items-center gap-3 '>
                     <img className='h-12 rounded-full object-cover w-12' src={getPlaceholderAvatarUrl()} alt="" />
@@ -83,13 +86,13 @@ const ConfirmRidePopUp = (props) => {
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="ri-map-pin-user-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.pickupLocation || props.ride?.pickup}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.pickupLocation || props.ride?.pickup)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3 border-b-2'>
                         <i className="text-lg ri-map-pin-2-fill"></i>
                         <div>
-                            <p className='text-sm -mt-1 text-gray-600'>{props.ride?.dropLocation || props.ride?.destination}</p>
+                            <p className='text-sm -mt-1 text-gray-600'>{normalizeLocationText(props.ride?.dropLocation || props.ride?.destination)}</p>
                         </div>
                     </div>
                     <div className='flex items-center gap-5 p-3'>
@@ -109,7 +112,7 @@ const ConfirmRidePopUp = (props) => {
                             disabled={markingArrived}
                             className={`w-full text-lg flex justify-center font-semibold p-3 rounded-lg ${markingArrived ? 'bg-slate-200 text-slate-700' : 'bg-amber-500 text-white'}`}
                         >
-                            {markingArrived ? 'Marking arrived…' : 'Mark Arrived at Pickup'}
+                            {markingArrived ? t('marking_arrived') : t('mark_arrived_at_pickup')}
                         </button>
                     )}
                     <form onSubmit={submitHander}>
@@ -121,15 +124,15 @@ const ConfirmRidePopUp = (props) => {
                             maxLength={6}
                             disabled={!arrived}
                             className={`bg-[#eee] px-6 py-4 font-mono text-lg rounded-lg w-full mt-3 ${!arrived ? 'opacity-60' : ''}`}
-                            placeholder={arrived ? 'Enter OTP' : 'Arrive first to enter OTP'}
+                            placeholder={arrived ? t('enter_otp') : t('arrive_first_to_enter_otp')}
                         />
 
-                        <button disabled={!canStart} className={`w-full mt-5 text-lg flex justify-center font-semibold p-3 rounded-lg ${canStart ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Start Ride</button>
+                        <button disabled={!canStart} className={`w-full mt-5 text-lg flex justify-center font-semibold p-3 rounded-lg ${canStart ? 'bg-green-600 text-white' : 'bg-slate-200 text-slate-700'}`}>{t('start_ride')}</button>
                         <button onClick={() => {
                             props.setConfirmRidePopupPanel(false)
                             props.setRidePopupPanel(false)
 
-                        }} className='w-full mt-2 bg-red-600 text-lg text-white font-semibold p-3 rounded-lg'>Cancel</button>
+                        }} className='w-full mt-2 bg-red-600 text-lg text-white font-semibold p-3 rounded-lg'>{t('cancel')}</button>
 
                     </form>
                 </div>

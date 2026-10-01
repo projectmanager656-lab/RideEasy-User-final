@@ -1,0 +1,20 @@
+# Taste
+- Wants the agent to inspect/understand the existing project and how a file is currently used before changing anything, rather than editing blindly. Confidence: 0.9
+- Wants the smallest safe fix necessary, scoped strictly to the reported problem — no changes outside the task and no unrelated refactors. Confidence: 0.9
+- Wants existing working functionality (UI, navigation, auth, sockets, config, etc.) preserved unchanged; prefers integrating with the existing architecture/config over redesigning it. Confidence: 0.9
+- Do not upgrade or recreate dependencies/frameworks (e.g., Capacitor/Gradle/Java) unless the task requires it. Confidence: 0.85
+- After making changes, verify end-to-end instead of stopping after editing files — run builds, lint/checks, and service reachability probes. Confidence: 0.9
+- Fix problems at the root cause; do not mask symptoms, suppress errors, mock data, bypass auth, or add fake fallbacks just to make an error disappear. Confidence: 0.9
+- For risky/security-sensitive system changes (e.g., firewall rules), report the exact safe command/action for the user to run rather than performing destructive actions like disabling protections. Confidence: 0.85
+- When finishing a substantial task, provide a concise structured report with clearly enumerated items (root cause, files changed, exact changes, verification results, remaining steps). Confidence: 0.85
+- Develops React/Vite + Capacitor apps tested both in-browser and on a physical Android device via Android Studio, with a Node backend on a LAN. Confidence: 0.8
+- Prefers a single source of truth for configuration (e.g., one place defining the backend base URL) over scattered/duplicated hard-coded values. Confidence: 0.8
+- Never expose secrets — passwords, password hashes, credentials, or DB connection URIs — in code, logs, API responses, or reports; emit only masked/metadata forms. Confidence: 0.85
+- When a verification step would require the user's real credentials (e.g., their plaintext password), do not guess or extract them — stop that test and tell the user exactly what manual test to run. Confidence: 0.8
+- Wants a diagnosis backed by concrete evidence (inspecting the actual database records / runtime state) rather than inferring the cause from an error code alone. Confidence: 0.8
+- Treats existing user/production data as read-only during diagnosis: do not auto-reset or overwrite records (e.g., passwords), and ask before mutating real user data rather than fabricating a migration. Confidence: 0.75
+- Cleans up temporary test artifacts (test accounts, throwaway scripts, test tokens) after verification so nothing is left behind in the project. Confidence: 0.75
+- Keeps the backend/server authoritative for core business logic (e.g., scheduling/dispatch timing); does not want problems solved by moving that responsibility to the frontend. Confidence: 0.8
+- Prefers comparing real timestamps/Date instants over formatted date-time strings when dealing with time (timezone-safe handling). Confidence: 0.7
+- Does not want verification overclaimed: clearly distinguish behavior that was actually runtime-tested from what was only inspected at the code level. Confidence: 0.85
+- Assumes a reported bug may have multiple causes; wants all actual sources traced and fixed globally, not just the surface symptom. Confidence: 0.75

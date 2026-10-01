@@ -22,11 +22,14 @@ router.post('/phone/verify-otp',
 );
 
 router.get('/profile', auth.authCaptain, captainController.getCaptainProfile);
+router.post('/wallet/add', auth.authCaptain, captainController.addWalletBalance);
 router.patch('/profile', auth.authCaptain, captainController.updateCaptainPayee);
 router.get('/rides/history', auth.authCaptain, captainController.getRideHistory);
 router.get('/earnings', auth.authCaptain, captainController.getEarnings);
 router.get('/passenger-rating-summary', auth.authCaptain, captainController.getPassengerRatingSummary);
 router.post('/status', auth.authCaptain, captainController.updateStatus);
+router.post('/device-token', auth.authCaptain, captainController.saveDeviceToken);
+router.delete('/device-token', auth.authCaptain, captainController.removeDeviceToken);
 router.get('/logout', auth.attachBearerToken, captainController.logoutCaptain);
 
 module.exports = router;

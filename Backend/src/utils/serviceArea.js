@@ -106,6 +106,53 @@ function inferServiceCityKeyOrNearest (lat, lng) {
 }
 
 /**
+ * Every city name that gates driver↔ride matching, derived from the zone config so
+ * the canonical spelling has exactly one source of truth.
+ */
+const SERVICE_CITY_NAMES = [ ...new Set(SERVICE_AREAS.map((z) => z.key)) ]
+
+/**
+ * Canonical comparison key for a city string: trimmed + lower-cased, so
+ * "Ichalkaranji", "ichalkaranji" and " Ichalkaranji " all collapse to "ichalkaranji".
+ * Different cities (Kolhapur, Sangli) keep different keys — cities are never conflated.
+ * Returns null for a missing/blank value.
+ */
+function cityKey (value) {
+  if (value == null) return null
+  const key = String(value).trim().toLowerCase()
+  return key || null
+}
+
+/**
+ * Canonical spelling of a service city (e.g. "ichalkaranji" -> "Ichalkaranji"), or null
+ * when the value is not a serviced city. Used on the write paths so the value stored on
+ * the driver is always the same one ride dispatch compares against.
+ */
+function canonicalServiceCity (value) {
+  const key = cityKey(value)
+  if (!key) return null
+  return SERVICE_CITY_NAMES.find((name) => cityKey(name) === key) || null
+}
+
+/**
+ * Mongo clause matching a captain whose `servingCity` is the same city as `rideCity`,
+ * ignoring surrounding whitespace and letter case. Returns null when `rideCity` is blank
+ * so callers skip city matching rather than matching every driver.
+ */
+function captainServingCityMatch (rideCity) {
+  const key = cityKey(rideCity)
+  if (!key) return null
+  return {
+    $expr: {
+      $eq: [
+        { $toLower: { $trim: { input: { $ifNull: [ '$servingCity', '' ] } } } },
+        key,
+      ],
+    },
+  }
+}
+
+/**
  * Pickup coordinates on a ride doc: GeoJSON [lng, lat].
  */
 function ridePickupInServiceArea (ride) {
@@ -117,12 +164,16 @@ function ridePickupInServiceArea (ride) {
 
 module.exports = {
   SERVICE_AREAS,
+  SERVICE_CITY_NAMES,
   haversineKm,
   zoneDistanceBreakdown,
   logServiceAreaDistances,
   isWithinServiceArea,
   inferServiceCityKey,
   inferServiceCityKeyOrNearest,
+  cityKey,
+  canonicalServiceCity,
+  captainServingCityMatch,
   ridePickupInServiceArea,
   SERVICE_AREA_ERROR,
 }

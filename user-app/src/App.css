@@ -33,6 +33,19 @@
   }
 }
 
+/* Vehicle markers — the assigned driver's, plus the smaller simulated
+   neighbours shown while searching. Leaflet owns the marker root's transform
+   (that is what positions it), so this only opts the artwork out of hit-testing. */
+.rideeasy-vehicle-marker,
+.nearby-vehicle-marker {
+  pointer-events: none;
+}
+
+.rideeasy-vehicle-marker img,
+.nearby-vehicle-marker img {
+  display: block;
+}
+
 .card {
   padding: 2em;
 }

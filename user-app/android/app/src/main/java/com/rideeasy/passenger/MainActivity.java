@@ -11,6 +11,10 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         SplashScreen.installSplashScreen(this);
+
+        registerPlugin(UpiPaymentPlugin.class);
+        registerPlugin(FirebaseStatusPlugin.class);
+
         super.onCreate(savedInstanceState);
     }
 }

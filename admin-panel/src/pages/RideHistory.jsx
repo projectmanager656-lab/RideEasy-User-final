@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { normalizeLocationText } from '../utils/locationText'
 
 function statusStyle (status) {
   const s = String(status || '').toLowerCase()
@@ -108,11 +109,11 @@ const RideHistory = () => {
               <div className="mt-2 space-y-1 text-sm break-words">
                 <p className="text-slate-300">
                   <span className="text-slate-500">Pickup · </span>
-                  {r.pickupLocation || '—'}
+                  {normalizeLocationText(r.pickupLocation)}
                 </p>
                 <p className="text-slate-300">
                   <span className="text-slate-500">Drop · </span>
-                  {r.dropLocation || '—'}
+                  {normalizeLocationText(r.dropLocation)}
                 </p>
               </div>
               <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">

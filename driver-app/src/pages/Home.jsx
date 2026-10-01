@@ -389,6 +389,8 @@ const Home = () => {
         return () => clearInterval(id)
     }, [ride?._id, ride?.status, syncRideFromServer]);
 
+    /** Poll searching ride; deps are primitives only — depending on the `ride`
+        object re-ran this effect on every setRide and hammered the API. */
     useEffect(() => {
         if (!ride?._id) return
         if (ride?.status && ride.status !== 'searching') return
@@ -436,7 +438,7 @@ const Home = () => {
             cancelled = true
             clearInterval(id)
         }
-    }, [ride, hasShownAcceptAlert, syncRideFromServer]);
+    }, [ride?._id, ride?.status, hasShownAcceptAlert, syncRideFromServer]);
 
 
     const handlePickupChange = async (e) => {
