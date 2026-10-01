@@ -144,4 +144,37 @@ describe('notification service', () => {
         expect(Notification.create).toHaveBeenCalledTimes(1);
         expect(out).not.toBeNull();
     });
+
+    test('createPersisted drops a malformed meta.rideId instead of persisting a dangling reference', async () => {
+        Notification.create.mockResolvedValue(notifDoc());
+
+        await notificationService.createPersisted({
+            ...params(),
+            meta: { rideId: 'not-an-object-id', rideStatus: 'arrived' },
+            channels: { inApp: true },
+        });
+
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.not.objectContaining({ rideId: expect.anything() }) }),
+        );
+        /** The rest of the metadata survives. */
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.objectContaining({ rideStatus: 'arrived' }) }),
+        );
+    });
+
+    test('createPersisted keeps a valid authoritative Ride _id', async () => {
+        Notification.create.mockResolvedValue(notifDoc());
+        const rideId = '64d1d2d0b9f7a1234567890a';
+
+        await notificationService.createPersisted({
+            ...params(),
+            meta: { rideId },
+            channels: { inApp: true },
+        });
+
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.objectContaining({ rideId }) }),
+        );
+    });
 });

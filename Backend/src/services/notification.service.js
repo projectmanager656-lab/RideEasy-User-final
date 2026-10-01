@@ -162,13 +162,30 @@ async function createPersisted ({
     channels = { inApp: true, push: true, sms: false },
 }) {
     try {
+        /**
+         * A ride reference must always be the authoritative Ride `_id`. A malformed
+         * value is dropped instead of persisted — a stored dangling id is exactly what
+         * makes a notification click resolve to `GET /rides/:id → 404` later.
+         */
+        let safeMeta = meta;
+        if (meta && typeof meta === 'object' && meta.rideId != null) {
+            const rideRef = String(meta.rideId);
+            if (/^[a-f0-9]{24}$/i.test(rideRef)) {
+                safeMeta = { ...meta, rideId: rideRef };
+            } else {
+                logger.warn('notification.invalidRideId', { type, rideId: rideRef });
+                safeMeta = { ...meta };
+                delete safeMeta.rideId;
+            }
+        }
+
         const notif = await Notification.create({
             receiverId,
             receiverType,
             title,
             message,
             type,
-            meta,
+            meta: safeMeta,
             dedupeKey,
             isRead: false,
         });
@@ -191,7 +208,7 @@ async function createPersisted ({
                 receiverType,
                 title,
                 message,
-                meta: { ...(meta || {}), notificationType: type },
+                meta: { ...(safeMeta || {}), notificationType: type },
             });
             delivery.push.sent = Boolean(push.sent);
             delivery.push.error = push.error || null;

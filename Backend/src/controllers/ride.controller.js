@@ -35,6 +35,7 @@ const {
   emitStandardRidePhase,
   driverRoomHyphen,
   driverRoomSocketIds,
+  onlineDriversSocketCount,
 } = require("../socket");
 const {
   RIDE_REQUEST,
@@ -49,6 +50,12 @@ const {
 
 /** Driver search radius in metres. Override with RIDE_SEARCH_RADIUS_M when testing locally. */
 const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
+
+/**
+ * Verbose per-driver dispatch diagnostics (captain ids, room contents). Development
+ * only — production keeps the concise matched/delivered summary without ids.
+ */
+const DISPATCH_DEBUG = process.env.NODE_ENV !== "production";
 
 /**
  * Turns the client's `scheduledAt` into the ONE authoritative pair of instants.
@@ -599,28 +606,30 @@ async function broadcastRideNew(rideDoc, driverIds) {
     const roomName = driverRoomHyphen(captainId);
     /** Presence from the matched Captain document — diagnostic only, never the target. */
     const presence = await driverPresenceFor(id);
-    console.log("[DISPATCH DEBUG] MATCHED DRIVER", {
-      rideId: rid,
-      captainId,
-      driverSocketIdFromDB: presence.socketId,
-      driverStatus: presence.status,
-      driverIsOnline: presence.isOnline,
-    });
     const roomSocketIds = driverRoomSocketIds(id);
-    /**
-     * THE decisive check: matched=1 with socketCount=0 means the matched driver has no
-     * live socket in its room (registration/reconnect issue OR the driver is genuinely
-     * offline). matched=1 with socketCount>0 means delivery should succeed.
-     */
-    console.log("[DISPATCH DEBUG] LIVE DRIVER ROOM", {
-      captainId,
-      roomName,
-      socketCount: roomSocketIds.length,
-      socketIds: roomSocketIds,
-    });
+    if (DISPATCH_DEBUG) {
+      console.log("[DISPATCH DEBUG] MATCHED DRIVER", {
+        rideId: rid,
+        captainId,
+        driverSocketIdFromDB: presence.socketId,
+        driverStatus: presence.status,
+        driverIsOnline: presence.isOnline,
+      });
+      /**
+       * THE decisive check: matched=1 with socketCount=0 means the matched driver has no
+       * live socket in its room (registration/reconnect issue OR the driver is genuinely
+       * offline). matched=1 with socketCount>0 means delivery should succeed.
+       */
+      console.log("[DISPATCH DEBUG] LIVE DRIVER ROOM", {
+        captainId,
+        roomName,
+        socketCount: roomSocketIds.length,
+        socketIds: roomSocketIds,
+      });
+    }
     /* `emitToCaptain` targets the live room and returns the live socket count. */
     const socketCount = emitToCaptain(id, RIDE_REQUEST, payload);
-    console.log("[ride dispatch] room check", { rideId: rid, roomName, socketCount });
+    if (DISPATCH_DEBUG) console.log("[ride dispatch] room check", { rideId: rid, roomName, socketCount });
     /**
      * Durable per-(ride, captain) record of what the attempt actually did. Live room
      * membership is the only honest "delivered" signal — recorded here so a matched
@@ -642,13 +651,14 @@ async function broadcastRideNew(rideDoc, driverIds) {
     });
   }
   console.log(
-    "[ride dispatch] ride=%s city=%s matched=%d delivered=%d offline=%d targetDrivers=%s",
+    "[ride dispatch] ride=%s city=%s matched=%d delivered=%d offline=%d onlineSockets=%d%s",
     rid,
     rideDoc?.city || ride?.city || "",
     driverIds.length,
     delivered,
     driverIds.length - delivered,
-    driverIds.join(","),
+    onlineDriversSocketCount(),
+    DISPATCH_DEBUG ? ` targetDrivers=${driverIds.join(",")}` : "",
   );
   return { matched: driverIds.length, delivered };
 }
@@ -1628,10 +1638,6 @@ module.exports.getPassengerOtp = async (req, res) => {
       try {
         otp = decryptOtp(ride.otpCipher);
       } catch (e) {
-        // Cipher encrypted under an older key (e.g. JWT_SECRET rotated between
-        // markArrived and now) or a corrupted record — the stored OTP is
-        // unusable for BOTH sides. Regenerate below instead of 500 so the
-        // ride is not stuck for the rest of the window.
         console.warn(
           "[getPassengerOtp] stored cipher undecryptable (rotated key or another instance wrote it) ride=%s — reissuing: %s",
           String(rideId),
@@ -1640,7 +1646,6 @@ module.exports.getPassengerOtp = async (req, res) => {
       }
     }
 
-    let regenerated = false;
     if (!otp) {
       const plain = randomSixDigit();
       const otpHash = await hashOtp(plain);
@@ -1660,27 +1665,10 @@ module.exports.getPassengerOtp = async (req, res) => {
       otp = plain;
       ride.otpCipher = otpCipher;
       ride.otpExpiresAt = otpExpiresAt;
-      ride.otpHash = otpHash;
-      regenerated = true;
     }
 
     const etaMeta = await computeEtaCaptainToPickup(ride);
     const confirmation = buildPassengerConfirmation(ride, otp, etaMeta);
-
-    if (regenerated) {
-      // Sync BOTH parties so the driver's displayed OTP matches the new one —
-      // same shape as the markArrived broadcast (confirmation carries the OTP).
-      const payload = {
-        rideId: ride._id,
-        status: ride.status,
-        ride: publicRide(ride),
-        confirmation,
-        driverLocation: confirmation.liveLocation || undefined,
-      };
-      emitToUser(userIdOf(ride.user), "ride:status-update", payload);
-      emitToCaptain(captainIdOf(ride.captain), "ride:status-update", payload);
-    }
-
     return res.json({
       ok: true,
       otp,

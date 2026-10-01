@@ -81,3 +81,23 @@ export function isRideGenuinelyActive (ride, now = Date.now()) {
   if (isRideSearchExpired(ride, now)) return false
   return isRideStatusActive(ride.status)
 }
+
+/**
+ * THE canonical ride status → screen mapping, shared by the Home active-ride banner,
+ * notification clicks and the cold-boot ride recovery. `null` means there is no screen
+ * to open (nothing live).
+ *
+ * `searching`, `accepted` and `arrived` are all owned by the live ride screen
+ * (/searching-for-driver): it renders the driver search, the assigned driver's details
+ * and the arrival/OTP state of the ride a passenger is actually on. The standalone
+ * `/driver-details` and `/user-otp` pages are superseded — nothing in the live ride
+ * flow navigates to them, so they must never be a routing target from here.
+ */
+export function rideRouteForStatus (status) {
+  const st = normalizeRideStatus(status)
+  if (st === 'searching' || st === 'accepted' || st === 'arrived') return '/searching-for-driver'
+  if (st === 'started' || st === 'completed') return '/riding'
+  /* Reserved or finished: the upcoming/history list owns it. */
+  if (st === 'scheduled' || st === 'cancelled') return '/history'
+  return null
+}
