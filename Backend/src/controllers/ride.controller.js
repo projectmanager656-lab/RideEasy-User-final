@@ -1608,22 +1608,24 @@ module.exports.getPassengerOtp = async (req, res) => {
       ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
 
     let otp = null;
-    if (hasValidOtpWindow) {
-      if (!ride.otpCipher) {
-        return res.status(400).json({ message: "OTP not ready yet" });
-      }
+    if (hasValidOtpWindow && ride.otpCipher) {
       try {
         otp = decryptOtp(ride.otpCipher);
       } catch (e) {
+        // Cipher encrypted under an older key (e.g. JWT_SECRET rotated between
+        // markArrived and now) or a corrupted record — the stored OTP is
+        // unusable for BOTH sides. Regenerate below instead of 500 so the
+        // ride is not stuck for the rest of the window.
         console.error(
-          "[getPassengerOtp] decrypt failed",
+          "[getPassengerOtp] decrypt failed — regenerating OTP",
           String(rideId),
           e?.message || e,
         );
-        return res.status(500).json({ message: "OTP unavailable" });
       }
-      if (!otp) return res.status(500).json({ message: "OTP unavailable" });
-    } else {
+    }
+
+    let regenerated = false;
+    if (!otp) {
       const plain = randomSixDigit();
       const otpHash = await hashOtp(plain);
       const otpCipher = encryptOtp(plain);
@@ -1642,10 +1644,27 @@ module.exports.getPassengerOtp = async (req, res) => {
       otp = plain;
       ride.otpCipher = otpCipher;
       ride.otpExpiresAt = otpExpiresAt;
+      ride.otpHash = otpHash;
+      regenerated = true;
     }
 
     const etaMeta = await computeEtaCaptainToPickup(ride);
     const confirmation = buildPassengerConfirmation(ride, otp, etaMeta);
+
+    if (regenerated) {
+      // Sync BOTH parties so the driver's displayed OTP matches the new one —
+      // same shape as the markArrived broadcast (confirmation carries the OTP).
+      const payload = {
+        rideId: ride._id,
+        status: ride.status,
+        ride: publicRide(ride),
+        confirmation,
+        driverLocation: confirmation.liveLocation || undefined,
+      };
+      emitToUser(userIdOf(ride.user), "ride:status-update", payload);
+      emitToCaptain(captainIdOf(ride.captain), "ride:status-update", payload);
+    }
+
     return res.json({
       ok: true,
       otp,
