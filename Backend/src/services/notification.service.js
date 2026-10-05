@@ -267,6 +267,10 @@ async function listForReceiver (receiverId, receiverType, { limit = 40 } = {}) {
         .lean();
 }
 
+async function clearAllForReceiver (receiverId, receiverType) {
+    return Notification.deleteMany({ receiverId, receiverType });
+}
+
 async function markRead (id, receiverId) {
     return Notification.findOneAndUpdate(
         { _id: id, receiverId },
@@ -309,6 +313,7 @@ module.exports = {
     createIdempotent,
     notifyRidePersist,
     listForReceiver,
+    clearAllForReceiver,
     markRead,
     registerDeviceToken,
     removeDeviceToken,

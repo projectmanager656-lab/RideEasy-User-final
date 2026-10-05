@@ -117,6 +117,7 @@ const Home = () => {
     /** In-app notifications for this passenger (Home bell + sheet). */
     const [ notifications, setNotifications ] = useState([])
     const [ notificationsLoading, setNotificationsLoading ] = useState(false)
+    const [ notificationsClearing, setNotificationsClearing ] = useState(false)
     /** Transient popup shown when a notification arrives while the app is open. */
     const [ notificationToast, setNotificationToast ] = useState(null)
     const notificationToastTimerRef = useRef(null)
@@ -627,6 +628,23 @@ const Home = () => {
             await apiClient.post(`/users/notifications/${id}/read`, {}, withAuth())
         } catch { /* next load reconciles */ }
     }, [])
+
+    /** Clear all notifications for the current user (server-authoritative). */
+    const clearNotifications = useCallback(async () => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        setNotificationsClearing(true)
+        try {
+            await apiClient.delete('/users/notifications', withAuth())
+            setNotifications([])
+        } catch (err) {
+            setBookingError(t('could_not_clear_notifications') || 'Could not clear notifications. Please try again.')
+            if (notifNoticeTimerRef.current) clearTimeout(notifNoticeTimerRef.current)
+            notifNoticeTimerRef.current = setTimeout(() => setBookingError(''), 5000)
+        } finally {
+            setNotificationsClearing(false)
+        }
+    }, [t])
 
     /**
      * Notification click → recover the CURRENT ride from the backend and route by
@@ -1690,6 +1708,8 @@ const Home = () => {
                 notifications={notifications}
                 loading={notificationsLoading}
                 onSelect={openNotification}
+                onClear={clearNotifications}
+                clearing={notificationsClearing}
             />
 
             {notificationToast ? (

@@ -849,6 +849,18 @@ module.exports.markNotificationRead = async (req, res) => {
     }
 };
 
+/** Clear all notifications for the authenticated user. */
+module.exports.clearNotifications = async (req, res) => {
+    try {
+        const result = await notificationService.clearAllForReceiver(req.user._id, 'user');
+        return ok(res, req, 200, 'Notifications cleared', {
+            deletedCount: result?.deletedCount ?? 0,
+        });
+    } catch (err) {
+        return fail(res, req, 500, err.message || 'Could not clear notifications');
+    }
+};
+
 /** SOS Emergency */
 module.exports.triggerSos = async (req, res) => {
     try {
