@@ -38,7 +38,8 @@ const ConfirmRide = (props) => {
     const vehicleTypeNorm = tier
         ? tier.vehicleType
         : (u === 'MINI' || u === 'SEDAN' ? 'CAR' : ([ 'BIKE', 'AUTO', 'CAR' ].includes(u) ? u : 'AUTO'))
-    const priceRaw = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? fare.price)
+    // Priority: backend fare prop > tier reference (which has no hardcoded fare anymore)
+    const priceRaw = fare[vehicleTypeNorm] ?? fare[vehicleType] ?? fare.price
     const price = Number.isFinite(Number(priceRaw)) && Number(priceRaw) > 0 ? Number(priceRaw) : null
 
     const isUpiLike = paymentMethod === 'UPI' || paymentMethod === 'Online'

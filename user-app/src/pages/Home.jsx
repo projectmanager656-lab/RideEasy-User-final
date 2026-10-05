@@ -426,6 +426,10 @@ const Home = () => {
                 }
                 if (data.confirmation) {
                     setRideConfirmation((prev) => ({ ...(prev || {}), ...data.confirmation }))
+                    const otpVal = data.confirmation?.otp ?? data.otp
+                    if (otpVal != null && String(otpVal).trim() !== '') {
+                        setPassengerOtp(String(otpVal).trim())
+                    }
                 }
                 setRide((prev) => {
                     const base = { ...(prev || {}) }
@@ -1283,7 +1287,7 @@ const Home = () => {
         const { paymentMethod = 'Cash' } = opts
         const tier = findRideTier(vehicleType)
         const vehicleTypeNorm = tier ? tier.vehicleType : 'AUTO'
-        const price = tier ? tier.fare : (fare[vehicleTypeNorm] ?? fare[vehicleType] ?? null)
+        const price = fare[vehicleTypeNorm] ?? null
         if (price == null) {
             alert(t('select_pickup_drop_vehicle'))
             return

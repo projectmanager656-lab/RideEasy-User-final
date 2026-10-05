@@ -76,7 +76,7 @@ const LookingForDriver = (props) => {
                         <i className="ri-currency-line text-emerald-400"></i>
                         <div>
                             <h3 className='text-lg font-medium text-theme-primary'>
-                                ₹{props.ride?.price ?? props.fare?.[props.vehicleType] ?? tierFare(props.vehicleType) ?? props.fare?.price ?? '—'}
+                                ₹{props.ride?.price ?? props.fare?.[props.vehicleType] ?? props.fare?.price ?? '—'}
                             </h3>
                             <p className='text-sm -mt-1 text-theme-secondary'>{t('payment_at_end')}</p>
                         </div>

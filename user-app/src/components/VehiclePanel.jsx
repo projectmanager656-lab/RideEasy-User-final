@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useContext, useMemo } from 'react'
 import { RIDE_TIERS } from '../constants/rideTiers'
 import { useLanguage } from '../i18n'
+import { ConfigContext } from '../context/ConfigContext'
 
 function fmtDist(km) {
     if (!Number.isFinite(km) || km < 0) return null
@@ -25,12 +26,23 @@ const VehiclePanel = (props) => {
     }, [fare.distanceKm])
 
     const selectedTier = useMemo(() => RIDE_TIERS.find((t) => t.id === selectedVehicle) || null, [selectedVehicle])
-    const selectedPrice = selectedTier ? selectedTier.fare : null
+    // Use backend-provided fare for this vehicle type from fareConfig rates
+    const selectedPrice = fare[selectedVehicle] != null ? fare[selectedVehicle] : (rates[selectedVehicle]?.baseFare != null ? rates[selectedVehicle].baseFare : null)
 
-    const availableFares = useMemo(() => RIDE_TIERS.map((t) => t.fare).sort((a, b) => a - b), [])
+    // Build fare display from backend config; if no backend fare, show tier reference only
+    const availableFares = useMemo(() => {
+        const fares = []
+        for (const vt of ['BIKE', 'AUTO', 'CAR']) {
+            if (fare[vt] != null) fares.push(Number(fare[vt]))
+            else if (rates[vt] != null && rates[vt].baseFare != null) fares.push(Number(rates[vt].baseFare))
+        }
+        return fares.sort((a, b) => a - b)
+    }, [fare, rates])
     const fareRange = availableFares.length === 1
         ? `₹${availableFares[0]}`
-        : `₹${availableFares[0]} - ₹${availableFares[availableFares.length - 1]}`
+        : availableFares.length > 0
+        ? `₹${availableFares[0]} - ₹${availableFares[availableFares.length - 1]}`
+        : '—'
 
     return (
         <div className="relative flex h-full min-h-0 flex-1 flex-col">
@@ -87,7 +99,7 @@ const VehiclePanel = (props) => {
                                     </div>
                                 </div>
                                 <div className="mt-1.5 text-right text-sm">
-                                    <div className="font-semibold text-theme-primary">₹{tier.fare}</div>
+                                    <div className="font-semibold text-theme-primary">₹{rates[tier.id]?.baseFare != null ? rates[tier.id].baseFare : '—'}</div>
                                     <div className="text-[8px] text-theme-secondary">{tier.features?.[0]}</div>
                                     <div className="mt-0.5">
                                         {active ? t('selected') : t('min_away', { count: tier.etaMinutes })}

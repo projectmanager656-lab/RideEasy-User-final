@@ -1,5 +1,6 @@
 const express = require('express');
 const pricingService = require('../services/pricing.service');
+const FareConfiguration = require('../models/fare_configurations.model');
 const RideeasySupport = require('../models/rideeasySupport.model');
 const { SERVICE_AREAS } = require('../config/serviceAreas');
 const { getScheduledDispatchLeadMinutes } = require('../config/env');
@@ -80,6 +81,56 @@ router.get('/fare', async (req, res) => {
             ok: true,
             fareConfig: { version, rates },
             message: 'Fare config',
+            requestId: req.requestId,
+        });
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            ok: false,
+            error: err?.message || 'Config failed',
+            message: err?.message || 'Config failed',
+            code: 'CONFIG_ERROR',
+            requestId: req.requestId,
+        });
+    }
+});
+
+/**
+ * Public fare configurations for clients (no auth).
+ * Serves the fare config document from the `fare_configurations` collection.
+ * Falls back to default rates if no document exists yet.
+ */
+router.get('/fare-configurations', async (req, res) => {
+    try {
+        // Try to find the global configuration document
+        let doc = await FareConfiguration.findOne({ key: 'global' }).lean();
+
+        // If no global doc, try to find any active configuration
+        if (!doc) {
+            doc = await FareConfiguration.findOne({
+                status: 'ACTIVE',
+                effectiveFrom: { $lte: new Date() },
+                $or: [
+                    { effectiveTo: null },
+                    { effectiveTo: { $gte: new Date() } }
+                ]
+            }).lean();
+        }
+
+        const rates = doc && doc.rates
+            ? { ...doc.rates }
+            : {
+                BIKE: { baseFare: 15, perKm: 8, platformFee: 5 },
+                AUTO: { baseFare: 25, perKm: 11, platformFee: 5 },
+                CAR: { baseFare: 40, perKm: 12, platformFee: 5 },
+              };
+        const version = doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null;
+        res.set('Cache-Control', 'public, max-age=60');
+        return res.status(200).json({
+            success: true,
+            ok: true,
+            fareConfig: { version, rates },
+            message: 'Fare configurations',
             requestId: req.requestId,
         });
     } catch (err) {

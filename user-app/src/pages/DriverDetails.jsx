@@ -298,7 +298,7 @@ const DriverDetails = () => {
   const status = normalizeStatus(ride?.status)
   const isArrived = status === 'arrived'
 
-  const price = fare ?? tierFare(vehicleType)
+  const price = fare ?? null
   const totalFareNum = Number(price)
   const advanceAmount = Number(ride?.advanceAmount) > 0
     ? Number(ride.advanceAmount)

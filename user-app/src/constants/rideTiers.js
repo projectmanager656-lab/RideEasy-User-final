@@ -12,7 +12,6 @@ export const RIDE_TIERS = [
         label: 'Auto',
         desc: 'Affordable 3-wheeler option',
         icon: 'ri-taxi-fill',
-        fare: 120,
         etaMinutes: 4,
         vehicleType: 'AUTO',
         capacity: 3,
@@ -23,7 +22,6 @@ export const RIDE_TIERS = [
         label: 'RideEasy Go',
         desc: 'Affordable AC car',
         icon: 'ri-car-fill',
-        fare: 160,
         etaMinutes: 5,
         vehicleType: 'CAR',
         capacity: 4,
@@ -34,7 +32,6 @@ export const RIDE_TIERS = [
         label: 'RideEasy Premier',
         desc: 'Premium & comfortable car',
         icon: 'ri-crown-fill',
-        fare: 220,
         etaMinutes: 6,
         vehicleType: 'CAR',
         capacity: 4,
@@ -45,7 +42,6 @@ export const RIDE_TIERS = [
         label: 'RideEasy XL',
         desc: 'SUV for group travel',
         icon: 'ri-caravan-fill',
-        fare: 280,
         etaMinutes: 8,
         vehicleType: 'CAR',
         capacity: 6,
@@ -56,7 +52,6 @@ export const RIDE_TIERS = [
         label: 'Bike',
         desc: 'Fast bike ride',
         icon: 'ri-motorbike-line',
-        fare: 80,
         etaMinutes: 3,
         vehicleType: 'BIKE',
         capacity: 1,
@@ -96,7 +91,7 @@ export function tierLabel (id) {
 }
 
 export function tierFare (id) {
-    return findRideTier(id)?.fare ?? null
+    return null
 }
 
 export function tierIcon (id) {

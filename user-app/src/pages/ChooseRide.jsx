@@ -355,8 +355,16 @@ const ChooseRide = () => {
         const hasFare = fare && Object.keys(fare).length > 0
         return RIDE_OPTIONS.map((o) => {
             const t = o.tier
-            const backendPrice = hasFare ? (fare[t.vehicleType] ?? fare[String(t.vehicleType).toUpperCase()]) : undefined
-            const price = backendPrice != null && Number(backendPrice) > 0 ? backendPrice : (t.fare || null)
+            const vehicleType = t.vehicleType
+            let backendPrice
+            if (hasFare && fare[vehicleType] != null) {
+                backendPrice = fare[vehicleType]
+            } else if (fareConfig?.rates?.[vehicleType] != null) {
+                backendPrice = fareConfig.rates[vehicleType].baseFare
+            } else {
+                backendPrice = null
+            }
+            const price = backendPrice != null && Number(backendPrice) >= 0 ? backendPrice : null
             return { ...t, logo: o.logo, price }
         })
     }, [ fare ])
@@ -440,7 +448,7 @@ const ChooseRide = () => {
         }
         const tier = selected
         const vehicleType = tier.vehicleType
-        const price = Number(tier.price) > 0 ? tier.price : null
+        const price = Number(tier.price) >= 0 ? tier.price : null
         if (price == null) {
             setBookingError(t('fare_unavailable_retry'))
             return

@@ -28,9 +28,11 @@ function isNewer (incoming, current) {
 const ConfigProvider = ({ children }) => {
   const socket = useSocket()
   const [fareConfig, setFareConfig] = useState(null)
+  const [fareConfigurations, setFareConfigurations] = useState(null)
   const [support, setSupport] = useState(null)
   const [supportSettled, setSupportSettled] = useState(false)
   const fareVersionRef = useRef(null)
+  const fareConfigurationsVersionRef = useRef(null)
   const supportVersionRef = useRef(null)
 
   const loadFareConfig = () => {
@@ -41,6 +43,18 @@ const ConfigProvider = ({ children }) => {
         if (!cfg || !isNewer(cfg.version, fareVersionRef.current)) return
         fareVersionRef.current = cfg.version
         setFareConfig(cfg)
+      })
+      .catch(() => { /* keep last known config offline */ })
+  }
+
+  const loadFareConfigurations = () => {
+    apiClient
+      .get('/config/fare-configurations')
+      .then((res) => {
+        const cfg = stripApiEnvelope(res.data)?.fareConfig
+        if (!cfg || !isNewer(cfg.version, fareConfigurationsVersionRef.current)) return
+        fareConfigurationsVersionRef.current = cfg.version
+        setFareConfigurations(cfg)
       })
       .catch(() => { /* keep last known config offline */ })
   }
@@ -62,6 +76,7 @@ const ConfigProvider = ({ children }) => {
   // Initial load — API first, so the app has data even before the socket connects.
   useEffect(() => {
     void loadFareConfig()
+    void loadFareConfigurations()
     void loadSupport()
   }, [])
 
@@ -73,6 +88,13 @@ const ConfigProvider = ({ children }) => {
       if (!isNewer(version, fareVersionRef.current)) return
       fareVersionRef.current = version
       setFareConfig({ version, rates: payload?.rates || null })
+    }
+
+    const onFareConfigurations = (payload) => {
+      const version = payload?.version
+      if (!isNewer(version, fareConfigurationsVersionRef.current)) return
+      fareConfigurationsVersionRef.current = version
+      setFareConfigurations({ version, rates: payload?.rates || null })
     }
 
     const onSupport = (payload) => {
@@ -92,22 +114,25 @@ const ConfigProvider = ({ children }) => {
     // that was offline catches up instead of running on stale config.
     const onConnect = () => {
       void loadFareConfig()
+      void loadFareConfigurations()
       void loadSupport()
     }
 
     socket.on(FARE_CONFIG_UPDATED, onFareConfig)
+    socket.on(FARE_CONFIG_UPDATED, onFareConfigurations)
     socket.on(RIDEEASY_SUPPORT_UPDATED, onSupport)
     socket.on('connect', onConnect)
     return () => {
       socket.off(FARE_CONFIG_UPDATED, onFareConfig)
+      socket.off(FARE_CONFIG_UPDATED, onFareConfigurations)
       socket.off(RIDEEASY_SUPPORT_UPDATED, onSupport)
       socket.off('connect', onConnect)
     }
   }, [socket])
 
   const value = useMemo(
-    () => ({ fareConfig, support, supportSettled }),
-    [fareConfig, support, supportSettled],
+    () => ({ fareConfig, fareConfigurations, support, supportSettled }),
+    [fareConfig, fareConfigurations, support, supportSettled],
   )
 
   return (

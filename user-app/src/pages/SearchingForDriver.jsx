@@ -606,7 +606,7 @@ const SearchingForDriver = () => {
     navigate('/home', { replace: true })
   }, [navigate])
 
-  const price = fare ?? tierFare(vehicleType)
+  const price = fare ?? null
   const confirmation = rideConfirmation
   const captain = ride?.captain
   const driverName = confirmation?.driverName || captain?.name || t('your_driver')
