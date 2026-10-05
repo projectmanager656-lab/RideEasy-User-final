@@ -15,6 +15,11 @@ jest.mock("../../services/pricing.service", () => ({
 jest.mock("../../services/rideCore.service", () => ({
   releaseCaptainBusyIfAvailable: jest.fn(),
 }));
+jest.mock("../../services/coupon.service", () => ({
+  validateCoupon: jest.fn(),
+  reserveCoupon: jest.fn(),
+  releaseCoupon: jest.fn(),
+}));
 jest.mock("../../utils/serviceArea", () => ({}));
 jest.mock("../../socket", () => ({
   emitToUser: jest.fn(),
@@ -64,7 +69,7 @@ describe("ride cancellation status races", () => {
     rideService.releaseCaptainBusyIfAvailable.mockResolvedValue(undefined);
   });
 
-  test.each(["searching", "accepted", "arrived"])(
+  test.each(["scheduled", "searching", "accepted", "arrived"])(
     "passenger cancellation uses a conditional %s predicate",
     async (status) => {
       rideModel.findById.mockReturnValueOnce(rideQuery(ownedRide(status)));
@@ -77,7 +82,7 @@ describe("ride cancellation status races", () => {
       );
 
       expect(rideModel.updateOne).toHaveBeenCalledWith(
-        { _id: "ride-id", status: { $in: ["searching", "accepted", "arrived"] } },
+        { _id: "ride-id", status: { $in: ["scheduled", "searching", "accepted", "arrived"] } },
         expect.objectContaining({ $set: expect.objectContaining({ status: "cancelled" }) }),
       );
       expect(rideService.releaseCaptainBusyIfAvailable).toHaveBeenCalled();

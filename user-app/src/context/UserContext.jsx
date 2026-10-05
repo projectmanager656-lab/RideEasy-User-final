@@ -13,7 +13,7 @@ import { apiClient, withAuth } from '../services/http'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { getPassengerToken } from '../utils/authTokens'
-import { clearRideSession } from '../utils/rideSession'
+import { clearRideSession, clearUserScopedSession } from '../utils/rideSession'
 
 function notifySessionChanged () {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event('rideeasy:session-changed'))
@@ -74,7 +74,8 @@ const UserContext = ({ children }) => {
     } catch {
       /* ignore */
     }
-    clearRideSession()
+    /** Ride pointer + booking draft + safety cache of THIS account must not leak to the next one. */
+    clearUserScopedSession()
     setToken(null)
     setUser(null)
     setProfileError('')

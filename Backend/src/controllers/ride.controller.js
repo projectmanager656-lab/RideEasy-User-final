@@ -25,6 +25,8 @@ const {
   ridePickupInServiceArea,
   logServiceAreaDistances,
   captainServingCityMatch,
+  rideCityMatchesCaptain,
+  haversineKm,
   cityKey,
   SERVICE_AREA_ERROR,
 } = require("../utils/serviceArea");
@@ -56,6 +58,14 @@ const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
  * only — production keeps the concise matched/delivered summary without ids.
  */
 const DISPATCH_DEBUG = process.env.NODE_ENV !== "production";
+
+/**
+ * The ONLY statuses a cancellation may claim. The update predicate uses these so a
+ * concurrent accept / expiry / start can never be overwritten by a cancel that read
+ * the ride a moment earlier (first writer wins; the loser gets 409).
+ */
+const CANCELABLE_USER_STATUSES = ["scheduled", "searching", "accepted", "arrived"];
+const CANCELABLE_CAPTAIN_STATUSES = ["accepted", "arrived"];
 
 /**
  * Turns the client's `scheduledAt` into the ONE authoritative pair of instants.
@@ -103,12 +113,8 @@ function subscriptionNotExpiredMatch() {
   };
 }
 
-/** Ride matching uses the driver's later-onboarding vehicle type. */
-function captainVehicleTypesForRide(vehicleType) {
-  const norm = rideService.normalizeVehicleType(vehicleType);
-  if (norm === "CAR") return ["CAR", "MINI", "SEDAN"];
-  return [norm];
-}
+/** Ride matching uses the driver's later-onboarding vehicle type (canonical impl in rideCore.service). */
+const captainVehicleTypesForRide = rideService.captainVehicleTypesForRide;
 const USER_CANCEL_FEE_AFTER_ASSIGN_WINDOW_MS = 2 * 60 * 1000;
 const USER_CANCEL_FEE_AFTER_ASSIGN = 10;
 const USER_CANCEL_FEE_AFTER_ARRIVED = 25;
@@ -510,46 +516,102 @@ async function explainNoDrivers({ rideCity, vehicleType, pickupLng, pickupLat })
 }
 
 /**
- * TEMP DIAGNOSTIC (ride-dispatch): dumps the ELIGIBLE driver pool with the city
- * comparison that gated it. The pool deliberately IGNORES the city filter, so a
- * city mismatch is visible — filtering by rideCity here would show nothing exactly
- * when the city is the reason nobody matched. Read-only; never logs credentials.
- * Remove once dispatch is confirmed.
+ * Per-driver explanation for a ride nobody received. Runs when matched=0 (nobody was
+ * eligible) and when matched>0 but delivered=0 (eligible drivers had no live socket —
+ * then the live-room logs in broadcastRideNew tell which matched driver missed it).
+ *
+ * The candidate pool deliberately applies NO eligibility filters, so every rejection is
+ * visible: each driver gets a verdict (ELIGIBLE_NEARBY / ELIGIBLE_CITY / EXCLUDED) and,
+ * when excluded, the exact filter(s) that excluded it. Distances are Haversine from the
+ * ride pickup; location age comes from `lastLocationUpdatedAt`. Driver ids are masked —
+ * dev-only detail; production keeps the filter-free aggregate counts.
  */
 async function logDriverCandidates({ rideId, rideCity, vehicleType, pickupLng, pickupLat, eligibleDriverCount }) {
   try {
+    const { minimumWalletBalance } = await getCaptainPricing();
+    const minWallet = Number(minimumWalletBalance || 0);
     const rideCityKey = cityKey(rideCity);
+    const vehicleCompat = captainVehicleTypesForRide(vehicleType);
+    const hasPickup = Number.isFinite(pickupLat) && Number.isFinite(pickupLng);
+
     const candidates = await captainModel
-      .find({
-        $and: [
-          { approved: true, blocked: { $ne: true } },
-          subscriptionNotExpiredMatch(),
-          driverPresenceMatch(),
-          await captainWalletMatch(),
-        ],
-      })
+      .find({})
+      .sort({ isOnline: -1, _id: 1 })
+      .limit(100)
       .select(
-        "name vehicleType servingCity status isOnline blocked approved subscriptionStatus subscriptionExpiresAt walletBalance socketId city location",
+        "vehicleType servingCity status isOnline blocked approved subscriptionStatus subscriptionExpiresAt walletBalance socketId location lastLocationUpdatedAt busy",
       )
       .lean();
-    console.log("[ride dispatch]", {
+
+    console.log("[ride dispatch] candidate pool", {
       rideId: String(rideId),
       requestedVehicleType: vehicleType,
       pickupLat,
       pickupLng,
       city: rideCity,
       eligibleDriverCount,
-      eligibleCandidateCount: candidates.length,
+      totalCandidateCount: candidates.length,
+      note: "pool unfiltered; per-driver verdicts follow in dev only",
     });
+
+    if (!DISPATCH_DEBUG) return;
+
     for (const d of candidates) {
       const driverCityKey = cityKey(d.servingCity);
-      console.log("[ride dispatch] DRIVER CITY CHECK", {
-        driverId: String(d._id),
-        driverCity: d.servingCity,
-        driverCityKey,
-        rideCity,
-        rideCityKey,
-        sameCity: Boolean(driverCityKey && driverCityKey === rideCityKey),
+      const sameCity = Boolean(driverCityKey && rideCityKey && driverCityKey === rideCityKey);
+      const driverVehicle = String(d.vehicleType || "").trim().toUpperCase();
+      const vehicleOk = vehicleCompat.includes(driverVehicle);
+      const reasons = [];
+      if (!d.approved) reasons.push("not approved");
+      if (d.blocked) reasons.push("blocked");
+      if (d.subscriptionStatus !== "active") {
+        reasons.push(`subscription ${d.subscriptionStatus || "none"}`);
+      } else if (d.subscriptionExpiresAt && new Date(d.subscriptionExpiresAt) <= new Date()) {
+        reasons.push("subscription expired");
+      }
+      if (d.status !== "active") reasons.push(`status ${d.status || "inactive"}`);
+      if (d.isOnline === false) reasons.push("offline");
+      if (Number(d.walletBalance || 0) < minWallet) {
+        reasons.push(`wallet ₹${Number(d.walletBalance || 0)} < ₹${minWallet}`);
+      }
+      if (!sameCity) reasons.push(`city '${d.servingCity || "?"}' ≠ '${rideCity || "?"}'`);
+      if (!vehicleOk) reasons.push(`vehicle ${driverVehicle || "?"} ∉ [${vehicleCompat.join(",")}]`);
+
+      const coords = d.location?.coordinates;
+      const dLng = Array.isArray(coords) ? Number(coords[0]) : NaN;
+      const dLat = Array.isArray(coords) ? Number(coords[1]) : NaN;
+      const hasLocation =
+        Number.isFinite(dLat) &&
+        Number.isFinite(dLng) &&
+        !(Math.abs(dLat) < 0.02 && Math.abs(dLng) < 0.02);
+      const distanceM =
+        hasPickup && hasLocation
+          ? Math.round(haversineKm(pickupLat, pickupLng, dLat, dLng) * 1000)
+          : null;
+      const locationAgeMin = d.lastLocationUpdatedAt
+        ? Math.round((Date.now() - new Date(d.lastLocationUpdatedAt).getTime()) / 60000)
+        : null;
+
+      const verdict = reasons.length
+        ? "EXCLUDED"
+        : distanceM != null && distanceM <= RIDE_SEARCH_RADIUS_M
+          ? "ELIGIBLE_NEARBY"
+          : "ELIGIBLE_CITY";
+
+      console.log("[ride dispatch] DRIVER CHECK", {
+        driverId: String(d._id).slice(-6),
+        verdict,
+        reasons: reasons.length ? reasons : undefined,
+        online: d.isOnline ?? null,
+        status: d.status || null,
+        onActiveRide: Boolean(d.busy),
+        sameCity,
+        vehicleOk,
+        locationPresent: hasLocation,
+        locationAgeMin,
+        distanceM,
+        inRadius: distanceM != null ? distanceM <= RIDE_SEARCH_RADIUS_M : null,
+        socketRegistered: Boolean(d.socketId),
       });
     }
   } catch (e) {
@@ -754,7 +816,23 @@ async function startRideDispatch(rideOrId) {
    * flags are kept deliberately so `/rides/pending` keeps working). `offerRideToDrivers`
    * reports that truthfully instead of pretending the offer was delivered.
    */
-  return await offerRideToDrivers(populated, driverIds);
+  const dispatch = await offerRideToDrivers(populated, driverIds);
+  /**
+   * matched>0 / delivered=0 is a DIFFERENT failure from matched=0: drivers were eligible
+   * but none had a live socket. Dump the same per-driver table so the offline drivers
+   * (and their missing room/location state) are identifiable without guesswork.
+   */
+  if (driverIds.length > 0 && dispatch.delivered === 0) {
+    await logDriverCandidates({
+      rideId,
+      rideCity,
+      vehicleType: populated.vehicleType,
+      pickupLng,
+      pickupLat,
+      eligibleDriverCount: driverIds.length,
+    });
+  }
+  return dispatch;
 }
 
 module.exports.startRideDispatch = startRideDispatch;
@@ -1420,7 +1498,18 @@ module.exports.cancelRideByUser = async (req, res) => {
       cancelledAt: new Date(),
       cancellationReason: String(req.body?.reason || "").slice(0, 240),
     };
-    await rideModel.updateOne({ _id: ride._id }, { $set: patch });
+    /**
+     * Atomic claim: only cancel while the ride is STILL in a cancellable status.
+     * If an accept / start / expiry won the race in the meantime, the predicate
+     * matches nothing and we report 409 without touching coupon, captain or sockets.
+     */
+    const result = await rideModel.updateOne(
+      { _id: ride._id, status: { $in: CANCELABLE_USER_STATUSES } },
+      { $set: patch },
+    );
+    if (!result?.matchedCount) {
+      return fail(res, req, 409, "Ride cannot be cancelled at this stage");
+    }
     // The ride never happened, so free any coupon reserved for it (no-op when settled).
     await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
@@ -1479,8 +1568,8 @@ module.exports.cancelRideByCaptain = async (req, res) => {
         "Only assigned rides can be cancelled by driver",
       );
     }
-    await rideModel.updateOne(
-      { _id: ride._id },
+    const result = await rideModel.updateOne(
+      { _id: ride._id, status: { $in: CANCELABLE_CAPTAIN_STATUSES } },
       {
         $set: {
           status: "cancelled",
@@ -1491,6 +1580,19 @@ module.exports.cancelRideByCaptain = async (req, res) => {
         },
       },
     );
+    /**
+     * Same atomic claim as the passenger path: if the ride moved on (started, was
+     * cancelled by the passenger/system, …) the predicate matches nothing and we
+     * return 409 without releasing coupons, penalising the driver or emitting.
+     */
+    if (!result?.matchedCount) {
+      return fail(
+        res,
+        req,
+        409,
+        "Only assigned rides can be cancelled by driver",
+      );
+    }
     // The ride never happened, so free any coupon reserved for it (no-op when settled).
     await releaseCoupon({ rideId: ride._id });
     await rideService.releaseCaptainBusyIfAvailable(ride.captain);
@@ -1753,17 +1855,26 @@ async function findPendingRidesForCaptain(cap, captainId) {
   const notClaimed = {
     $or: [{ captain: null }, { captain: { $exists: false } }],
   };
+  /**
+   * Same eligibility semantics as realtime dispatch: city compared case/trim-insensitively
+   * and the captain's vehicle type expanded through the legacy compatibility list
+   * (CAR ⇄ MINI/SEDAN), so the recovery path can never be stricter than the live offer.
+   */
+  const cityMatch = rideCityMatchesCaptain(cap.servingCity);
+  const vehicleMatch = {
+    vehicleType: { $in: captainVehicleTypesForRide(cap.vehicleType) },
+  };
   const base = {
     status: "searching",
-    city: cap.servingCity,
-    vehicleType: cap.vehicleType,
+    ...(cityMatch || {}),
+    ...vehicleMatch,
     declinedBy: { $nin: [captainId] },
     $and: [searchRecent, notClaimed],
   };
 
   const baseLoose = {
     status: "searching",
-    city: cap.servingCity,
+    ...(cityMatch || {}),
     declinedBy: { $nin: [captainId] },
     $and: [searchRecent, notClaimed],
   };
@@ -1851,13 +1962,21 @@ module.exports.getPendingRides = async (req, res) => {
       .select(
         "location servingCity vehicleType subscriptionStatus status blocked approved isOnline walletBalance busy",
       );
-    console.log("======================================");
-    console.log("DEBUG /rides/pending");
-    console.log("Captain ID:", req.captain._id);
-    console.log("Captain email:", req.captain.email);
-    console.log("Captain busy:", cap?.busy);
-    console.log("Captain object:", cap);
-    console.log("======================================");
+    /**
+     * Compact dev-only trace. Never log the captain document (or email) — a poll every
+     * 4s would flood production logs with personal data for no operational value.
+     */
+    if (DISPATCH_DEBUG) {
+      console.log(
+        "[rides/pending] captain=%s busy=%s online=%s status=%s city=%s vehicle=%s",
+        String(req.captain._id).slice(-6),
+        cap?.busy,
+        cap?.isOnline,
+        cap?.status,
+        cap?.servingCity,
+        cap?.vehicleType,
+      );
+    }
     /* Do not require cap.status==='active': disconnect sets inactive before reconnect; join/driver:join races with /rides/pending. */
     if (
       !cap ||

@@ -98,7 +98,7 @@ describe("ride cancellation releases the coupon reservation", () => {
         );
 
         expect(rideModel.updateOne).toHaveBeenCalledWith(
-            { _id: "ride-1" },
+            { _id: "ride-1", status: { $in: ["scheduled", "searching", "accepted", "arrived"] } },
             { $set: expect.objectContaining({ status: "cancelled", cancelledBy: "user" }) },
         );
         expect(couponService.releaseCoupon).toHaveBeenCalledWith({ rideId: "ride-1" });

@@ -11,6 +11,9 @@
 /** Session key written by the booking flow and read by the restore paths. */
 export const RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
+/** Booking draft handed Home → Choose Ride (sessionStorage). */
+export const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
+
 /** Same window the tracking screen uses before it declares "No Driver Found". */
 export const RIDE_SEARCH_TIMEOUT_SECONDS = 120
 
@@ -41,6 +44,31 @@ export function writeRideSessionId (id) {
 export function clearRideSession () {
   try {
     sessionStorage.removeItem(RIDE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Every storage key that belongs to the signed-in passenger session and must never
+ * survive a logout / account switch:
+ * - the active-ride pointer (could otherwise resume the previous account's ride),
+ * - the booking draft (previous account's pickup/drop addresses + coordinates),
+ * - the safety-prefs cache (per-user setting; key mirrors PREFS_KEY in
+ *   utils/safetyData.js — kept literal to avoid a circular import).
+ *
+ * Device prefs (language/theme/onboarding/device id) and the per-user recent searches
+ * are deliberately NOT touched.
+ */
+export function clearUserScopedSession () {
+  clearRideSession()
+  try {
+    sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem('rideeasy_safety_prefs')
   } catch {
     /* ignore */
   }

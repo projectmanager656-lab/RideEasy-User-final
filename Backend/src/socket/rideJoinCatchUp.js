@@ -1,7 +1,8 @@
 const rideModel = require('../models/rideCore.model');
 const captainModel = require('../models/captain.model');
+const rideService = require('../services/rideCore.service');
 const { RIDE_REQUEST } = require('./rideSocket.events');
-const { ridePickupInServiceArea } = require('../utils/serviceArea');
+const { ridePickupInServiceArea, rideCityMatchesCaptain } = require('../utils/serviceArea');
 
 /** Same age window the `/rides/pending` poll uses (see findPendingRidesForCaptain). */
 const PENDING_RIDE_MAX_AGE_MIN = Number(process.env.PENDING_RIDE_MAX_AGE_MIN || 45);
@@ -45,14 +46,26 @@ async function emitSearchingRideOffer(socket, captainId) {
     if (!cap?.servingCity || !cap?.vehicleType) return;
 
     const createdAfter = new Date(Date.now() - PENDING_RIDE_MAX_AGE_MIN * 60 * 1000);
+    /**
+     * Exactly the `findPendingRidesForCaptain` filters (ride.controller.js): recency from
+     * `searchStartedAt` (legacy rows fall back to `createdAt`), case/trim-insensitive city,
+     * and the legacy-compatible vehicle list — so a ride the HTTP poll would return is
+     * also re-offered over the socket, and no ride the poll excludes leaks through here.
+     */
+    const searchRecent = {
+        $or: [
+            { searchStartedAt: { $gte: createdAfter } },
+            { searchStartedAt: null, createdAt: { $gte: createdAfter } },
+        ],
+    };
+    const notClaimed = { $or: [ { captain: null }, { captain: { $exists: false } } ] };
     const rides = await rideModel
         .find({
             status: 'searching',
-            city: cap.servingCity,
-            vehicleType: cap.vehicleType,
-            createdAt: { $gte: createdAfter },
+            ...(rideCityMatchesCaptain(cap.servingCity) || {}),
+            vehicleType: { $in: rideService.captainVehicleTypesForRide(cap.vehicleType) },
             declinedBy: { $nin: [ captainId ] },
-            $or: [ { captain: null }, { captain: { $exists: false } } ],
+            $and: [ searchRecent, notClaimed ],
         })
         .sort({ createdAt: -1 })
         .limit(5);

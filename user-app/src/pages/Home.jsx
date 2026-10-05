@@ -28,8 +28,8 @@ import {
     isRideStatusFinal,
     isRideSearchExpired,
     rideRouteForStatus,
+    DRAFT_BOOKING_KEY,
 } from '../utils/rideSession'
-const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
 

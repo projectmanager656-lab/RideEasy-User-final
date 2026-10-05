@@ -103,6 +103,19 @@ function normalizeVehicleType(vt) {
 }
 module.exports.normalizeVehicleType = normalizeVehicleType;
 
+/**
+ * Captain vehicle types that may serve a ride of `vehicleType`. Legacy drivers/rides may
+ * still carry MINI/SEDAN, so a CAR request matches all three. THE single source of truth
+ * for both realtime dispatch and the recovery paths (/rides/pending, socket catch-up).
+ */
+function captainVehicleTypesForRide(vehicleType) {
+    const norm = normalizeVehicleType(vehicleType);
+    if (!norm) return [];
+    if (norm === 'CAR') return ['CAR', 'MINI', 'SEDAN'];
+    return [norm];
+}
+module.exports.captainVehicleTypesForRide = captainVehicleTypesForRide;
+
 module.exports.createRide = async ({
     user,
     pickupLocation,

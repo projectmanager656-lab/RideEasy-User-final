@@ -4,6 +4,11 @@ jest.mock("../../services/pricing.service", () => ({
 jest.mock("../../services/rideCore.service", () => ({
   normalizeVehicleType: jest.fn((value) => value),
   releaseCaptainBusyIfAvailable: jest.fn(),
+  /** Legacy-compatible list used by /rides/pending (CAR ⇄ MINI/SEDAN). */
+  captainVehicleTypesForRide: jest.fn((value) => {
+    const norm = String(value || "").toUpperCase();
+    return norm === "CAR" ? ["CAR", "MINI", "SEDAN"] : [norm];
+  }),
 }));
 jest.mock("../../models/captain.model", () => ({
   findById: jest.fn(),
@@ -33,6 +38,8 @@ jest.mock("../../utils/serviceArea", () => ({
   inferServiceCityKeyOrNearest: jest.fn(() => "Kolhapur"),
   ridePickupInServiceArea: jest.fn(() => true),
   logServiceAreaDistances: jest.fn(),
+  /** Ride-side city clause used by the /rides/pending query — shape is not asserted here. */
+  rideCityMatchesCaptain: jest.fn(() => ({})),
   SERVICE_AREA_ERROR: "Outside service area",
 }));
 

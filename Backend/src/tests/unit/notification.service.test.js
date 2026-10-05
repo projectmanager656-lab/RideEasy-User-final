@@ -8,7 +8,9 @@
 jest.mock('../../models/notification.model', () => ({
     create: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(),
     updateOne: jest.fn(),
+    deleteMany: jest.fn(),
 }));
 jest.mock('../../models/deviceToken.model', () => ({ find: jest.fn() }));
 jest.mock('../../models/user.model', () => ({ findById: jest.fn() }));
@@ -176,5 +178,26 @@ describe('notification service', () => {
         expect(Notification.create).toHaveBeenCalledWith(
             expect.objectContaining({ meta: expect.objectContaining({ rideId }) }),
         );
+    });
+
+    test('listForReceiver queries ONLY the receiver: user A never sees user B data', async () => {
+        Notification.find.mockReturnValue({
+            sort: jest.fn(() => ({
+                limit: jest.fn(() => ({ lean: jest.fn().mockResolvedValue([]) })),
+            })),
+        });
+
+        await notificationService.listForReceiver('user-a', 'user', { limit: 10 });
+
+        expect(Notification.find).toHaveBeenCalledWith({ receiverId: 'user-a', receiverType: 'user' });
+    });
+
+    test('clearAllForReceiver deletes ONLY the authenticated receiver (clear is scoped)', async () => {
+        Notification.deleteMany.mockResolvedValue({ deletedCount: 3 });
+
+        const out = await notificationService.clearAllForReceiver('user-a', 'user');
+
+        expect(Notification.deleteMany).toHaveBeenCalledWith({ receiverId: 'user-a', receiverType: 'user' });
+        expect(out.deletedCount).toBe(3);
     });
 });
