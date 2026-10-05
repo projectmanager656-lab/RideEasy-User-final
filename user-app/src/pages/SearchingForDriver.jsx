@@ -27,13 +27,15 @@ import luxuryImg from '../assets/luxury-img-ride.png'
 const LOOKING_TIMEOUT_SECONDS = 120
 
 /**
- * Razorpay Checkout display config scoped to UPI only. On a phone the gateway then
- * opens the UPI app-intent flow — the passenger picks an installed app (Google Pay,
- * PhonePe, Paytm, BHIM …) which opens with the exact advance amount prefilled.
+ * Razorpay Checkout display config scoped to UPI only. `flows: ['intent']` is the
+ * provider's app-handoff flow: on a phone the gateway hands off to the installed UPI
+ * app chooser (Google Pay, PhonePe, Paytm, BHIM …) with the exact advance amount
+ * prefilled. Desktop browsers cannot open an intent — the gateway keeps its own
+ * QR/collect fallback there, so this stays safe for browser testing.
  * Mirrors the wallet top-up checkout config already used in this app.
  */
 const ADVANCE_UPI_DISPLAY = {
-  blocks: { upi: { name: 'UPI', instruments: [{ method: 'upi' }] } },
+  blocks: { upi: { name: 'UPI', instruments: [{ method: 'upi', flows: ['intent'] }] } },
   sequence: ['block.upi'],
   preferences: { show_default_blocks: false },
 }
@@ -274,10 +276,14 @@ const SearchingForDriver = () => {
         if (cancelled) return
         const httpStatus = err?.response?.status
         console.warn('[ride socket] ride fetch failed', { rideId, status: httpStatus || 'network' })
-        // A ride handed over by booking is trusted and may still be retried by polling;
-        // an unconfirmable STORED id must be cleared rather than trusted.
+        // A ride handed over by booking is trusted and may still be retried by polling.
         if (fromBooking) return
-        leaveTracking()
+        /**
+         * Only the backend SAYING the ride is gone (404/403) may end tracking. A
+         * transient network failure while the payment/UPI app handoff is happening must
+         * NOT bounce the passenger Home — this screen stays and the poll retries.
+         */
+        if (httpStatus === 404 || httpStatus === 403) leaveTracking()
       })
     return () => { cancelled = true }
   }, [rideId, state.ride?._id])

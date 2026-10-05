@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { getApiBaseUrl } from '../config/apiBaseUrl'
 import { getPassengerToken, getCaptainToken, getAdminToken } from '../utils/authTokens'
+import { clearUserScopedSession } from '../utils/rideSession'
 
 /**
  * Single axios instance for the deployed (or local) backend.
@@ -67,6 +68,11 @@ apiClient.interceptors.response.use(
       } catch {
         /* ignore */
       }
+      /**
+       * The session is over — drop the previous account's ride pointer, booking draft
+       * and safety cache now, instead of relying on the reload to clean up.
+       */
+      clearUserScopedSession()
       /**
        * The token is gone — tell SocketContext so it drops the now-invalid live
        * connection instead of staying authenticated on a dead JWT until the reload.

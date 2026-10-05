@@ -11,6 +11,9 @@
 /** Session key written by the booking flow and read by the restore paths. */
 export const RIDE_SESSION_KEY = 'rideeasy_user_ride'
 
+/** Booking draft handed Home → Choose Ride (sessionStorage). */
+export const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
+
 /** Same window the tracking screen uses before it declares "No Driver Found". */
 export const RIDE_SEARCH_TIMEOUT_SECONDS = 120
 
@@ -41,6 +44,31 @@ export function writeRideSessionId (id) {
 export function clearRideSession () {
   try {
     sessionStorage.removeItem(RIDE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Every storage key that belongs to the signed-in passenger session and must never
+ * survive a logout / account switch:
+ * - the active-ride pointer (could otherwise resume the previous account's ride),
+ * - the booking draft (previous account's pickup/drop addresses + coordinates),
+ * - the safety-prefs cache (per-user setting; key mirrors PREFS_KEY in
+ *   utils/safetyData.js — kept literal to avoid a circular import).
+ *
+ * Device prefs (language/theme/onboarding/device id) and the per-user recent searches
+ * are deliberately NOT touched.
+ */
+export function clearUserScopedSession () {
+  clearRideSession()
+  try {
+    sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem('rideeasy_safety_prefs')
   } catch {
     /* ignore */
   }
@@ -80,4 +108,24 @@ export function isRideGenuinelyActive (ride, now = Date.now()) {
   if (isRideStatusFinal(ride.status)) return false
   if (isRideSearchExpired(ride, now)) return false
   return isRideStatusActive(ride.status)
+}
+
+/**
+ * THE canonical ride status → screen mapping, shared by the Home active-ride banner,
+ * notification clicks and the cold-boot ride recovery. `null` means there is no screen
+ * to open (nothing live).
+ *
+ * `searching`, `accepted` and `arrived` are all owned by the live ride screen
+ * (/searching-for-driver): it renders the driver search, the assigned driver's details
+ * and the arrival/OTP state of the ride a passenger is actually on. The standalone
+ * `/driver-details` and `/user-otp` pages are superseded — nothing in the live ride
+ * flow navigates to them, so they must never be a routing target from here.
+ */
+export function rideRouteForStatus (status) {
+  const st = normalizeRideStatus(status)
+  if (st === 'searching' || st === 'accepted' || st === 'arrived') return '/searching-for-driver'
+  if (st === 'started' || st === 'completed') return '/riding'
+  /* Reserved or finished: the upcoming/history list owns it. */
+  if (st === 'scheduled' || st === 'cancelled') return '/history'
+  return null
 }

@@ -11,6 +11,7 @@
     "migrate:services": "node src/scripts/ensure-services-doc.js",
     "migrate:user-city-bank-details": "node src/scripts/remove-user-city-bank-details.js",
     "migrate:captain-onboarding-serving-city": "node src/scripts/migrate-captain-onboarding-serving-city.js",
+    "diagnose:dispatch": "node src/scripts/diagnose-dispatch.js",
     "test": "jest",
     "test:coverage": "jest --coverage"
   },

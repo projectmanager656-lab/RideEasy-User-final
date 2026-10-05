@@ -9,7 +9,7 @@ import { useLanguage } from '../i18n'
  * Tapping an item calls `onSelect`, which recovers the CURRENT ride state before
  * navigating (a notification's stored status may be stale by then).
  */
-const NotificationSheet = ({ open, onClose, notifications = [], loading = false, onSelect }) => {
+const NotificationSheet = ({ open, onClose, notifications = [], loading = false, onSelect, onClear, clearing = false }) => {
     const { t } = useLanguage()
     const [closing, setClosing] = useState(false)
     const sheetRef = useRef(null)
@@ -144,6 +144,17 @@ const NotificationSheet = ({ open, onClose, notifications = [], loading = false,
                             </li>
                         ))}
                     </ul>
+                )}
+
+                {notifications.length > 0 && onClear && (
+                    <button
+                        type="button"
+                        onClick={onClear}
+                        disabled={clearing}
+                        className="mt-4 w-full rounded-xl border border-brand-yellow/50 bg-brand-yellow/10 py-3 text-sm font-semibold text-brand-yellow transition active:scale-[0.98] hover:bg-brand-yellow/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {clearing ? t('loading') : t('clear')}
+                    </button>
                 )}
 
                 {/* Done button */}

@@ -8,7 +8,9 @@
 jest.mock('../../models/notification.model', () => ({
     create: jest.fn(),
     findOne: jest.fn(),
+    find: jest.fn(),
     updateOne: jest.fn(),
+    deleteMany: jest.fn(),
 }));
 jest.mock('../../models/deviceToken.model', () => ({ find: jest.fn() }));
 jest.mock('../../models/user.model', () => ({ findById: jest.fn() }));
@@ -143,5 +145,59 @@ describe('notification service', () => {
         expect(Notification.findOne).not.toHaveBeenCalled();
         expect(Notification.create).toHaveBeenCalledTimes(1);
         expect(out).not.toBeNull();
+    });
+
+    test('createPersisted drops a malformed meta.rideId instead of persisting a dangling reference', async () => {
+        Notification.create.mockResolvedValue(notifDoc());
+
+        await notificationService.createPersisted({
+            ...params(),
+            meta: { rideId: 'not-an-object-id', rideStatus: 'arrived' },
+            channels: { inApp: true },
+        });
+
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.not.objectContaining({ rideId: expect.anything() }) }),
+        );
+        /** The rest of the metadata survives. */
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.objectContaining({ rideStatus: 'arrived' }) }),
+        );
+    });
+
+    test('createPersisted keeps a valid authoritative Ride _id', async () => {
+        Notification.create.mockResolvedValue(notifDoc());
+        const rideId = '64d1d2d0b9f7a1234567890a';
+
+        await notificationService.createPersisted({
+            ...params(),
+            meta: { rideId },
+            channels: { inApp: true },
+        });
+
+        expect(Notification.create).toHaveBeenCalledWith(
+            expect.objectContaining({ meta: expect.objectContaining({ rideId }) }),
+        );
+    });
+
+    test('listForReceiver queries ONLY the receiver: user A never sees user B data', async () => {
+        Notification.find.mockReturnValue({
+            sort: jest.fn(() => ({
+                limit: jest.fn(() => ({ lean: jest.fn().mockResolvedValue([]) })),
+            })),
+        });
+
+        await notificationService.listForReceiver('user-a', 'user', { limit: 10 });
+
+        expect(Notification.find).toHaveBeenCalledWith({ receiverId: 'user-a', receiverType: 'user' });
+    });
+
+    test('clearAllForReceiver deletes ONLY the authenticated receiver (clear is scoped)', async () => {
+        Notification.deleteMany.mockResolvedValue({ deletedCount: 3 });
+
+        const out = await notificationService.clearAllForReceiver('user-a', 'user');
+
+        expect(Notification.deleteMany).toHaveBeenCalledWith({ receiverId: 'user-a', receiverType: 'user' });
+        expect(out.deletedCount).toBe(3);
     });
 });

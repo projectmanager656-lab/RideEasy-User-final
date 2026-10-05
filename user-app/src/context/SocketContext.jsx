@@ -68,7 +68,12 @@ const SocketProvider = ({ children }) => {
         // Signed out — drop the connection and forget the handshake token.
         connectedToken = null
         socket.auth = {}
-        if (socket.connected) socket.disconnect()
+        /**
+         * Also stop a socket that is merely MID-RECONNECT (`active` while not yet
+         * connected): otherwise the infinite reconnection loop keeps handshaking with
+         * the emptied auth, re-registering the previous account's rooms until reload.
+         */
+        if (socket.connected || socket.active) socket.disconnect()
         return
       }
       /**

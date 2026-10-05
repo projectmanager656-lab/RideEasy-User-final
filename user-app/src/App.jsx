@@ -9,6 +9,14 @@ import { UserDataContext } from './context/UserContext'
 import { hasCompletedOnboarding, syncOnboardingFromServer } from './utils/onboarding'
 import useAndroidBackButton from './hooks/useAndroidBackButton'
 import { useLanguage } from './i18n'
+import { apiClient, withAuth } from './services/http'
+import { stripApiEnvelope } from './utils/apiBody'
+import {
+  readRideSessionId,
+  clearRideSession,
+  normalizeRideStatus,
+  rideRouteForStatus,
+} from './utils/rideSession'
 import 'remixicon/fonts/remixicon.css'
 
 const UserLogin = lazy(() => import('./pages/UserLogin'))
@@ -99,6 +107,49 @@ const UserAppRoot = () => {
 
   void serverSynced
 
+  /**
+   * Cold-boot ride recovery. Capacitor reloads the app at `/` when the Android process
+   * is recreated — which is what happens if the payment/UPI-app handoff kills the
+   * activity — and that must not silently drop the passenger on the city screen while a
+   * ride/payment is in flight. The stored pointer is resolved against the backend ONCE;
+   * only a genuinely resumable ride reopens its screen, anything else is cleared and the
+   * normal first screen is used. This never runs from `/home`: deliberate navigation away
+   * from a ride screen is still respected (the Home banner remains the way back in).
+   */
+  const [ bootRide, setBootRide ] = useState(undefined)
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return
+    const rideId = readRideSessionId()
+    if (!rideId) {
+      setBootRide(null)
+      return
+    }
+    let cancelled = false
+    apiClient.get(`/rides/${rideId}`, withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const ride = stripApiEnvelope(res.data)
+        const st = normalizeRideStatus(ride?.status)
+        const resumable = st === 'searching' || st === 'accepted' || st === 'arrived'
+          || st === 'started'
+          || (st === 'completed' && ride?.paymentStatus !== 'success')
+        const dest = resumable ? rideRouteForStatus(st) : null
+        if (!dest) {
+          clearRideSession()
+          setBootRide(null)
+          return
+        }
+        setBootRide({ dest, ride: { ...ride, status: st } })
+      })
+      .catch((err) => {
+        if (cancelled) return
+        /** Authoritatively gone → drop the pointer. A blip keeps it for the next boot. */
+        if (err?.response?.status === 404) clearRideSession()
+        setBootRide(null)
+      })
+    return () => { cancelled = true }
+  }, [ authLoading, isAuthenticated ])
+
   if (authLoading) {
     return <AuthShellLoader />
   }
@@ -121,6 +172,12 @@ const UserAppRoot = () => {
     return <Navigate to="/login" replace />
   }
 
+  if (bootRide === undefined) {
+    return <AuthShellLoader />
+  }
+  if (bootRide) {
+    return <Navigate to={bootRide.dest} replace state={{ ride: bootRide.ride }} />
+  }
   return <Navigate to="/location" replace />
 }
 

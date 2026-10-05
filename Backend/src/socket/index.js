@@ -224,6 +224,16 @@ function driverRoomSocketIds(captainId) {
   return room ? [ ...room ] : [];
 }
 
+/**
+ * Live socket count in the shared online-drivers room. Diagnostic only: it shows how
+ * many driver sockets exist at all when a dispatch reports matched-but-undelivered.
+ */
+function onlineDriversSocketCount() {
+  if (!io) return 0;
+  const room = io.sockets.adapter.rooms.get(ONLINE_DRIVERS_ROOM);
+  return room ? room.size : 0;
+}
+
 function emitToAdmin(event, data) {
   if (!io) return;
   io.to("admin").emit(event, data);
@@ -698,6 +708,7 @@ module.exports = {
   getIo,
   driverRoomHyphen,
   driverRoomSocketIds,
+  onlineDriversSocketCount,
   cityRoomFromKey,
   ONLINE_DRIVERS_ROOM,
 };

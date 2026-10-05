@@ -6,6 +6,7 @@ const en = {
 
   // --- Home.jsx ---
   no_new_notifications: 'No new notifications.',
+  clear: 'Clear',
   // --- In-app ride notifications (scheduled rides) ---
   notif_ride_scheduled_title: 'Ride scheduled',
   notif_ride_scheduled_body: 'Your ride is scheduled for {{time}}.',
@@ -20,6 +21,7 @@ const en = {
   pickup_destination_same: 'Pickup and destination cannot be the same. Please choose a different destination.',
   location_search_busy: 'Location search is temporarily busy. Please try again.',
   driver_assignment_unavailable: 'Driver assignment is temporarily unavailable. Please try again.',
+  could_not_clear_notifications: 'Could not clear notifications. Please try again.',
 
   // --- LocationScreen.jsx ---
   locating_you: 'Locating you…',
@@ -58,6 +60,8 @@ const hi = {
 
   // --- Home.jsx ---
   no_new_notifications: 'कोई नई सूचना नहीं है।',
+  clear: 'साफ़ करें',
+  // --- In-app ride notifications (scheduled rides) ---
   notif_ride_scheduled_title: 'राइड शेड्यूल हो गई',
   notif_ride_scheduled_body: 'आपकी राइड {{time}} बजे निर्धारित है।',
   notif_ride_scheduled_body_generic: 'आपकी राइड शेड्यूल हो गई है।',
@@ -71,6 +75,7 @@ const hi = {
   pickup_destination_same: 'पिकअप और गंतव्य स्थान एक समान नहीं हो सकते। कृपया कोई दूसरा गंतव्य चुनें।',
   location_search_busy: 'स्थान खोज सेवा अस्थायी रूप से व्यस्त है। कृपया पुनः प्रयास करें।',
   driver_assignment_unavailable: 'ड्राइवर नियुक्ति अस्थायी रूप से उपलब्ध नहीं है। कृपया पुनः प्रयास करें।',
+  could_not_clear_notifications: 'सूचनाएँ साफ़ नहीं की जा सकीं। कृपया पुनः प्रयास करें।',
 
   // --- LocationScreen.jsx ---
   locating_you: 'आपका स्थान ढूंढा जा रहा है…',
@@ -109,6 +114,8 @@ const mr = {
 
   // --- Home.jsx ---
   no_new_notifications: 'नवीन सूचना नाही.',
+  clear: 'साफ करा',
+  // --- In-app ride notifications (scheduled rides) ---
   notif_ride_scheduled_title: 'राइड शेड्यूल झाली',
   notif_ride_scheduled_body: 'तुमची राइड {{time}} वाजता नियोजित आहे.',
   notif_ride_scheduled_body_generic: 'तुमची राइड शेड्यूल झाली आहे.',
@@ -121,7 +128,8 @@ const mr = {
   select_pickup_and_drop_for_fare: 'भाडे मिळवण्यासाठी कृपया पिकअप आणि ड्रॉप ठिकाण निवडा.',
   pickup_destination_same: 'पिकअप आणि गंतव्यस्थान सारखे असू शकत नाहीत. कृपया वेगळे गंतव्यस्थान निवडा.',
   location_search_busy: 'स्थान शोध सेवा तात्पुरती व्यस्त आहे. कृपया पुन्हा प्रयत्न करा.',
-  driver_assignment_unavailable: 'ड्रायव्हर नियुक्ती तात्पुरती अनुपलब्ध आहे. कृपया पुन्हा प्रयत्न करा.',
+  driver_assignment_unavailable: 'ड्रायव्हर नियुक्ती तात्पुरती अनुपलब्ध आहे. कृपया पुन्हा प्रयत्न करा।',
+  could_not_clear_notifications: 'सूचना साफ करता आली नाही. कृपया पुन्हा प्रयत्न करा।',
 
   // --- LocationScreen.jsx ---
   locating_you: 'तुमचे स्थान शोधले जात आहे…',
@@ -133,11 +141,11 @@ const mr = {
   no_recent_searches: 'अजून अलीकडील शोध नाही',
   searched_destinations_hint: 'तुम्ही शोधलेली ठिकाणे येथे दिसतील.',
   location_access_off: 'स्थान सेवा बंद आहे. तुम्ही कुठे आहात हे पाहण्यासाठी स्थान सेवा चालू करा.',
-  could_not_get_location: 'तुमचे सध्याचे स्थान मिळू शकले नाही. कृपया पुन्हा प्रयत्न करा.',
+  could_not_get_location: 'तुमचे सध्याचे स्थान मिळू शकले नाही. कृपया पुन्हा प्रयत्न करा।',
   loc_accuracy_modal_title: 'चांगल्या अनुभवासाठी, तुमच्या डिव्हाइसला स्थान अचूकता (Location Accuracy) वापरावी लागेल',
   location_settings_on: 'खालील सेटिंग्ज चालू असणे आवश्यक आहे:',
   device_location: 'डिव्हाइस स्थान',
-  loc_accuracy_google_para: 'Location Accuracy (स्थान अचूकता) अॅप्स आणि सेवांसाठी अधिक अचूक स्थान पुरवते. यासाठी, Google तुमच्या डिव्हाइसमधील सेन्सर आणि वायरलेस सिग्नलची माहिती वेळोवेळी प्रक्रिया करून वायरलेस सिग्नल ठिकाणांचा सामूहिक डेटा तयार करते. ही माहिती तुमची ओळख न करता स्थान अचूकता आणि स्थान-आधारित सेवा सुधारण्यासाठी वापरली जाते, आणि वापरकर्त्यांच्या गरजा पूर्ण करण्यासाठी Google आणि तृतीय पक्षांच्या कायदेशीर हितांवर आधारित Google च्या सेवा सुधारण्यासाठी, पुरवण्यासाठी आणि टिकवण्यासाठीही वापरली जाते.',
+  loc_accuracy_google_para: 'Location Accuracy (स्थान अचूकता) अॅप्स आणि सेवांसाठी अधिक अचूक स्थान पुरवते. यासाठी, Google तुमच्या डिव्हाइसमधील सेन्सर आणि वायरलेस सिग्नलची माहिती वेळोवेळी प्रक्रिया करून वायरलेस सिग्नल ठिकाणांचा सामूहिक डेटा तयार करते. ही माहिती तुमची ओळख न करता स्थान अचूकता आणि स्थान-आधारित सेवा सुधारण्यासाठी वापरली जाते, आणि वापरकर्त्यांच्या गरजा पूर्ण करण्यासाठी Google आणि तृतीय पक्षांच्या कायदेशीर हितांवर आधारित Google च्या सेवा सुधारण्यासाठी, पुरवण्यासाठी आणि टिकवण्यासाठीही वापरली जाते।',
   loc_accuracy_change_note: 'तुम्ही हे कधीही स्थान सेटिंग्जमध्ये बदलू शकता. सेटिंग्ज व्यवस्थापित करा किंवा अधिक जाणून घ्या',
   no_thanks: 'नाही, धन्यवाद',
   turn_on: 'चालू करा',

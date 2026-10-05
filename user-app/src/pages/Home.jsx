@@ -27,8 +27,9 @@ import {
     clearRideSession,
     isRideStatusFinal,
     isRideSearchExpired,
+    rideRouteForStatus,
+    DRAFT_BOOKING_KEY,
 } from '../utils/rideSession'
-const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
 
 const SERVICE_CITY_KEYS = SERVICE_AREAS.map((z) => z.key)
 
@@ -60,25 +61,6 @@ function splitRideApiPayload(raw) {
 
 function normalizeRideStatus(s) {
     return String(s || '').trim().toLowerCase()
-}
-
-/**
- * THE canonical ride status → screen mapping, shared by the Home active-ride banner and
- * notification clicks. `null` means there is no screen to open (nothing live).
- *
- * `searching`, `accepted` and `arrived` are all owned by the live ride screen
- * (/searching-for-driver): it renders the driver search, the assigned driver's details
- * and the arrival/OTP state of the ride a passenger is actually on. The standalone
- * `/driver-details` and `/user-otp` pages are superseded — nothing in the live ride
- * flow navigates to them, so they must never be a routing target from here.
- */
-function rideRouteForStatus(s) {
-    const st = normalizeRideStatus(s)
-    if (st === 'searching' || st === 'accepted' || st === 'arrived') return '/searching-for-driver'
-    if (st === 'started' || st === 'completed') return '/riding'
-    /* Reserved or finished: the upcoming/history list owns it. */
-    if (st === 'scheduled' || st === 'cancelled') return '/history'
-    return null
 }
 
 /** Merge deterministic local results first, then de-duped live API results. */
@@ -135,6 +117,7 @@ const Home = () => {
     /** In-app notifications for this passenger (Home bell + sheet). */
     const [ notifications, setNotifications ] = useState([])
     const [ notificationsLoading, setNotificationsLoading ] = useState(false)
+    const [ notificationsClearing, setNotificationsClearing ] = useState(false)
     /** Transient popup shown when a notification arrives while the app is open. */
     const [ notificationToast, setNotificationToast ] = useState(null)
     const notificationToastTimerRef = useRef(null)
@@ -152,6 +135,9 @@ const Home = () => {
     const socketOtpSyncTimer = useRef(null)
     /** Avoid spamming maps geocode when ride polls return the same addresses without GeoJSON. */
     const rideGeocodeOnceRef = useRef({ pick: '', drop: '' })
+    /** Notification ride ids the backend reported gone — never refetch them this session. */
+    const staleNotifRideIdsRef = useRef(new Set())
+    const notifNoticeTimerRef = useRef(null)
     /** On app open, keep search form visible until user explicitly resumes/creates a ride. */
     const keepSearchFirstRef = useRef(true)
     /** True after the first socket connect — lets reconnects trigger a notification resync. */
@@ -169,6 +155,7 @@ const Home = () => {
 
     useEffect(() => () => {
         clearTimeout(searchTimerRef.current)
+        clearTimeout(notifNoticeTimerRef.current)
     }, [])
 
     /** Single source of truth: GET ride (includes otp + captain location) then fallback passenger-otp. */
@@ -211,7 +198,12 @@ const Home = () => {
                 }
                 return data
             })
-            .catch(() => undefined)
+            .catch((err) => {
+                /** 404 = the backend authoritatively says this ride is gone. `null` lets
+                 *  notification clicks tell "no longer available" apart from a blip. */
+                if (err?.response?.status === 404) return null
+                return undefined
+            })
     }, [])
 
     const socket = useSocket()
@@ -641,21 +633,60 @@ const Home = () => {
         } catch { /* next load reconciles */ }
     }, [])
 
+    /** Clear all notifications for the current user (server-authoritative). */
+    const clearNotifications = useCallback(async () => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+        setNotificationsClearing(true)
+        try {
+            await apiClient.delete('/users/notifications', withAuth())
+            setNotifications([])
+        } catch (err) {
+            setBookingError(t('could_not_clear_notifications') || 'Could not clear notifications. Please try again.')
+            if (notifNoticeTimerRef.current) clearTimeout(notifNoticeTimerRef.current)
+            notifNoticeTimerRef.current = setTimeout(() => setBookingError(''), 5000)
+        } finally {
+            setNotificationsClearing(false)
+        }
+    }, [t])
+
     /**
      * Notification click → recover the CURRENT ride from the backend and route by
      * its LIVE status. The status stored on the notification may be stale.
      */
+    /** One small non-destructive notice for a notification whose ride is gone. */
+    const showStaleRideNotice = useCallback(() => {
+        setBookingError(t('ride_no_longer_available'))
+        if (notifNoticeTimerRef.current) clearTimeout(notifNoticeTimerRef.current)
+        notifNoticeTimerRef.current = setTimeout(() => setBookingError(''), 5000)
+    }, [t])
+
     const openNotification = useCallback(async (n) => {
         setNotificationsOpen(false)
         void markNotificationRead(n?._id)
         const rideId = n?.meta?.rideId
         if (!rideId) return
+        /**
+         * Stale notification: the referenced ride no longer exists. Say so once, mark it
+         * read, remember the id so it is never re-requested — and never navigate.
+         */
+        if (staleNotifRideIdsRef.current.has(String(rideId))) {
+            showStaleRideNotice()
+            return undefined
+        }
         const data = await syncRideFromServer(rideId)
-        const st = normalizeRideStatus(data?.status)
+        /** `null` = backend 404: the ride is gone, not a transient failure. */
+        if (data === null) {
+            staleNotifRideIdsRef.current.add(String(rideId))
+            showStaleRideNotice()
+            return undefined
+        }
+        if (!data) return undefined
+        const st = normalizeRideStatus(data.status)
         const dest = rideRouteForStatus(st)
         if (!dest) return undefined
-        return navigate(dest, { state: { ride: { ...(data || { _id: rideId }), status: st || data?.status } } })
-    }, [markNotificationRead, navigate, syncRideFromServer]);
+        return navigate(dest, { state: { ride: { ...data, status: st } } })
+    }, [markNotificationRead, navigate, syncRideFromServer, showStaleRideNotice]);
 
     /**
      * Active-ride banner → recover the CURRENT ride and open the screen that owns its
@@ -1681,6 +1712,8 @@ const Home = () => {
                 notifications={notifications}
                 loading={notificationsLoading}
                 onSelect={openNotification}
+                onClear={clearNotifications}
+                clearing={notificationsClearing}
             />
 
             {notificationToast ? (

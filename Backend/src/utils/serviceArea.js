@@ -153,6 +153,26 @@ function captainServingCityMatch (rideCity) {
 }
 
 /**
+ * RIDE-side mirror of `captainServingCityMatch`: Mongo clause matching a ride whose
+ * `city` is the captain's serving city, ignoring whitespace/case. Used by the recovery
+ * paths (`/rides/pending`, socket join catch-up) so a ride-query can never fail on a
+ * casing/whitespace difference the realtime dispatch query would tolerate.
+ * Returns null when the captain has no serving city.
+ */
+function rideCityMatchesCaptain (servingCity) {
+  const key = cityKey(servingCity)
+  if (!key) return null
+  return {
+    $expr: {
+      $eq: [
+        { $toLower: { $trim: { input: { $ifNull: [ '$city', '' ] } } } },
+        key,
+      ],
+    },
+  }
+}
+
+/**
  * Pickup coordinates on a ride doc: GeoJSON [lng, lat].
  */
 function ridePickupInServiceArea (ride) {
@@ -174,6 +194,7 @@ module.exports = {
   cityKey,
   canonicalServiceCity,
   captainServingCityMatch,
+  rideCityMatchesCaptain,
   ridePickupInServiceArea,
   SERVICE_AREA_ERROR,
 }
