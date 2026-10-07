@@ -26,16 +26,39 @@ export function normalizeRideStatus (status) {
 
 export function readRideSessionId () {
   try {
-    return sessionStorage.getItem(RIDE_SESSION_KEY) || null
+    const fromSession = sessionStorage.getItem(RIDE_SESSION_KEY)
+    if (fromSession) return fromSession
+  } catch {
+    /* ignore */
+  }
+  try {
+    /* Survives the Android WebView recreation that the payment/UPI handoff causes. */
+    return localStorage.getItem(RIDE_SESSION_KEY) || null
   } catch {
     return null
   }
 }
 
+/**
+ * The pointer is mirrored into localStorage as well as sessionStorage.
+ *
+ * sessionStorage does not survive the Android activity/WebView recreation that happens
+ * when the payment step hands off to an external UPI app (Capacitor logs "App
+ * restarted"), which left the re-created ride screen with no ride to resolve and forced
+ * the passenger back to Home AFTER a verified advance payment. Both keys hold the same
+ * non-secret ride id and both are dropped together by clearRideSession() /
+ * clearUserScopedSession() (logout, 401, finished rides), so no extra state is kept.
+ */
 export function writeRideSessionId (id) {
   if (id == null || id === '') return
+  const value = String(id)
   try {
-    sessionStorage.setItem(RIDE_SESSION_KEY, String(id))
+    sessionStorage.setItem(RIDE_SESSION_KEY, value)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.setItem(RIDE_SESSION_KEY, value)
   } catch {
     /* ignore */
   }
@@ -44,6 +67,11 @@ export function writeRideSessionId (id) {
 export function clearRideSession () {
   try {
     sessionStorage.removeItem(RIDE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(RIDE_SESSION_KEY)
   } catch {
     /* ignore */
   }
