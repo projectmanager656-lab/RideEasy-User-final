@@ -95,6 +95,8 @@ function driverVerdict(d, ctx) {
   else if (d.subscriptionExpiresAt && new Date(d.subscriptionExpiresAt) <= new Date()) reasons.push('subscription expired');
   if (d.status !== 'active') reasons.push(`status ${d.status || 'inactive'}`);
   if (d.isOnline === false) reasons.push('offline');
+  /** Mirrors the realtime candidate query (captainNotBusyMatch) — already-riding captains are excluded. */
+  if (d.busy) reasons.push('on an active ride');
   if (Number(d.walletBalance || 0) < minWallet) reasons.push(`wallet ${Number(d.walletBalance || 0)} < ${minWallet}`);
   if (!sameCity) reasons.push(`city '${d.servingCity || '?'}' != '${d._rideCity || ''}'`);
   if (!vehicleOk) reasons.push(`vehicle ${driverVehicle || '?'} not in [${rideVehicleCompat.join(',')}]`);

@@ -355,6 +355,49 @@ describe("payMock advance guard", () => {
     expect(rideSet().chargedAmount).toBeUndefined();
     expect(res.status).toHaveBeenCalledWith(200);
   });
+
+  /**
+   * The advance rail used to broadcast `status: "completed"`, which threw the passenger
+   * off the active ride lifecycle screen (and told the driver the trip was over).
+   */
+  test("a paid advance broadcasts the ride's REAL status, never a fake completion", async () => {
+    const socket = require("../../socket");
+    rideModel.findById.mockResolvedValue(
+      rideDoc({ paymentMethod: "Cash", advancePaymentRequired: false, status: "accepted" }),
+    );
+    PaymentRecord.create.mockResolvedValue({ externalRef: "txn_cash" });
+    rideModel.findByIdAndUpdate.mockReturnValue(
+      populated(rideDoc({ paymentMethod: "Cash", advancePaymentStatus: "success", status: "accepted" })),
+    );
+
+    await rideController.payMock(request({ rideId: RIDE_ID, method: "Cash", part: "advance" }), response());
+
+    const statusFrames = socket.emitToUser.mock.calls.filter(([, event]) => event === "ride:status-update");
+    expect(statusFrames).toHaveLength(1);
+    expect(statusFrames[0][2]).toEqual(
+      expect.objectContaining({ rideId: RIDE_ID, status: "accepted", advancePaymentStatus: "success" }),
+    );
+    expect(socket.emitToUser).not.toHaveBeenCalledWith(USER_ID, "ride:completed", expect.anything());
+  });
+
+  test("a genuinely completed ride still emits the completion event", async () => {
+    const socket = require("../../socket");
+    rideModel.findById.mockResolvedValue(
+      rideDoc({ paymentMethod: "Cash", advancePaymentRequired: false, status: "completed" }),
+    );
+    PaymentRecord.create.mockResolvedValue({ externalRef: "txn_final" });
+    rideModel.findByIdAndUpdate.mockReturnValue(
+      populated(rideDoc({ paymentMethod: "Cash", paymentStatus: "success", chargedAmount: 400, status: "completed" })),
+    );
+
+    await rideController.payMock(request({ rideId: RIDE_ID, method: "Cash", part: "remaining" }), response());
+
+    expect(socket.emitToUser).toHaveBeenCalledWith(
+      USER_ID,
+      "ride:completed",
+      expect.objectContaining({ rideId: RIDE_ID, status: "completed" }),
+    );
+  });
 });
 
 describe("verifyRideRazorpayPayment", () => {

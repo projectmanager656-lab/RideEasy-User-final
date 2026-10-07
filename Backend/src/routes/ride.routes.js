@@ -45,6 +45,8 @@ router.get('/service-area-check',
 );
 
 router.get('/pending', auth.authCaptain, rideController.getPendingRides);
+/** The passenger's current live ride — recovery read for the ride lifecycle screen. */
+router.get('/active', auth.authUser, rideController.getActiveRide);
 router.get('/user/history', auth.authUser, rideController.userRideHistory);
 router.get('/history', auth.authUser, rideController.userRideHistory);
 router.get('/:id/passenger-otp', auth.authUser, rideController.getPassengerOtp);

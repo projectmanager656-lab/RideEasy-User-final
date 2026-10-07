@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect, useContext, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
 import CaptainDetails from '../components/CaptainDetails'
 import RidePopUp from '../components/RidePopUp'
 import ConfirmRidePopUp from '../components/ConfirmRidePopUp'
@@ -198,7 +200,35 @@ const CaptainHome = () => {
             .catch(() => setSubscriptionStatus({ active: false }))
         const pendingInterval = setInterval(fetchPending, PENDING_POLL_MS)
 
+        /**
+         * Resume / visibility recovery. Android throttles (and can freeze) WebView timers
+         * while the app is backgrounded, and a socket that dropped in the background may
+         * not have re-registered its rooms yet — so when the driver comes back the 4s poll
+         * can be arbitrarily late and a live offer would look lost. Re-join the rooms and
+         * refetch the pending rides immediately; the normal interval stays untouched.
+         */
+        let resumeHandle = null
+        let disposed = false
+        const recoverOnResume = () => {
+            if (document.visibilityState === 'hidden') return
+            console.info('[driver socket] resume — re-joining rooms and refetching pending rides')
+            if (socket.connected) doJoin()
+            fetchPending()
+        }
+        document.addEventListener('visibilitychange', recoverOnResume)
+        if (Capacitor.isNativePlatform()) {
+            CapacitorApp.addListener('resume', recoverOnResume)
+                .then((handle) => {
+                    if (disposed) handle.remove()
+                    else resumeHandle = handle
+                })
+                .catch(() => { /* not available on this platform */ })
+        }
+
         return () => {
+            disposed = true
+            if (resumeHandle) resumeHandle.remove()
+            document.removeEventListener('visibilitychange', recoverOnResume)
             socket.off('connect', doJoin)
             socket.off('connect', fetchPending)
             clearTimeout(bootFetch)

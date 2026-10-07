@@ -14,6 +14,7 @@ import {
   readRideSessionId,
   writeRideSessionId,
   clearRideSession,
+  isRideStatusActive,
   isRideStatusFinal,
   isRideGenuinelyActive,
 } from '../utils/rideSession'
@@ -145,7 +146,7 @@ const SearchingForDriver = () => {
    * "Looking for a driver", and must be cleared when the ride is not genuinely active.
    */
   const navRide = state.ride && state.ride._id ? state.ride : null
-  const [rideId] = useState(() => navRide?._id || readRideSessionId() || null)
+  const [rideId, setRideId] = useState(() => navRide?._id || readRideSessionId() || null)
   const [ride, setRide] = useState(() => (navRide ? { ...navRide } : null))
   /** True once the ride is confirmed (handed over by booking, or fetched from the backend). */
   const [rideResolved, setRideResolved] = useState(Boolean(navRide))
@@ -221,11 +222,45 @@ const SearchingForDriver = () => {
     }
   }, [socket, currentUser?._id])
 
-  /** Missing ride — nothing to search for. */
+  /**
+   * No local ride pointer at all. This is the state the screen was left in when the
+   * Android WebView was re-created during the payment/UPI handoff, and blindly going
+   * Home from here is what dropped the passenger on Home right after a verified
+   * advance payment. Read the AUTHORITATIVE current ride from the backend first and
+   * re-adopt it; Home is only correct once the backend confirms there is no live ride.
+   */
   useEffect(() => {
     if (rideId) return
-    navigate('/home', { replace: true })
-  }, [rideId, navigate])
+    let cancelled = false
+    apiClient.get('/rides/active', withAuth())
+      .then((res) => {
+        if (cancelled) return
+        const body = stripApiEnvelope(res.data)
+        const doc = body?.ride || null
+        const st = normalizeStatus(doc?.status)
+        if (!doc?._id || !isRideStatusActive(st)) {
+          console.info('[ride socket] no active ride to recover — leaving tracking')
+          navigateRef.current('/home', { replace: true })
+          return
+        }
+        console.info('[ride socket] active ride recovered after losing the local pointer', { rideId: String(doc._id), status: st })
+        setRide((prev) => ({ ...(prev || {}), ...doc, _id: doc._id }))
+        const conf = doc.confirmation && typeof doc.confirmation === 'object' ? { ...doc.confirmation } : null
+        if (conf) setRideConfirmation(conf)
+        applyGeoFromRide(doc)
+        const otpVal = doc.otp ?? conf?.otp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        setRideId(String(doc._id))
+        setRideResolved(true)
+        writeRideSessionId(doc._id)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.warn('[ride socket] active ride recovery failed', { status: err?.response?.status || 'network' })
+        navigateRef.current('/home', { replace: true })
+      })
+    return () => { cancelled = true }
+  }, [rideId])
 
   /**
    * One-shot live fetch. When the ride was handed over by the booking flow it only
@@ -445,7 +480,25 @@ const SearchingForDriver = () => {
         const conf = o.confirmation && typeof o.confirmation === 'object' ? o.confirmation : null
         if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
         const otpVal = o.otp ?? conf?.otp
-        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        if (otpVal != null && String(otpVal).trim() !== '') {
+          setPassengerOtp(String(otpVal).trim())
+          return
+        }
+        /**
+         * The ride read normally carries the PIN. When it does not, read the same code
+         * through the dedicated passenger-only endpoint — it decrypts the PIN the driver
+         * will verify and only reissues when the stored cipher is undecryptable. Guarded
+         * by the same `passengerOtp` short-circuit, so it runs once per arrival and never
+         * regenerates a code the driver may already have.
+         */
+        return apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
+          .then((r) => {
+            if (cancelled) return
+            const body = stripApiEnvelope(r.data)
+            const pin = body?.otp ?? body?.confirmation?.otp
+            if (pin != null && String(pin).trim() !== '') setPassengerOtp(String(pin).trim())
+            if (body?.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...body.confirmation }))
+          })
       })
       .catch(() => {})
     return () => { cancelled = true }
