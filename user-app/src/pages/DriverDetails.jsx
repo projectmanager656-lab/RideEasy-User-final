@@ -8,7 +8,7 @@ import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import { tierFare } from '../constants/rideTiers'
 import { useSocket } from '../hooks/useSocket'
-import { readRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
+import { readRideSessionId, writeRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
 import { resolveMediaUrl } from '../utils/mediaUrl'
 import RideMap from '../components/RideMap'
 import bikeImg from '../assets/Bike-img-ride.png'
@@ -99,7 +99,11 @@ const DriverDetails = () => {
    * across reloads. The ride is only persisted once the backend confirms it below.
    */
   useEffect(() => {
-    if (!rideId) navigate('/home', { replace: true })
+    if (!rideId) {
+      navigate('/home', { replace: true })
+    } else {
+      writeRideSessionId(rideId)
+    }
   }, [rideId, navigate])
 
   useEffect(() => {
@@ -123,6 +127,7 @@ const DriverDetails = () => {
         const o = stripApiEnvelope(res.data)
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        if (o._id) writeRideSessionId(o._id)
         if (conf) setRideConfirmation(conf)
         applyGeoFromRide(o)
         const otpVal = o.otp ?? conf?.otp
@@ -302,11 +307,11 @@ const DriverDetails = () => {
   const totalFareNum = Number(price)
   const advanceAmount = Number(ride?.advanceAmount) > 0
     ? Number(ride.advanceAmount)
-    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 0.25) : 0)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round((totalFareNum * 25) / 100) : 0)
   const remainingAmount = Number(ride?.remainingAmount) > 0
     ? Number(ride.remainingAmount)
     : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
-  const advancePaid = ride?.advancePaymentStatus === 'success'
+  const advancePaid = ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success'
 
   const messageDriver = useCallback((phone) => {
     const digits = String(phone || '').replace(/[^+\d]/g, '')
@@ -327,8 +332,24 @@ const DriverDetails = () => {
     try {
       const res = await apiClient.post('/rides/pay-mock', { rideId, method: 'UPI', part: 'advance' }, withAuth())
       const o = stripApiEnvelope(res.data)
-      if (o?.ride) {
-        setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+      const nextRide = o?.ride || { advancePaymentStatus: 'success' }
+      setRide((prev) => ({ ...(prev || {}), ...nextRide, advancePaymentStatus: 'success', paymentStatus: 'success', _id: nextRide._id || prev?._id }))
+      writeRideSessionId(nextRide._id || rideId)
+
+      // Immediately fetch OTP from backend since payment is now verified
+      try {
+        const otpRes = await apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
+        const otpData = stripApiEnvelope(otpRes.data)
+        if (otpData?.otp) {
+          setPassengerOtp(String(otpData.otp).trim())
+        }
+      } catch {
+        try {
+          const rideRes = await apiClient.get(`/rides/${rideId}`, withAuth())
+          const rideData = stripApiEnvelope(rideRes.data)
+          const fallbackOtp = rideData?.otp ?? rideData?.confirmation?.otp
+          if (fallbackOtp) setPassengerOtp(String(fallbackOtp).trim())
+        } catch { /* ignore */ }
       }
     } catch (err) {
       setAdvancePayError(formatApiError(err))
@@ -386,10 +407,7 @@ const DriverDetails = () => {
       if (!sheet) return
       const h = sheet.offsetHeight
       const screenH = window.innerHeight
-      if (h < screenH * 0.25) {
-        // dragged way down — close
-        handleClose()
-      } else if (h > screenH * 0.75) {
+      if (h > screenH * 0.75) {
         // dragged way up — snap to full
         sheet.style.height = `${screenH - 40}px`
         setExpanded(true)
@@ -419,7 +437,6 @@ const DriverDetails = () => {
         closing ? 'sheet-backdrop-out pointer-events-none' : 'sheet-backdrop-in'
       }`}
       style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(1px)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
     >
       {/* Sheet panel */}
       <div
@@ -444,7 +461,7 @@ const DriverDetails = () => {
         <header className="flex shrink-0 items-center justify-between border-b border-theme bg-theme-bg/95 px-4 pb-3 backdrop-blur-md">
           <button
             type="button"
-            onClick={handleClose}
+            onClick={() => navigate('/home')}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-card text-theme-primary transition active:scale-95"
             aria-label={t('back')}
           >
@@ -566,35 +583,50 @@ const DriverDetails = () => {
         </div>
 
         {/* User OTP Banner / Shortcut */}
-        <div className="flex items-center justify-between rounded-2xl border-2 border-brand-yellow/60 bg-brand-yellow/10 p-4 shadow-sm">
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-theme-secondary">{t('your_ride_otp')}</span>
-            <p className="font-mono text-2xl font-black tracking-[0.2em] text-brand-yellow">
-              {passengerOtp || '••••••'}
-            </p>
+        {advancePaid ? (
+          <div className="flex items-center justify-between rounded-2xl border-2 border-brand-yellow/60 bg-brand-yellow/10 p-4 shadow-sm animate-fade-in">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-theme-secondary">{t('your_ride_otp')}</span>
+              <p className="font-mono text-2xl font-black tracking-[0.2em] text-brand-yellow">
+                {passengerOtp || '••••••'}
+              </p>
+              <p className="text-[11px] text-theme-secondary mt-0.5">{t('share_pin_hint') || 'Share this PIN with your driver to start the ride'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/user-otp', {
+                state: {
+                  ride,
+                  pickupCoords,
+                  dropCoords,
+                  pickup,
+                  destination,
+                  passengerOtp,
+                  confirmation: rideConfirmation,
+                  vehicleType,
+                  tierId: rideTierId,
+                  price,
+                },
+              })}
+              className="flex items-center gap-1.5 rounded-xl bg-brand-yellow px-4 py-2.5 text-xs font-bold text-black shadow transition active:scale-95"
+            >
+              <span>{t('view_otp_page') || 'View OTP Page'}</span>
+              <i className="ri-arrow-right-line" aria-hidden />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/user-otp', {
-              state: {
-                ride,
-                pickupCoords,
-                dropCoords,
-                pickup,
-                destination,
-                passengerOtp,
-                confirmation: rideConfirmation,
-                vehicleType,
-                tierId: rideTierId,
-                price,
-              },
-            })}
-            className="flex items-center gap-1.5 rounded-xl bg-brand-yellow px-4 py-2.5 text-xs font-bold text-black shadow transition active:scale-95"
-          >
-            <span>{t('view_otp_page') || 'View OTP Page'}</span>
-            <i className="ri-arrow-right-line" aria-hidden />
-          </button>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-2xl border border-theme bg-theme-card p-4 shadow-sm">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-yellow/15 text-brand-yellow">
+              <i className="ri-lock-line text-xl" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-theme-muted">{t('ride_start_otp') || 'Ride Start OTP'}</h4>
+              <p className="text-xs text-theme-secondary mt-0.5">
+                {t('advance_required_to_start') || 'Pay advance payment to receive your Ride OTP'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Live Route Map */}
         {(pickupCoords || dropCoords || liveDriverCoords) && (
@@ -680,7 +712,7 @@ const DriverDetails = () => {
                 ) : (
                   <>
                     <i className="ri-qr-code-line text-base" aria-hidden />
-                    <span>{t('pay_advance_upi', { amount: formatPrice(advanceAmount) })}</span>
+                    <span>Pay {formatPrice(advanceAmount)}</span>
                   </>
                 )}
               </button>

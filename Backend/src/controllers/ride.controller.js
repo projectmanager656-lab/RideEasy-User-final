@@ -1215,9 +1215,14 @@ module.exports.getFare = async (req, res) => {
       return fail(res, req, 400, SERVICE_AREA_ERROR);
     }
 
-    const fareCoordOpts = hasFullClientCoords
-      ? { pickupCoord, dropCoord }
+    const city = pickupCoord
+      ? inferServiceCityKeyOrNearest(pickupCoord.lat, pickupCoord.lng)
       : null;
+    const fareCoordOpts = {
+      pickupCoord,
+      dropCoord,
+      city,
+    };
     const fare = await rideService.getFare(pickup, destination, fareCoordOpts);
     return res.status(200).json({
       ...fare,
@@ -1666,7 +1671,7 @@ module.exports.getRideById = async (req, res) => {
       ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
     let otpPlain = null;
     if (
-      ride.status === "arrived" &&
+      (ride.status === "arrived" || ride.status === "accepted" || ride.advancePaymentStatus === "success") &&
       otpWindowValid &&
       (isPassenger || isAssignedCaptain)
     ) {
@@ -2527,14 +2532,26 @@ module.exports.payMock = async (req, res) => {
       { new: true, runValidators: false },
     ).populate("user", "name phone email").populate("captain");
 
-    const payload = { rideId: ride._id, status: "completed", ride: publicRide(updated), paymentStatus: "success" };
+    const payload = isRemaining
+      ? { rideId: ride._id, status: "completed", ride: publicRide(updated), paymentStatus: "success" }
+      : {
+          rideId: ride._id,
+          status: updated.status,
+          ride: publicRide(updated),
+          paymentStatus: updated.paymentStatus,
+          advancePaymentStatus: "success",
+        };
+
     const uid = userIdOf(updated.user);
     const cid = captainIdOf(updated.captain);
     if (uid) {
       emitToUser(uid, "ride:status-update", payload);
-      emitToUser(uid, RIDE_COMPLETED, payload);
+      if (isRemaining) emitToUser(uid, RIDE_COMPLETED, payload);
     }
-    if (cid) emitToCaptain(cid, "ride:status-update", payload);
+    if (cid) {
+      emitToCaptain(cid, "ride:status-update", payload);
+      if (isRemaining) emitToCaptain(cid, RIDE_COMPLETED, payload);
+    }
 
     return res.status(200).json({
       ...publicRide(updated),

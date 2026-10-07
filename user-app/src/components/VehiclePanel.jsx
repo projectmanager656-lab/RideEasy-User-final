@@ -10,6 +10,8 @@ function fmtDist(km) {
 
 const VehiclePanel = (props) => {
     const { t } = useLanguage()
+    const { fareConfig, fareConfigurations } = useContext(ConfigContext) || {}
+    const rates = fareConfig?.rates || fareConfigurations?.rates || {}
     const fare = props.fare || {}
     const selectedVehicle = props.selectedVehicle || null
     const onSelectVehicle = props.onSelectVehicle || null
@@ -99,7 +101,7 @@ const VehiclePanel = (props) => {
                                     </div>
                                 </div>
                                 <div className="mt-1.5 text-right text-sm">
-                                    <div className="font-semibold text-theme-primary">₹{rates[tier.id]?.baseFare != null ? rates[tier.id].baseFare : '—'}</div>
+                                    <div className="font-semibold text-theme-primary">₹{fare[tier.id] != null ? fare[tier.id] : (rates[tier.id]?.baseFare != null ? rates[tier.id].baseFare : '—')}</div>
                                     <div className="text-[8px] text-theme-secondary">{tier.features?.[0]}</div>
                                     <div className="mt-0.5">
                                         {active ? t('selected') : t('min_away', { count: tier.etaMinutes })}

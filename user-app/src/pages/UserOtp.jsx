@@ -6,7 +6,7 @@ import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '..
 import { useUserData } from '../context/UserContext'
 import { useLanguage } from '../i18n'
 import { useSocket } from '../hooks/useSocket'
-import { readRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
+import { readRideSessionId, writeRideSessionId, clearRideSession, isRideStatusFinal } from '../utils/rideSession'
 import bikeImg from '../assets/Bike-img-ride.png'
 import autoImg from '../assets/Auto-img-ride.png'
 import carImg from '../assets/Car-img-ride.png'
@@ -71,13 +71,12 @@ const UserOtp = () => {
   navigateRef.current = navigate
   const startedHandledRef = useRef(null)
 
-  /**
-   * No ride id → nothing to show. Deliberately does NOT write the id back into
-   * session storage: re-seeding a bare id here is what kept a dead ride "active"
-   * across reloads. The ride is only persisted once the backend confirms it below.
-   */
   useEffect(() => {
-    if (!rideId) navigate('/home', { replace: true })
+    if (!rideId) {
+      navigate('/home', { replace: true })
+    } else {
+      writeRideSessionId(rideId)
+    }
   }, [rideId, navigate])
 
   useEffect(() => {
@@ -101,9 +100,20 @@ const UserOtp = () => {
         const o = stripApiEnvelope(res.data)
         const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
+        if (o._id) writeRideSessionId(o._id)
         if (conf) setRideConfirmation(conf)
         const otpVal = o.otp ?? conf?.otp
-        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        if (otpVal != null && String(otpVal).trim() !== '') {
+          setPassengerOtp(String(otpVal).trim())
+        } else {
+          apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
+            .then((otpRes) => {
+              if (cancelled) return
+              const otpData = stripApiEnvelope(otpRes.data)
+              if (otpData?.otp) setPassengerOtp(String(otpData.otp).trim())
+            })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
     return () => { cancelled = true }

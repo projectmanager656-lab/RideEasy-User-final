@@ -15,6 +15,16 @@ export const ConfigContext = createContext(undefined)
 function isNewer (incoming, current) {
   if (!incoming) return false
   if (!current) return true
+  const nInc = Number(incoming)
+  const nCur = Number(current)
+  if (Number.isFinite(nInc) && Number.isFinite(nCur)) {
+    return nInc > nCur
+  }
+  const dInc = Date.parse(incoming)
+  const dCur = Date.parse(current)
+  if (!Number.isNaN(dInc) && !Number.isNaN(dCur)) {
+    return dInc > dCur
+  }
   return String(incoming) > String(current)
 }
 

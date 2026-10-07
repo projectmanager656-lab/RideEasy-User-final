@@ -1,4 +1,4 @@
-﻿const Service = require('../models/service.model');
+const Service = require('../models/service.model');
 const Pricing = require('../models/pricing.model'); // legacy — read once for migration
 const FareConfiguration = require('../models/fare_configurations.model');
 const { SERVICE_AREAS } = require('../config/serviceAreas');
@@ -196,59 +196,47 @@ async function getServiceAreas() {
 }
 
 async function getRates(cityZone = null) {
-    const zone = String(
-        cityZone || process.env.FARE_CITY_ZONE || 'pune'
-    ).trim().toLowerCase();
-
+    const zone = cityZone ? String(cityZone).trim() : null;
     const now = new Date();
 
-    /**
-     * Step 1: Try finding active fare_configurations for this specific city zone.
-     * This is the primary source — if any active document exists, use it.
-     * Legacy services.rates MUST NOT be used when an active DB config exists.
-     */
-    let configs = await FareConfiguration.find({
-        cityZone: zone,
-        status: 'ACTIVE',
-        effectiveFrom: { $lte: now },
-        $or: [
-            { effectiveTo: null },
-            { effectiveTo: { $gte: now } }
-        ]
-    })
-        .sort({ version: -1 })
-        .lean();
-
+    const vehicleTypes = ['BIKE', 'AUTO', 'CAR'];
+    const out = {};
     let hasActiveConfig = false;
 
-    const out = {};
+    const extractRatesFromDoc = (cfg, vt) => {
+        const baseFare = Number(cfg.baseFare != null ? cfg.baseFare : (cfg.rates?.[vt]?.baseFare ?? 0));
+        const perKm = Number(cfg.distanceRate != null ? cfg.distanceRate : (cfg.rates?.[vt]?.perKm ?? 0));
+        const platformFee = Number(cfg.fees != null ? cfg.fees : (cfg.rates?.[vt]?.platformFee ?? 0));
+        const timeRate = Number(cfg.timeRate || 0);
+        const minimumFare = Number(cfg.minimumFare || 0);
+        const tax = Number(cfg.tax || 0);
+        const version = cfg.version != null ? cfg.version : 1;
 
-    for (const vt of ['BIKE', 'AUTO', 'CAR']) {
-        const cfg = configs.find(
-            (item) => String(item.rideType).toUpperCase() === vt
-        );
-
-        if (cfg && cfg.rates?.[vt]) {
-            out[vt] = {
-                baseFare: Number(cfg.rates[vt].baseFare || 0),
-                perKm: Number(cfg.rates[vt].perKm || 0),
-                platformFee: Number(cfg.rates[vt].platformFee || cfg.fees || 0),
-                timeRate: Number(cfg.timeRate || 0),
-                minimumFare: Number(cfg.minimumFare || 0),
-                tax: Number(cfg.tax || 0),
-                version: Number(cfg.version || 0),
-            };
-            hasActiveConfig = true;
-        }
-    }
+        return {
+            baseFare,
+            perKm,
+            distanceRate: perKm,
+            platformFee,
+            fees: platformFee,
+            timeRate,
+            minimumFare,
+            tax,
+            version,
+            rideType: vt,
+            cityZone: cfg.cityZone || zone,
+            status: cfg.status || 'ACTIVE',
+        };
+    };
 
     /**
-     * Step 2: If no configs for this specific city zone, try finding any active
-     * fare_configurations (global / other city zones). If we find active DB configs,
-     * use them and DO NOT fall back to services.rates or DEFAULT_RATES.
+     * Step 1: If cityZone provided, find active fare_configurations for this specific city zone.
+     * Case-insensitive match on cityZone and rideType.
+     * Latest version wins.
      */
-    if (!hasActiveConfig) {
-        configs = await FareConfiguration.find({
+    if (zone) {
+        const zoneRegex = new RegExp(`^${zone}$`, 'i');
+        const configs = await FareConfiguration.find({
+            cityZone: zoneRegex,
             status: 'ACTIVE',
             effectiveFrom: { $lte: now },
             $or: [
@@ -256,70 +244,54 @@ async function getRates(cityZone = null) {
                 { effectiveTo: { $gte: now } }
             ]
         })
-            .sort({ version: -1 })
+            .sort({ version: -1, updatedAt: -1 })
             .lean();
 
-        for (const vt of ['BIKE', 'AUTO', 'CAR']) {
+        for (const vt of vehicleTypes) {
             const cfg = configs.find(
-                (item) => String(item.rideType).toUpperCase() === vt
+                (item) => String(item.rideType || '').toUpperCase() === vt
             );
-
-            if (cfg && cfg.rates?.[vt]) {
-                out[vt] = {
-                    baseFare: Number(cfg.rates[vt].baseFare || 0),
-                    perKm: Number(cfg.rates[vt].perKm || 0),
-                    platformFee: Number(cfg.rates[vt].platformFee || cfg.fees || 0),
-                    timeRate: Number(cfg.timeRate || 0),
-                    minimumFare: Number(cfg.minimumFare || 0),
-                    tax: Number(cfg.tax || 0),
-                    version: Number(cfg.version || 0),
-                };
+            if (cfg) {
+                out[vt] = extractRatesFromDoc(cfg, vt);
                 hasActiveConfig = true;
             }
         }
     }
 
     /**
-     * Step 3: Emergency fallback — ONLY when NO active fare_configurations exist
-     * in the database at all (not even for other vehicle types / city zones).
-     * Legacy services.rates may be used as a last resort.
+     * Step 2: For any vehicle types not found for this cityZone (or if no cityZone provided),
+     * check active fare_configurations in the database (latest version wins).
      */
-    if (!hasActiveConfig) {
-        const globalDoc = await FareConfiguration.findOne({
-            key: 'global',
+    for (const vt of vehicleTypes) {
+        if (out[vt]) continue;
+
+        const cfg = await FareConfiguration.findOne({
+            rideType: new RegExp(`^${vt}$`, 'i'),
             status: 'ACTIVE',
             effectiveFrom: { $lte: now },
             $or: [
                 { effectiveTo: null },
                 { effectiveTo: { $gte: now } }
             ]
-        }).lean();
+        })
+            .sort({ version: -1, updatedAt: -1 })
+            .lean();
 
-        if (globalDoc && globalDoc.rates) {
-            for (const vt of ['BIKE', 'AUTO', 'CAR']) {
-                if (out[vt]) continue;
-                const cfg = globalDoc.rates[vt];
-                if (cfg) {
-                    out[vt] = {
-                        baseFare: Number(cfg.baseFare || 0),
-                        perKm: Number(cfg.perKm || 0),
-                        platformFee: Number(cfg.platformFee || cfg.fees || 0),
-                        timeRate: Number(cfg.timeRate || 0),
-                        minimumFare: Number(cfg.minimumFare || 0),
-                        tax: Number(cfg.tax || 0),
-                        version: Number(cfg.version || 0),
-                    };
-                }
-            }
+        if (cfg) {
+            out[vt] = extractRatesFromDoc(cfg, vt);
+            hasActiveConfig = true;
         }
     }
 
-    // Final fallback ONLY when absolutely nothing exists in fare_configurations
-    if (Object.keys(out).length < 3) {
+    /**
+     * Step 3: Emergency fallback ONLY when NO active fare_configurations record exists in the DB.
+     * Legacy services.rates must NOT override active fare_configurations.
+     */
+    if (!hasActiveConfig || Object.keys(out).length < 3) {
         const legacy = await ensureServiceDoc();
         const stored = legacy?.rates || {};
 
-        for (const vt of ['BIKE', 'AUTO', 'CAR']) {
+        for (const vt of vehicleTypes) {
             if (out[vt]) continue;
 
             const cfg = stored[vt] || DEFAULT_RATES[vt];
@@ -327,16 +299,20 @@ async function getRates(cityZone = null) {
             out[vt] = {
                 baseFare: Number(cfg.baseFare || 0),
                 perKm: Number(cfg.perKm || 0),
+                distanceRate: Number(cfg.perKm || 0),
                 platformFee: Number(cfg.platformFee || 0),
+                fees: Number(cfg.platformFee || 0),
                 timeRate: Number(cfg.timeRate || 0),
                 minimumFare: Number(cfg.minimumFare || 0),
                 tax: Number(cfg.tax || 0),
                 version: 0,
             };
         }
-        console.log(
-            '[Fare Fallback] No active fare_configurations found. Using legacy services.rates.'
-        );
+        if (!hasActiveConfig) {
+            console.log(
+                '[Fare Fallback] No active fare_configurations found. Using legacy services.rates.'
+            );
+        }
     }
 
     return out;
@@ -460,9 +436,9 @@ async function updateRates(partial) {
          * Find the latest ACTIVE configuration to determine next version
          * and merge with existing fields.
          */
-        previous = await FareConfiguration.findOne({
-            rideType: vt,
-            cityZone: zone,
+        const previous = await FareConfiguration.findOne({
+            rideType: new RegExp(`^${vt}$`, 'i'),
+            cityZone: new RegExp(`^${zone}$`, 'i'),
             status: 'ACTIVE'
         })
             .sort({ version: -1 })
@@ -475,8 +451,8 @@ async function updateRates(partial) {
          */
         await FareConfiguration.updateMany(
             {
-                rideType: vt,
-                cityZone: zone,
+                rideType: new RegExp(`^${vt}$`, 'i'),
+                cityZone: new RegExp(`^${zone}$`, 'i'),
                 status: 'ACTIVE'
             },
             {
@@ -507,31 +483,28 @@ async function updateRates(partial) {
         };
 
         const created = await FareConfiguration.create({
-            key: 'global',
             rideType: vt,
+            cityZone: partial?.cityZone || previous?.cityZone || 'Kolhapur',
             version,
-
-            // Nested rates object (used by /fare-configurations endpoint and getRates())
+            status: 'ACTIVE',
+            effectiveFrom: now,
+            effectiveTo: null,
+            baseFare: Number(merged.baseFare),
+            distanceRate: Number(merged.distanceRate),
+            timeRate: Number(merged.timeRate),
+            minimumFare: Number(merged.minimumFare),
+            fees: Number(merged.fees),
+            tax: Number(merged.tax),
+            registrationFee: Number(merged.registrationFee),
+            minimumWalletBalance: Number(merged.minimumWalletBalance),
             rates: {
                 [vt]: {
                     baseFare: Number(merged.baseFare),
                     perKm: Number(merged.distanceRate),
                     platformFee: Number(merged.fees),
                 },
-                BIKE: { baseFare: 0, perKm: 0, platformFee: 0 },
-                CAR: { baseFare: 0, perKm: 0, platformFee: 0 },
             },
-
-            version,
         });
-
-        // Set the rates for the current vehicle type
-        created.rates[vt] = {
-            baseFare: Number(merged.baseFare),
-            perKm: Number(merged.distanceRate),
-            platformFee: Number(merged.fees),
-        };
-        await created.save();
 
         results[vt] = created.toObject();
     }

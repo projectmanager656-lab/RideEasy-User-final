@@ -48,6 +48,8 @@ module.exports.normalizePaymentMethod = normalizePaymentMethod;
 /** Re-export for backward compatibility — prefer `payment.service`. */
 module.exports.settleRidePaymentIfNeeded = paymentService.settleRidePaymentIfNeeded;
 
+const { inferServiceCityKeyOrNearest } = require('../utils/serviceArea');
+
 /** Pre-ride advance: the one shared 25% split, always recomputed from the stored fare. */
 const { ADVANCE_PERCENTAGE, computeAdvanceSplit } = paymentService;
 module.exports.ADVANCE_PERCENTAGE = ADVANCE_PERCENTAGE;
@@ -69,26 +71,40 @@ async function buildFarePayload(pickup, destination, coordOpts = null) {
     if (!Number.isFinite(distanceKm) || distanceKm <= 0) {
         throw rideError('Distance must be greater than 0', 400);
     }
-    const rates = await pricingService.getRates();
+    const durationMin = Math.round(distanceTime.duration.value / 60);
+    const city = coordOpts?.city || (coordOpts?.pickupCoord ? inferServiceCityKeyOrNearest(coordOpts.pickupCoord.lat, coordOpts.pickupCoord.lng) : null) || 'Kolhapur';
+    const rates = await pricingService.getRates(city);
     const fare = {};
     for (const vt of ALLOWED_VEHICLE_TYPES) {
         const cfg = rates[vt];
         if (!cfg) continue;
-        fare[vt] = Math.round(cfg.baseFare + distanceKm * cfg.perKm + cfg.platformFee);
+        let total = (cfg.baseFare || 0) + (distanceKm * (cfg.perKm ?? cfg.distanceRate ?? 0)) + (cfg.platformFee ?? cfg.fees ?? 0);
+        if (cfg.timeRate) {
+            total += (durationMin * cfg.timeRate);
+        }
+        if (cfg.minimumFare && total < cfg.minimumFare) {
+            total = cfg.minimumFare;
+        }
+        if (cfg.tax && cfg.tax > 0) {
+            total += (total * cfg.tax) / 100;
+        }
+        fare[vt] = Math.round(total);
     }
     console.log(
-        '[FARE API] pickup=%j drop=%j distanceKm=%s pricingSource=%s calculatedFare=%j',
+        '[FARE API] city=%s pickup=%j drop=%j distanceKm=%s pricingSource=%s calculatedFare=%j',
+        city,
         pickup,
         destination,
         Math.round(distanceKm * 100) / 100,
-        'services.rates(key=global)',
+        'fare_configurations',
         fare,
     );
     return {
         distanceKm: Math.round(distanceKm * 100) / 100,
         distanceMeters: distanceTime.distance.value,
         durationSeconds: distanceTime.duration.value,
-        durationMinutes: Math.round(distanceTime.duration.value / 60),
+        durationMinutes: durationMin,
+        city,
         ...fare,
     };
 }

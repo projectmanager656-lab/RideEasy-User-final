@@ -462,20 +462,6 @@ export default function ConfirmPickup() {
                     delivered
                 )
 
-                /*
-                 * IMPORTANT:
-                 *
-                 * Only show this warning when a driver was actually
-                 * matched but zero live Socket.IO deliveries occurred.
-                 *
-                 * Do NOT show it when matched === 0.
-                 */
-                if (matched > 0 && delivered === 0) {
-                    console.warn(
-                     '[ride request] no driver received the offer over the socket (matched=%d) — drivers can still pick it up from the /rides/pending poll',
-                 matched
-    )
-}
 
                 /*
                  * Debug information without exposing authentication

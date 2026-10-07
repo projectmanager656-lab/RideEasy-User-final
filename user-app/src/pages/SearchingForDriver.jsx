@@ -270,6 +270,7 @@ const SearchingForDriver = () => {
         const otpVal = o.otp ?? conf?.otp
         if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
         setRideResolved(true)
+        writeRideSessionId(o._id || rideId)
         console.info('[ride socket] ride confirmed', { rideId, status })
       })
       .catch((err) => {
@@ -297,16 +298,17 @@ const SearchingForDriver = () => {
       const currentRid = rideIdRef.current != null ? String(rideIdRef.current) : ''
       const eventRid = rideDoc?._id != null ? String(rideDoc._id) : ''
       console.info('[ride socket] event', { event: RIDE_ACCEPTED, rideId: eventRid || currentRid })
-      if (!rideDoc || eventRid !== currentRid) {
-        if (eventRid && currentRid && eventRid !== currentRid) {
-          console.info('[ride socket] ignored stale ride event', { event: RIDE_ACCEPTED, eventRideId: eventRid, currentRideId: currentRid })
-        }
+      if (eventRid && currentRid && eventRid !== currentRid) {
+        console.info('[ride socket] ignored stale ride event', { event: RIDE_ACCEPTED, eventRideId: eventRid, currentRideId: currentRid })
         return
       }
-      setRide((prev) => ({ ...(prev || {}), ...rideDoc }))
-      if (payload?.confirmation) setRideConfirmation((prev) => ({ ...(prev || {}), ...payload.confirmation }))
-      const otpVal = payload?.confirmation?.otp ?? payload?.otp
-      if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      const nextRide = { ...(ride || {}), ...(rideDoc || {}), status: 'accepted', _id: currentRid || eventRid || rideDoc?._id }
+      const nextConf = payload?.confirmation || rideConfirmation
+      const nextOtp = payload?.confirmation?.otp ?? payload?.otp ?? passengerOtp
+      setRide(nextRide)
+      if (nextConf) setRideConfirmation(nextConf)
+      if (nextOtp) setPassengerOtp(nextOtp)
+      writeRideSessionId(nextRide._id || currentRid)
     }
 
     const handleStatusUpdate = (data) => {
@@ -326,6 +328,18 @@ const SearchingForDriver = () => {
           ? { ...data.ride, status: 'started' }
           : { _id: currentRid, status: 'started' }
         navigateRef.current('/riding', { state: { ride: nextRide } })
+        return
+      }
+      if (data.status === 'accepted' || data.status === 'arrived') {
+        const nextRide = data.ride
+          ? { ...(ride || {}), ...data.ride, status: data.status }
+          : { ...(ride || {}), _id: currentRid, status: data.status }
+        const nextConf = data.confirmation || rideConfirmation
+        const nextOtp = data.confirmation?.otp ?? data.otp ?? passengerOtp
+        setRide(nextRide)
+        if (nextConf) setRideConfirmation(nextConf)
+        if (nextOtp) setPassengerOtp(nextOtp)
+        writeRideSessionId(nextRide._id || currentRid)
         return
       }
       /**
@@ -411,11 +425,22 @@ const SearchingForDriver = () => {
    */
   useEffect(() => {
     if (!rideId || passengerOtp) return
-    if (normalizeStatus(ride?.status) !== 'arrived') return
+    const st = normalizeStatus(ride?.status)
+    if (st !== 'accepted' && st !== 'arrived') return
     let cancelled = false
-    apiClient.get(`/rides/${rideId}`, withAuth())
+    apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
       .then((res) => {
         if (cancelled) return
+        const d = stripApiEnvelope(res.data)
+        const otpVal = d?.otp || d?.passengerOtp
+        if (otpVal != null && String(otpVal).trim() !== '') {
+          setPassengerOtp(String(otpVal).trim())
+          return
+        }
+        return apiClient.get(`/rides/${rideId}`, withAuth())
+      })
+      .then((res) => {
+        if (cancelled || !res) return
         const o = stripApiEnvelope(res.data)
         const conf = o.confirmation && typeof o.confirmation === 'object' ? o.confirmation : null
         if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
@@ -442,7 +467,7 @@ const SearchingForDriver = () => {
       return
     }
     const isActive = !st || st === 'searching'
-    const intervalMs = isActive ? 8000 : 5000
+    const intervalMs = isActive ? 2000 : 3000
 
     let cancelled = false
     const tick = async () => {
@@ -465,6 +490,16 @@ const SearchingForDriver = () => {
           if (startedHandledRef.current === rideId) return
           startedHandledRef.current = rideId
           navigateRef.current('/riding', { state: { ride: { ...(o || {}), status: 'started' } } })
+          return
+        }
+        if (dst === 'accepted' || dst === 'arrived') {
+          writeRideSessionId(o._id || rideId)
+          setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id, status: dst }))
+          const conf = o.confirmation && typeof o.confirmation === 'object' ? { ...o.confirmation } : null
+          if (conf) setRideConfirmation((prev) => ({ ...(prev || {}), ...conf }))
+          applyGeoFromRide(o)
+          const otpVal = o.otp ?? conf?.otp
+          if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
           return
         }
         setRide((prev) => ({ ...(prev || {}), ...o, _id: o._id || prev?._id }))
@@ -647,7 +682,7 @@ const SearchingForDriver = () => {
   const remainingAmount = Number(ride?.remainingAmount) > 0
     ? Number(ride.remainingAmount)
     : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
-  const advancePaid = ride?.advancePaymentStatus === 'success'
+  const advancePaid = ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success' || advanceAmount <= 0
   /** UPI / Online rides must clear the advance before the trip can start — enforced by the backend. */
   const advanceRequiredToStart = ride?.paymentMethod === 'UPI' || ride?.paymentMethod === 'Online'
   /** Advance section appears once a driver is assigned — applies to every
@@ -678,17 +713,43 @@ const SearchingForDriver = () => {
     if (!rideId || advanceInFlightRef.current || advancePaid) return
     setAdvancePayError('')
 
+    const fetchOtpOnPaid = async () => {
+      try {
+        const otpRes = await apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
+        const otpData = stripApiEnvelope(otpRes.data)
+        const otpVal = otpData?.otp || otpData?.passengerOtp
+        if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+      } catch {
+        // Fallback to GET /rides/:id
+        try {
+          const rRes = await apiClient.get(`/rides/${rideId}`, withAuth())
+          const rData = stripApiEnvelope(rRes.data)
+          const conf = rData.confirmation && typeof rData.confirmation === 'object' ? rData.confirmation : null
+          const otpVal = rData.otp ?? conf?.otp
+          if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
+        } catch {}
+      }
+    }
+
     /** Wallet — existing rail, unchanged. */
     if (ride?.paymentMethod === 'Wallet') {
       setPayingAdvance(true)
       try {
         const res = await apiClient.post('/rides/pay-wallet', { rideId, part: 'advance' }, withAuth())
         const o = stripApiEnvelope(res.data)
-        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+        const updated = o?.ride || o
+        if (updated) {
+          setRide((prev) => ({ ...(prev || {}), ...updated, advancePaymentStatus: 'success', _id: updated._id || prev?._id }))
+        } else {
+          setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
+        }
+        setPayingAdvance(false)
+        advanceInFlightRef.current = false
+        if (!passengerOtp) fetchOtpOnPaid()
       } catch (err) {
         setAdvancePayError(formatApiError(err))
-      } finally {
         setPayingAdvance(false)
+        advanceInFlightRef.current = false
       }
       return
     }
@@ -703,11 +764,19 @@ const SearchingForDriver = () => {
           withAuth(),
         )
         const o = stripApiEnvelope(res.data)
-        if (o?.ride) setRide((prev) => ({ ...(prev || {}), ...o.ride, _id: o.ride._id || prev?._id }))
+        const updated = o?.ride || o
+        if (updated) {
+          setRide((prev) => ({ ...(prev || {}), ...updated, advancePaymentStatus: 'success', _id: updated._id || prev?._id }))
+        } else {
+          setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
+        }
+        setPayingAdvance(false)
+        advanceInFlightRef.current = false
+        if (!passengerOtp) fetchOtpOnPaid()
       } catch (err) {
         setAdvancePayError(formatApiError(err))
-      } finally {
         setPayingAdvance(false)
+        advanceInFlightRef.current = false
       }
       return
     }
@@ -732,9 +801,11 @@ const SearchingForDriver = () => {
 
       /** The backend already verified this advance — nothing left to charge. */
       if (order?.alreadyPaid) {
-        if (order.ride) setRide((prev) => ({ ...(prev || {}), ...order.ride, _id: order.ride._id || prev?._id }))
+        if (order.ride) setRide((prev) => ({ ...(prev || {}), ...order.ride, advancePaymentStatus: 'success', _id: order.ride._id || prev?._id }))
+        else setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
         advanceInFlightRef.current = false
         setPayingAdvance(false)
+        if (!passengerOtp) fetchOtpOnPaid()
         return
       }
 
@@ -751,7 +822,7 @@ const SearchingForDriver = () => {
         amount: Math.round(orderAmount * 100),
         currency: order?.currency || 'INR',
         name: 'RideEasy',
-        description: 'RideEasy 25% Ride Advance',
+        description: 'RideEasy Advance Payment',
         notes: { rideId: String(rideId), paymentType: 'ride_fare', part: 'advance' },
         /** UPI only, so the gateway opens the installed UPI app / app chooser. */
         method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
@@ -772,10 +843,16 @@ const SearchingForDriver = () => {
             )
             const verified = stripApiEnvelope(verifyRes.data)
             const verifiedRide = verified?.ride || verified
-            if (verifiedRide?._id) setRide((prev) => ({ ...(prev || {}), ...verifiedRide }))
+            if (verifiedRide?._id) {
+              setRide((prev) => ({ ...(prev || {}), ...verifiedRide, advancePaymentStatus: 'success' }))
+            } else {
+              setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
+            }
+            advanceInFlightRef.current = false
+            setPayingAdvance(false)
+            if (!passengerOtp) fetchOtpOnPaid()
           } catch (err) {
             setAdvancePayError(formatApiError(err))
-          } finally {
             advanceInFlightRef.current = false
             setPayingAdvance(false)
           }
@@ -993,18 +1070,35 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Share PIN / OTP — shown once a driver accepts (ready to share with the driver); matched to the accepted-state sync and the LookingForDriver sheet */}
-            {!isSearching && passengerOtp && (
-              <div className="mt-4 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
-                  <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
-                  {t('share_pin')}
-                </p>
-                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title={t('otp_share_instruction')}>
-                  {passengerOtp}
-                </p>
-                <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
-              </div>
+            {/* Share PIN / OTP — shown once a driver accepts; unlocked once advance is verified */}
+            {!isSearching && (
+              advancePaid ? (
+                passengerOtp ? (
+                  <div className="mt-4 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
+                      <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
+                      {t('share_pin')}
+                    </p>
+                    <p className="mt-1 font-mono text-3xl font-bold tracking-[0.25em] text-brand-yellow select-all" title={t('otp_share_instruction')}>
+                      {passengerOtp}
+                    </p>
+                    <p className="mt-1 text-xs text-theme-muted">{t('share_pin_hint')}</p>
+                  </div>
+                ) : null
+              ) : (
+                <div className="mt-4 rounded-xl border-2 border-dashed border-brand-yellow/40 bg-brand-yellow/5 px-4 py-3 text-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">
+                    <i className="ri-shield-keyhole-line mr-1 align-[-1px] text-brand-yellow" aria-hidden />
+                    {t('share_pin')}
+                  </p>
+                  <p className="mt-1 font-mono text-2xl font-bold tracking-[0.25em] text-theme-muted/50 select-none">
+                    • • • • • •
+                  </p>
+                  <p className="mt-1 text-xs text-brand-yellow font-medium">
+                    {t('advance_required_to_start') || 'Pay advance below to unlock Ride Start OTP'}
+                  </p>
+                </div>
+              )
             )}
 
             {/* Card 1 — Assigned / arrived: driver + vehicle details */}

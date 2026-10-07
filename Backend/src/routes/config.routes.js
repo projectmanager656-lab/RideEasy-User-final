@@ -70,11 +70,10 @@ router.get('/service-areas', async (req, res) => {
  */
 router.get('/fare', async (req, res) => {
     try {
-        const [rates, doc] = await Promise.all([
-            pricingService.getRates(),
-            pricingService.ensureServiceDoc(),
-        ]);
-        const version = doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null;
+        const cityZone = req.query.city || req.query.cityZone || null;
+        const rates = await pricingService.getRates(cityZone);
+        const versions = Object.values(rates).map((r) => r.version).filter((v) => v != null);
+        const version = versions.length > 0 ? String(Math.max(...versions.map(Number).filter(Number.isFinite))) : '1';
         res.set('Cache-Control', 'public, max-age=60');
         return res.status(200).json({
             success: true,
@@ -97,34 +96,14 @@ router.get('/fare', async (req, res) => {
 
 /**
  * Public fare configurations for clients (no auth).
- * Serves the fare config document from the `fare_configurations` collection.
- * Falls back to default rates if no document exists yet.
+ * Serves the active fare configurations directly from pricingService.getRates.
  */
 router.get('/fare-configurations', async (req, res) => {
     try {
-        // Try to find the global configuration document
-        let doc = await FareConfiguration.findOne({ key: 'global' }).lean();
-
-        // If no global doc, try to find any active configuration
-        if (!doc) {
-            doc = await FareConfiguration.findOne({
-                status: 'ACTIVE',
-                effectiveFrom: { $lte: new Date() },
-                $or: [
-                    { effectiveTo: null },
-                    { effectiveTo: { $gte: new Date() } }
-                ]
-            }).lean();
-        }
-
-        const rates = doc && doc.rates
-            ? { ...doc.rates }
-            : {
-                BIKE: { baseFare: 15, perKm: 8, platformFee: 5 },
-                AUTO: { baseFare: 25, perKm: 11, platformFee: 5 },
-                CAR: { baseFare: 40, perKm: 12, platformFee: 5 },
-              };
-        const version = doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null;
+        const cityZone = req.query.city || req.query.cityZone || null;
+        const rates = await pricingService.getRates(cityZone);
+        const versions = Object.values(rates).map((r) => r.version).filter((v) => v != null);
+        const version = versions.length > 0 ? String(Math.max(...versions.map(Number).filter(Number.isFinite))) : '1';
         res.set('Cache-Control', 'public, max-age=60');
         return res.status(200).json({
             success: true,

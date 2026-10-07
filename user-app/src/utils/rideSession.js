@@ -123,7 +123,8 @@ export function isRideGenuinelyActive (ride, now = Date.now()) {
  */
 export function rideRouteForStatus (status) {
   const st = normalizeRideStatus(status)
-  if (st === 'searching' || st === 'accepted' || st === 'arrived') return '/searching-for-driver'
+  if (st === 'searching') return '/searching-for-driver'
+  if (st === 'accepted' || st === 'arrived') return '/searching-for-driver'
   if (st === 'started' || st === 'completed') return '/riding'
   /* Reserved or finished: the upcoming/history list owns it. */
   if (st === 'scheduled' || st === 'cancelled') return '/history'

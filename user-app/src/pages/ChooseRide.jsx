@@ -75,7 +75,7 @@ const ChooseRide = () => {
     const navigate = useNavigate()
     const location = useLocation()
     const { t } = useLanguage()
-    const { fareConfig } = useContext(ConfigContext)
+    const { fareConfig, fareConfigurations } = useContext(ConfigContext) || {}
     const state = location.state || {}
 
     const pickupCoords = normalizeCoordinates(state.pickupCoords || state.pickupCoordinate || state.pickupSelection)
@@ -295,7 +295,7 @@ const ChooseRide = () => {
      * open → recalculate the displayed estimate without a refresh. The first
      * version seen is the initial load, which the mount effect above handles.
      */
-    const fareConfigVersion = fareConfig?.version || null
+    const fareConfigVersion = fareConfig?.version || fareConfigurations?.version || null
     const appliedFareVersionRef = useRef(null)
     const initialFareVersionSeenRef = useRef(false)
     useEffect(() => {
@@ -353,21 +353,22 @@ const ChooseRide = () => {
 
     const tiers = useMemo(() => {
         const hasFare = fare && Object.keys(fare).length > 0
+        const activeRates = fareConfig?.rates || fareConfigurations?.rates || {}
         return RIDE_OPTIONS.map((o) => {
             const t = o.tier
             const vehicleType = t.vehicleType
             let backendPrice
             if (hasFare && fare[vehicleType] != null) {
                 backendPrice = fare[vehicleType]
-            } else if (fareConfig?.rates?.[vehicleType] != null) {
-                backendPrice = fareConfig.rates[vehicleType].baseFare
+            } else if (activeRates[vehicleType]?.baseFare != null) {
+                backendPrice = activeRates[vehicleType].baseFare
             } else {
                 backendPrice = null
             }
             const price = backendPrice != null && Number(backendPrice) >= 0 ? backendPrice : null
             return { ...t, logo: o.logo, price }
         })
-    }, [ fare ])
+    }, [ fare, fareConfig, fareConfigurations ])
 
     const cheapest = useMemo(() => {
         const priced = tiers.filter((t) => t.price != null && Number(t.price) > 0)

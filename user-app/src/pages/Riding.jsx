@@ -28,8 +28,20 @@ const Riding = () => {
         const id = readRideSessionId()
         return id ? { _id: id } : null
     })
-    const [pickupCoords, setPickupCoords] = useState(null)
-    const [dropCoords, setDropCoords] = useState(null)
+    const [pickupCoords, setPickupCoords] = useState(() => {
+        const c = initialRide?.pickup?.coordinates
+        if (Array.isArray(c) && c.length === 2 && Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[0]))) {
+            return { lat: Number(c[1]), lng: Number(c[0]) }
+        }
+        return location.state?.pickupCoords || null
+    })
+    const [dropCoords, setDropCoords] = useState(() => {
+        const c = initialRide?.drop?.coordinates
+        if (Array.isArray(c) && c.length === 2 && Number.isFinite(Number(c[1])) && Number.isFinite(Number(c[0]))) {
+            return { lat: Number(c[1]), lng: Number(c[0]) }
+        }
+        return location.state?.dropCoords || null
+    })
     const [driverCoords, setDriverCoords] = useState(() => {
         const loc = initialRide?.captain?.location
         if (loc?.coordinates?.length === 2) {
@@ -189,7 +201,7 @@ const Riding = () => {
     }, [socket, ride?.status])
 
     useEffect(() => {
-        // normalizeLocationText tolerates both string and { address } locations.
+        if (pickupCoords) return
         const address = normalizeLocationText(ride?.pickupLocation, '')
         if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
@@ -198,9 +210,10 @@ const Riding = () => {
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setPickupCoords({ lat: res.data.lat, lng: res.data.lng })
         }).catch(() => {})
-    }, [ride?.pickupLocation])
+    }, [ride?.pickupLocation, pickupCoords])
 
     useEffect(() => {
+        if (dropCoords) return
         const address = normalizeLocationText(ride?.dropLocation, '')
         if (!address) return
         axios.get(`${API_BASE_URL}/maps/get-coordinates`, {
@@ -209,7 +222,7 @@ const Riding = () => {
         }).then((res) => {
             if (res.data?.lat != null && res.data?.lng != null) setDropCoords({ lat: res.data.lat, lng: res.data.lng })
         }).catch(() => {})
-    }, [ride?.dropLocation])
+    }, [ride?.dropLocation, dropCoords])
 
     useEffect(() => {
         if (!ride?._id || ride?.status === 'completed') return
