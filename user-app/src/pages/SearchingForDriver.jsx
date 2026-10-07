@@ -50,7 +50,7 @@ function normalizeStatus (s) {
 function formatPrice (n) {
   const v = Number(n)
   if (!Number.isFinite(v) || v <= 0) return null
-  return `₹${v.toFixed(2)}`
+  return Number.isInteger(v) ? `₹${v}` : `₹${v.toFixed(2)}`
 }
 
 /**
@@ -824,9 +824,11 @@ const SearchingForDriver = () => {
         name: 'RideEasy',
         description: 'RideEasy Advance Payment',
         notes: { rideId: String(rideId), paymentType: 'ride_fare', part: 'advance' },
-        /** UPI only, so the gateway opens the installed UPI app / app chooser. */
-        method: { upi: true, card: false, netbanking: false, wallet: false, emi: false, paylater: false },
-        config: { display: ADVANCE_UPI_DISPLAY },
+        prefill: {
+          name: (currentUser?.fullName ? `${currentUser.fullName.firstName || ''} ${currentUser.fullName.lastName || ''}`.trim() : currentUser?.name) || '',
+          contact: currentUser?.phone || '',
+          email: currentUser?.email || '',
+        },
         theme: { color: '#FFD000' },
         handler: async (paymentResponse) => {
           try {

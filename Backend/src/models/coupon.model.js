@@ -22,12 +22,15 @@ const couponSchema = new mongoose.Schema({
     expiresAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
     active: { type: Boolean, default: true },
+    status: { type: String, default: 'Active' },
+    minRide: { type: Number, default: 0, min: 0 },
+    usage: { type: Number, default: 0, min: 0 },
     eligibility: { type: String, default: 'All eligible users', maxlength: 240 },
     usageLimit: { type: Number, default: null, min: 0 },
     usedCount: { type: Number, default: 0, min: 0 },
     isNewUserOnly: { type: Boolean, default: false },
     creditExcessToWallet: { type: Boolean, default: true },
-}, { timestamps: true, collection: 'coupons' });
+}, { timestamps: true, collection: 'coupons', strict: false });
 
 couponSchema.index({ isActive: 1, validUntil: 1 });
 

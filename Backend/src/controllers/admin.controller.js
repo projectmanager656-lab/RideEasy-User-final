@@ -659,8 +659,8 @@ module.exports.updatePricing = async (req, res) => {
     // succeeded — clients compare `version` and ignore stale events.
     if (rates && typeof rates === "object") {
       emitToAll(FARE_CONFIG_UPDATED, {
-        version: svcDoc?.updatedAt ? new Date(svcDoc.updatedAt).toISOString() : null,
-        updatedAt: svcDoc?.updatedAt ? new Date(svcDoc.updatedAt).toISOString() : null,
+        version: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         rates: mergedRates,
       });
     }
@@ -680,6 +680,99 @@ module.exports.updatePricing = async (req, res) => {
       500,
       err.message || "Pricing update failed",
     );
+  }
+};
+
+module.exports.getFareConfigurations = async (req, res) => {
+  try {
+    const FareConfiguration = require("../models/fare_configurations.model");
+    const cityZone = req.query.city || req.query.cityZone || null;
+    const query = cityZone ? { cityZone: new RegExp(`^${cityZone}$`, "i") } : {};
+    const configs = await FareConfiguration.find(query).sort({ cityZone: 1, rideType: 1, version: -1 }).lean();
+    const rates = await pricingService.getRates(cityZone);
+    return ok(res, req, 200, "Fare configurations", { fareConfigurations: configs, rates });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to get fare configurations");
+  }
+};
+
+module.exports.updateFareConfigurations = async (req, res) => {
+  try {
+    const FareConfiguration = require("../models/fare_configurations.model");
+    const body = req.body || {};
+    const cityZone = body.cityZone || body.city || "Kolhapur";
+    let items = [];
+    if (Array.isArray(body)) {
+      items = body;
+    } else if (Array.isArray(body.fareConfigurations)) {
+      items = body.fareConfigurations;
+    } else if (body.rates && typeof body.rates === "object") {
+      for (const [vt, r] of Object.entries(body.rates)) {
+        items.push({ rideType: vt, cityZone, ...r });
+      }
+    } else if (body.rideType) {
+      items = [body];
+    }
+
+    const updated = [];
+    for (const item of items) {
+      const vt = String(item.rideType || "").trim().toUpperCase();
+      if (!vt) continue;
+      const cz = item.cityZone || cityZone || "Kolhapur";
+      const now = new Date();
+      const prev = await FareConfiguration.findOne({
+        rideType: new RegExp(`^${vt}$`, "i"),
+        status: { $regex: /^active$/i },
+      }).sort({ version: -1 }).lean();
+
+      const version = (Number(prev?.version) || 0) + 1;
+      await FareConfiguration.updateMany(
+        {
+          rideType: new RegExp(`^${vt}$`, "i"),
+          status: { $regex: /^active$/i },
+        },
+        { $set: { status: "INACTIVE", effectiveTo: now } }
+      );
+
+      const created = await FareConfiguration.create({
+        rideType: vt,
+        cityZone: cz,
+        version,
+        status: "ACTIVE",
+        effectiveFrom: item.effectiveFrom ? new Date(item.effectiveFrom) : now,
+        effectiveTo: item.effectiveTo ? new Date(item.effectiveTo) : null,
+        baseFare: Number(item.baseFare != null ? item.baseFare : (prev?.baseFare || 0)),
+        distanceRate: Number(item.distanceRate != null ? item.distanceRate : (item.perKm != null ? item.perKm : (prev?.distanceRate || 0))),
+        timeRate: Number(item.timeRate != null ? item.timeRate : (item.perMin != null ? item.perMin : (prev?.timeRate || 0))),
+        minimumFare: Number(item.minimumFare != null ? item.minimumFare : (item.minFare != null ? item.minFare : (prev?.minimumFare || 0))),
+        fees: Number(item.fees != null ? item.fees : (item.platformFee != null ? item.platformFee : (prev?.fees || 0))),
+        tax: Number(item.tax != null ? item.tax : (prev?.tax || 0)),
+        registrationFee: Number(item.registrationFee != null ? item.registrationFee : (prev?.registrationFee || 0)),
+        minimumWalletBalance: Number(item.minimumWalletBalance != null ? item.minimumWalletBalance : (prev?.minimumWalletBalance || 0)),
+        rates: {
+          [vt]: {
+            baseFare: Number(item.baseFare != null ? item.baseFare : (prev?.baseFare || 0)),
+            perKm: Number(item.distanceRate != null ? item.distanceRate : (item.perKm != null ? item.perKm : (prev?.distanceRate || 0))),
+            platformFee: Number(item.fees != null ? item.fees : (item.platformFee != null ? item.platformFee : (prev?.fees || 0))),
+          },
+        },
+        changedBy: req.admin?._id || null,
+      });
+      updated.push(created.toObject());
+    }
+
+    const rates = await pricingService.getRates(cityZone);
+    const nowIso = new Date().toISOString();
+    emitToAll(FARE_CONFIG_UPDATED, {
+      version: nowIso,
+      updatedAt: nowIso,
+      rates,
+      cityZone,
+    });
+
+    return ok(res, req, 200, "Fare configurations updated", { fareConfigurations: updated, rates });
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to update fare configurations");
   }
 };
 

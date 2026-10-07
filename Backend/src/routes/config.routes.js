@@ -72,8 +72,7 @@ router.get('/fare', async (req, res) => {
     try {
         const cityZone = req.query.city || req.query.cityZone || null;
         const rates = await pricingService.getRates(cityZone);
-        const versions = Object.values(rates).map((r) => r.version).filter((v) => v != null);
-        const version = versions.length > 0 ? String(Math.max(...versions.map(Number).filter(Number.isFinite))) : '1';
+        const version = new Date().toISOString();
         res.set('Cache-Control', 'public, max-age=60');
         return res.status(200).json({
             success: true,
@@ -102,8 +101,7 @@ router.get('/fare-configurations', async (req, res) => {
     try {
         const cityZone = req.query.city || req.query.cityZone || null;
         const rates = await pricingService.getRates(cityZone);
-        const versions = Object.values(rates).map((r) => r.version).filter((v) => v != null);
-        const version = versions.length > 0 ? String(Math.max(...versions.map(Number).filter(Number.isFinite))) : '1';
+        const version = new Date().toISOString();
         res.set('Cache-Control', 'public, max-age=60');
         return res.status(200).json({
             success: true,

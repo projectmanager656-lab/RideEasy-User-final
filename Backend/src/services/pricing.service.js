@@ -228,6 +228,25 @@ async function getRates(cityZone = null) {
         };
     };
 
+    const activeDateQuery = {
+        $and: [
+            {
+                $or: [
+                    { effectiveFrom: null },
+                    { effectiveFrom: { $exists: false } },
+                    { effectiveFrom: { $lte: now } },
+                ],
+            },
+            {
+                $or: [
+                    { effectiveTo: null },
+                    { effectiveTo: { $exists: false } },
+                    { effectiveTo: { $gte: now } },
+                ],
+            },
+        ],
+    };
+
     /**
      * Step 1: If cityZone provided, find active fare_configurations for this specific city zone.
      * Case-insensitive match on cityZone and rideType.
@@ -237,12 +256,8 @@ async function getRates(cityZone = null) {
         const zoneRegex = new RegExp(`^${zone}$`, 'i');
         const configs = await FareConfiguration.find({
             cityZone: zoneRegex,
-            status: 'ACTIVE',
-            effectiveFrom: { $lte: now },
-            $or: [
-                { effectiveTo: null },
-                { effectiveTo: { $gte: now } }
-            ]
+            status: { $regex: /^active$/i },
+            ...activeDateQuery,
         })
             .sort({ version: -1, updatedAt: -1 })
             .lean();
@@ -267,12 +282,8 @@ async function getRates(cityZone = null) {
 
         const cfg = await FareConfiguration.findOne({
             rideType: new RegExp(`^${vt}$`, 'i'),
-            status: 'ACTIVE',
-            effectiveFrom: { $lte: now },
-            $or: [
-                { effectiveTo: null },
-                { effectiveTo: { $gte: now } }
-            ]
+            status: { $regex: /^active$/i },
+            ...activeDateQuery,
         })
             .sort({ version: -1, updatedAt: -1 })
             .lean();
@@ -416,8 +427,8 @@ async function updateRates(partial) {
     const zone = String(
         partial?.cityZone ||
         process.env.FARE_CITY_ZONE ||
-        'pune'
-    ).trim().toLowerCase();
+        'Kolhapur'
+    ).trim();
 
     const vehicleTypes = ['BIKE', 'AUTO', 'CAR'];
 
@@ -438,8 +449,7 @@ async function updateRates(partial) {
          */
         const previous = await FareConfiguration.findOne({
             rideType: new RegExp(`^${vt}$`, 'i'),
-            cityZone: new RegExp(`^${zone}$`, 'i'),
-            status: 'ACTIVE'
+            status: { $regex: /^active$/i },
         })
             .sort({ version: -1 })
             .lean();
@@ -447,19 +457,18 @@ async function updateRates(partial) {
         const version = Number(previous?.version || 0) + 1;
 
         /*
-         * Close the currently active configuration.
+         * Close the currently active configuration for this rideType.
          */
         await FareConfiguration.updateMany(
             {
                 rideType: new RegExp(`^${vt}$`, 'i'),
-                cityZone: new RegExp(`^${zone}$`, 'i'),
-                status: 'ACTIVE'
+                status: { $regex: /^active$/i },
             },
             {
                 $set: {
                     status: 'INACTIVE',
-                    effectiveTo: now
-                }
+                    effectiveTo: now,
+                },
             }
         );
 

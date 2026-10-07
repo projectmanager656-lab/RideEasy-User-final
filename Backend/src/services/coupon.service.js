@@ -33,8 +33,15 @@ function normalizeCoupon(raw) {
     const type = String(raw.discountType || '').toLowerCase();
     const validUntil = toDate(raw.validUntil) || toDate(raw.expiresAt);
     const validFrom = toDate(raw.validFrom);
-    const local = raw.minFare != null ? raw.minFare : raw.minimumFare;
-    const isActive = raw.isActive !== undefined ? raw.isActive !== false : raw.active !== false;
+    const local = raw.minFare != null ? raw.minFare : (raw.minimumFare != null ? raw.minimumFare : raw.minRide);
+    let isActive = true;
+    if (raw.status != null) {
+        isActive = /^(active|enabled)$/i.test(String(raw.status).trim());
+    } else if (raw.isActive !== undefined) {
+        isActive = Boolean(raw.isActive);
+    } else if (raw.active !== undefined) {
+        isActive = Boolean(raw.active);
+    }
     return {
         _id: raw._id,
         code: String(raw.code || '').toUpperCase(),
@@ -51,7 +58,7 @@ function normalizeCoupon(raw) {
         // Alias kept so the existing UI can read `expiresAt` unchanged.
         expiresAt: validUntil,
         usageLimit: raw.usageLimit != null ? Number(raw.usageLimit) : null,
-        usedCount: Number(raw.usedCount || 0),
+        usedCount: Number(raw.usedCount != null ? raw.usedCount : (raw.usage || 0)),
         // Only an explicit flag (or an explicit eligibility rule) makes a coupon
         // first-ride-only — never the marketing copy in title/description.
         isNewUserOnly: Boolean(
@@ -80,18 +87,42 @@ function computeNominalDiscount(coupon, fare) {
     return Math.max(0, round2(nominal));
 }
 
-/** Active + within validity window, matching both field namings. */
+/** Active + within validity window, matching all status/active/date field variants. */
 function availabilityFilter(now) {
     return {
         $and: [
-            { $or: [ { isActive: true }, { active: true } ] },
-            { $or: [ { validUntil: null }, { validUntil: { $gt: now } }, { expiresAt: null }, { expiresAt: { $gt: now } } ] },
+            {
+                $or: [
+                    { isActive: true },
+                    { active: true },
+                    { status: { $regex: /^active$/i } },
+                    {
+                        $and: [
+                            { isActive: { $ne: false } },
+                            { active: { $ne: false } },
+                            { status: { $nin: ['Inactive', 'inactive', 'Disabled', 'disabled', 'Expired', 'expired'] } }
+                        ]
+                    }
+                ],
+            },
+            {
+                $or: [
+                    { validUntil: null },
+                    { validUntil: { $exists: false } },
+                    { validUntil: { $gt: now } },
+                    { expiresAt: null },
+                    { expiresAt: { $exists: false } },
+                    { expiresAt: { $gt: now } },
+                ],
+            },
         ],
     };
 }
 
 async function listAvailableCoupons(userId) {
     const now = new Date();
+    await releaseStaleCouponReservations({ now }).catch(() => {});
+
     const rows = await Coupon.find(availabilityFilter(now)).sort({ createdAt: -1 }).lean();
     const list = rows
         .map(normalizeCoupon)
@@ -99,10 +130,24 @@ async function listAvailableCoupons(userId) {
 
     let usedIds = new Set();
     if (userId && list.length) {
-        const used = await CouponUsage.find({ userId, couponId: { $in: list.map((c) => c._id) } })
-            .select('couponId')
-            .lean();
-        usedIds = new Set(used.map((u) => String(u.couponId)));
+        const usages = await CouponUsage.find({
+            userId,
+            couponId: { $in: list.map((c) => c._id) },
+        }).lean();
+
+        for (const u of usages) {
+            if (u.settled === true) {
+                usedIds.add(String(u.couponId));
+            } else if (u.rideId) {
+                const ride = await rideModel.findById(u.rideId).select('status').lean();
+                if (!ride || ride.status === 'cancelled' || ride.status === 'completed') {
+                    // Release dangling reservation so cancelled ride does not mark coupon as used
+                    await CouponUsage.deleteOne({ _id: u._id, settled: false }).catch(() => {});
+                } else {
+                    usedIds.add(String(u.couponId));
+                }
+            }
+        }
     }
 
     return list.map((c) => ({
@@ -145,9 +190,22 @@ async function validateCoupon({ code, userId, fare, session = null }) {
     // One redemption per user, ever. Checked before new-user eligibility so a repeat
     // attempt on an already-claimed coupon always reports "already used".
     if (userId) {
-        const usageQuery = CouponUsage.exists({ couponId: coupon._id, userId });
+        const usageQuery = CouponUsage.find({ couponId: coupon._id, userId });
         if (session) usageQuery.session(session);
-        if (await usageQuery) throw couponError('Coupon has already been used', 409);
+        const usages = await usageQuery.lean();
+        for (const usage of usages) {
+            if (usage.settled === true) {
+                throw couponError('Coupon has already been used', 409);
+            }
+            if (usage.rideId) {
+                const ride = await rideModel.findById(usage.rideId).select('status').lean();
+                if (!ride || ride.status === 'cancelled' || ride.status === 'completed') {
+                    await CouponUsage.deleteOne({ _id: usage._id, settled: false }).catch(() => {});
+                } else {
+                    throw couponError('Coupon has already been used', 409);
+                }
+            }
+        }
     }
 
     // New-user / first-ride coupons: only before the passenger's first non-cancelled ride.

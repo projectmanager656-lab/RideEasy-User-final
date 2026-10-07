@@ -354,7 +354,7 @@ const Wallet = () => {
                                             <span className="rounded-lg border border-brand-yellow/50 px-2 py-1 text-xs font-bold text-brand-yellow">{coupon.code}</span>
                                         </div>
                                         <p className="mt-3 text-xs text-theme-muted">Valid until {coupon.expiresAt ? dateLabel(coupon.expiresAt) : 'further notice'} · {coupon.eligibility}</p>
-                                        {coupon.used && <p className="mt-2 text-xs font-semibold text-emerald-400">Used</p>}
+                                        {coupon.used && <p className="mt-2 text-xs font-semibold text-emerald-400">Coupon used</p>}
                                     </div>
                                 ))}
                             </div>

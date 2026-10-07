@@ -378,23 +378,24 @@ const ChooseRide = () => {
 
     const selected = tiers.find((tier) => tier.id === selectedTier?.id) || tiers[0] || null
 
-    useEffect(() => {
-        let cancelled = false
+    const fetchOffers = useCallback(() => {
         setOffersLoading(true)
         apiClient.get('/users/coupons', withAuth())
             .then((res) => {
-                if (cancelled) return
                 const body = stripApiEnvelope(res.data)
-                setOffers(Array.isArray(body?.coupons) ? body.coupons.filter((coupon) => !coupon.used) : [])
+                setOffers(Array.isArray(body?.coupons) ? body.coupons : [])
             })
             .catch(() => {
-                if (!cancelled) setOffers([])
+                setOffers([])
             })
             .finally(() => {
-                if (!cancelled) setOffersLoading(false)
+                setOffersLoading(false)
             })
-        return () => { cancelled = true }
     }, [])
+
+    useEffect(() => {
+        fetchOffers()
+    }, [fetchOffers])
 
     const handleGoBack = () => {
         if (window.history.length > 1) navigate(-1)
@@ -737,7 +738,10 @@ const ChooseRide = () => {
                         </button>
                         <button
                             type="button"
-                            onClick={() => setOffersOpen(true)}
+                            onClick={() => {
+                                setOffersOpen(true)
+                                fetchOffers()
+                            }}
                             aria-label="Offer"
                             className="flex h-[52px] w-[76px] shrink-0 items-center justify-center gap-1 rounded-2xl border border-brand-yellow bg-theme-card px-2 text-brand-yellow transition active:scale-95"
                         >
@@ -814,16 +818,22 @@ const ChooseRide = () => {
                                                 <p className="mt-1 text-xs leading-5 text-theme-secondary">{offer.description || `${offer.discountType === 'percentage' ? `${offer.discountValue}% off` : `₹${offer.discountValue} off`}`}</p>
                                                 <p className="mt-1 text-[11px] text-theme-muted">{offer.code}{offer.expiresAt ? ` · Valid until ${new Date(offer.expiresAt).toLocaleDateString()}` : ''}</p>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    const applied = await applyCoupon(offer.code)
-                                                    if (applied) setOffersOpen(false)
-                                                }}
-                                                className="shrink-0 rounded-lg bg-brand-yellow px-3 py-2 text-xs font-bold text-black active:scale-95"
-                                            >
-                                                Apply
-                                            </button>
+                                            {offer.used ? (
+                                                <span className="shrink-0 rounded-lg border border-theme bg-theme-card-muted px-2.5 py-1.5 text-xs font-semibold text-theme-muted">
+                                                    Coupon used
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        const applied = await applyCoupon(offer.code)
+                                                        if (applied) setOffersOpen(false)
+                                                    }}
+                                                    className="shrink-0 rounded-lg bg-brand-yellow px-3 py-2 text-xs font-bold text-black active:scale-95"
+                                                >
+                                                    Apply
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}
