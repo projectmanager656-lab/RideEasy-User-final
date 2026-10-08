@@ -2403,6 +2403,26 @@ async function buildRideInvoice(ride) {
 }
 
 /** Passenger invoice — COMPLETED rides only. */
+module.exports.getActiveRide = async (req, res) => {
+  const userId = req.user._id
+  if (!userId) {
+    return fail(res, req, 401, "Unauthorized")
+  }
+  try {
+    const ride = await rideModel
+      .findOne({ user: userId, status: { $in: ['searching', 'accepted', 'arrived', 'started'] } })
+      .populate('captain', 'name phone vehicleType')
+      .lean()
+    if (!ride) {
+      return fail(res, req, 404, "No active ride found")
+    }
+    return ok(res, req, 200, "Active ride", { ride })
+  } catch (err) {
+    return fail(res, req, 500, err.message || "Failed to fetch active ride")
+  }
+}
+
+/** Passenger invoice — COMPLETED rides only. */
 module.exports.getRideInvoice = async (req, res) => {
   const rideId = req.params.id;
   if (!rideId || !mongoose.isValidObjectId(rideId)) {

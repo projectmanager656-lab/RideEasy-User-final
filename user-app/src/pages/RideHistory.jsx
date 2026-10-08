@@ -6,6 +6,7 @@ import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { normalizeLocationText } from '../utils/locationText'
 import { useLanguage } from '../i18n'
+import useSheetDrag from '../hooks/useSheetDrag'
 import vehicleAutoImg from '../assets/logo-auto.png'
 import vehicleCarImg from '../assets/logo-car.png'
 import vehicleBikeImg from '../assets/logo-bike.png'
@@ -217,6 +218,8 @@ const RideCard = ({ ride, t, onView }) => {
 }
 
 const RideDetailModal = ({ ride, t, onClose }) => {
+  /** Handle-driven close: tap / drag the grey bar (see hooks/useSheetDrag). */
+  const sheetDrag = useSheetDrag({ onClose })
   const sb = statusBadge(ride.status, t)
   const v = vehicleMeta(ride.vehicleType)
   const dt = rideDate(ride)
@@ -245,21 +248,18 @@ const RideDetailModal = ({ ride, t, onClose }) => {
       onClick={onClose}
     >
       <div
+        ref={sheetDrag.panelRef}
+        style={sheetDrag.panelStyle}
         className="relative w-full max-w-lg rounded-t-2xl border-t border-theme bg-theme-bg p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="absolute left-1/2 top-3 h-1.5 w-12 -translate-x-1/2 rounded-full bg-theme-muted" />
+        <div
+          ref={sheetDrag.handleRef}
+          className="sheet-drag-handle absolute left-1/2 top-3 h-1.5 w-12 -translate-x-1/2 rounded-full bg-theme-muted"
+        />
 
         <div className="mt-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-theme-primary">{t('ride_details')}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full p-1 text-theme-muted hover:bg-theme-card-muted hover:text-theme-primary"
-            aria-label={t('close')}
-          >
-            <i className="ri-close-line text-xl" />
-          </button>
         </div>
 
         <div className="mt-4 flex items-center justify-between">

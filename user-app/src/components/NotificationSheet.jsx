@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '../i18n'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 /**
  * In-app notification sheet.
@@ -13,6 +14,8 @@ const NotificationSheet = ({ open, onClose, notifications = [], loading = false,
     const { t } = useLanguage()
     const [closing, setClosing] = useState(false)
     const sheetRef = useRef(null)
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const sheetDrag = useSheetDrag({ onClose: () => handleClose(), open, closing })
 
     useEffect(() => {
         if (!open) {
@@ -65,18 +68,18 @@ const NotificationSheet = ({ open, onClose, notifications = [], loading = false,
 
             {/* Notification sheet panel */}
             <div
-                ref={sheetRef}
+                ref={(el) => { sheetRef.current = el; sheetDrag.panelRef.current = el }}
                 className={`relative z-10 mx-auto flex w-full max-w-[430px] flex-col rounded-t-2xl border-t border-theme bg-theme-card p-4 shadow-2xl ${
                     closing ? 'sheet-slide-down' : 'sheet-slide-up'
                 }`}
-                style={{ paddingBottom: 'max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))' }}
+                style={{ ...sheetDrag.panelStyle, paddingBottom: 'max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem))' }}
                 onAnimationEnd={onAnimationEnd}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="notifications-title"
             >
                 {/* Drag handle */}
-                <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-theme-muted/50" />
+                <div ref={sheetDrag.handleRef} className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-theme-muted/50" />
 
                 {/* Header */}
                 <div className="mb-4 flex items-center justify-between">

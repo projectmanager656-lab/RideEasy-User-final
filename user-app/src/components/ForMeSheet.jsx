@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useOverlayTransition } from '../hooks/useOverlayTransition'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd }) => {
     const { t } = useLanguage()
@@ -8,6 +9,8 @@ const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd })
     const [ name, setName ] = useState('')
     const [ phone, setPhone ] = useState('')
     const { visible, closing, requestClose, onPanelAnimationEnd } = useOverlayTransition(open, onClose)
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const sheetDrag = useSheetDrag({ onClose: () => close(), open, closing })
 
     if (!visible) return null
 
@@ -37,10 +40,12 @@ const ForMeSheet = ({ open, users = [], active = '', onSelect, onClose, onAdd })
                 aria-hidden
             />
             <div
+                ref={sheetDrag.panelRef}
+                style={sheetDrag.panelStyle}
                 className={`relative flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-5 sm:rounded-2xl sm:border ${closing ? 'sheet-slide-down' : 'sheet-slide-up'}`}
                 onAnimationEnd={onPanelAnimationEnd}
             >
-                <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
+                <div ref={sheetDrag.handleRef} className="sheet-drag-handle relative mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
                 <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('switch_rider')}</h2>
                     <button

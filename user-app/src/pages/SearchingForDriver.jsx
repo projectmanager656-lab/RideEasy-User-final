@@ -4,6 +4,7 @@ import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { loadRazorpayCheckout } from '../utils/loadRazorpay'
+import useSheetDrag from '../hooks/useSheetDrag'
 import { normalizeLocationText } from '../utils/locationText'
 import { RIDE_ACCEPTED, RIDE_STARTED, RIDE_COMPLETED, LOCATION_UPDATE } from '../constants/rideSocketEvents'
 import { useUserData } from '../context/UserContext'
@@ -28,17 +29,39 @@ import luxuryImg from '../assets/luxury-img-ride.png'
 const LOOKING_TIMEOUT_SECONDS = 120
 
 /**
- * Razorpay Checkout display config scoped to UPI only. `flows: ['intent']` is the
- * provider's app-handoff flow: on a phone the gateway hands off to the installed UPI
- * app chooser (Google Pay, PhonePe, Paytm, BHIM …) with the exact advance amount
- * prefilled. Desktop browsers cannot open an intent — the gateway keeps its own
- * QR/collect fallback there, so this stays safe for browser testing.
- * Mirrors the wallet top-up checkout config already used in this app.
+ * Full Razorpay Checkout for the advance: the passenger picks a REAL method
+ * themselves — UPI (Google Pay / PhonePe / any UPI app), Cards, Net Banking,
+ * wallets and every other method the gateway supports for this account.
+ * `show_default_blocks` keeps the gateway's own default list available too,
+ * so nothing that Razorpay supports is hidden. Mirrors the wallet top-up
+ * checkout config already used in this app.
  */
-const ADVANCE_UPI_DISPLAY = {
-  blocks: { upi: { name: 'UPI', instruments: [{ method: 'upi', flows: ['intent'] }] } },
-  sequence: ['block.upi'],
-  preferences: { show_default_blocks: false },
+const ADVANCE_CHECKOUT_DISPLAY = {
+  blocks: {
+    upi: { name: 'UPI', instruments: [{ method: 'upi' }] },
+    cards: { name: 'Cards', instruments: [{ method: 'card' }] },
+    netbanking: { name: 'Net Banking', instruments: [{ method: 'netbanking' }] },
+  },
+  sequence: ['block.upi', 'block.cards', 'block.netbanking'],
+  preferences: { show_default_blocks: true },
+}
+
+/**
+ * Google Pay / PhonePe quick actions: the SAME backend order, but Razorpay's
+ * checkout is scoped to its UPI app-intent flow, so the phone hands off to the
+ * installed UPI app (Google Pay, PhonePe, Paytm, BHIM …) with the exact advance
+ * amount and payee prefilled — the passenger completes it inside that app. This
+ * only chooses the redirect; the payment still belongs to the Razorpay order and
+ * is marked paid solely after the backend verifies Razorpay's signature.
+ * Desktop browsers cannot open an intent, so the gateway keeps its own QR/collect
+ * fallback there. Mirrors the wallet top-up checkout config used in this app.
+ */
+function upiIntentDisplay (appName) {
+  return {
+    blocks: { upi: { name: appName, instruments: [{ method: 'upi', flows: ['intent'] }] } },
+    sequence: ['block.upi'],
+    preferences: { show_default_blocks: false },
+  }
 }
 
 /** Gateway/UPI error text that means the device has no usable UPI app installed. */
@@ -176,7 +199,9 @@ const SearchingForDriver = () => {
   const [rideConfirmation, setRideConfirmation] = useState(null)
   const [cancelError, setCancelError] = useState('')
   const [cancelling, setCancelling] = useState(false)
-  const [cancelSheetOpen, setCancelSheetOpen] = useState(false)
+  const [ cancelSheetOpen, setCancelSheetOpen ] = useState(false)
+  /** Handle-driven close for the cancel-trip sheet: tap or drag the grey bar down. */
+  const cancelSheetDrag = useSheetDrag({ onClose: () => closeCancelSheet(), open: cancelSheetOpen })
   const [cancelReason, setCancelReason] = useState('')
   /** Paying the 25% advance for this ride (Wallet rail, or the UPI intent checkout). */
   const [payingAdvance, setPayingAdvance] = useState(false)
@@ -731,11 +756,12 @@ const SearchingForDriver = () => {
   const totalFareNum = Math.max(0, Number(price) - Number(ride?.discountAmount || 0))
   const advanceAmount = Number(ride?.advanceAmount) > 0
     ? Number(ride.advanceAmount)
-    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 0.25) : 0)
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round(totalFareNum * 25) / 100 : 0)
   const remainingAmount = Number(ride?.remainingAmount) > 0
     ? Number(ride.remainingAmount)
-    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.max(0, totalFareNum - advanceAmount) : 0)
-  const advancePaid = ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success' || advanceAmount <= 0
+    : (Number.isFinite(totalFareNum) && totalFareNum > 0 ? Math.round((totalFareNum - advanceAmount) * 100) / 100 : 0)
+  /** Only the BACKEND's verified result may ever show "Advance Paid" — never the local amount maths. */
+  const advancePaid = ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success'
   /** UPI / Online rides must clear the advance before the trip can start — enforced by the backend. */
   const advanceRequiredToStart = ride?.paymentMethod === 'UPI' || ride?.paymentMethod === 'Online'
   /** Advance section appears once a driver is assigned — applies to every
@@ -754,15 +780,22 @@ const SearchingForDriver = () => {
   }, [])
 
   /**
-   * Pay the server-derived 25% advance on the rail the passenger selected.
+   * Pay the server-derived 25% advance through the REAL Razorpay Checkout.
    *
-   * Wallet and Cash keep their existing rails. UPI / Online open the Razorpay UPI
-   * app-intent checkout, so an installed UPI app receives the payee, the exact
-   * advance amount and the note — the passenger only reviews and enters their PIN.
-   * Returning from that app is NOT proof of payment: the backend verifies the
-   * signature and the payment itself before the advance is marked paid.
+   * Every payment method opens the same gateway order → checkout → backend
+   * verification flow, so the passenger always picks a real method (Google Pay /
+   * PhonePe / any UPI app, Card, Net Banking, …) inside Razorpay. Returning from
+   * the checkout is NOT proof of payment: only the backend signature + provider
+   * verification may flip the advance to paid. Cancelling, failing or closing the
+   * checkout leaves the advance unpaid, so Pay stays available for a retry.
+   *
+   * A Google Pay / PhonePe quick action passes its app name and only changes the
+   * checkout scope to the UPI intent flow — the same order, the same amount and the
+   * same backend verification; it never marks the advance paid on its own.
    */
-  const payAdvance = useCallback(async () => {
+  const payAdvance = useCallback(async (target) => {
+    /** `onClick` hands us a click event for the plain Pay button — only a string is an app target. */
+    const upiAppTarget = typeof target === 'string' && target.trim() ? target.trim() : null
     if (!rideId || advanceInFlightRef.current || advancePaid) return
     setAdvancePayError('')
 
@@ -782,56 +815,6 @@ const SearchingForDriver = () => {
           if (otpVal != null && String(otpVal).trim() !== '') setPassengerOtp(String(otpVal).trim())
         } catch {}
       }
-    }
-
-    /** Wallet — existing rail, unchanged. */
-    if (ride?.paymentMethod === 'Wallet') {
-      setPayingAdvance(true)
-      try {
-        const res = await apiClient.post('/rides/pay-wallet', { rideId, part: 'advance' }, withAuth())
-        const o = stripApiEnvelope(res.data)
-        const updated = o?.ride || o
-        if (updated) {
-          setRide((prev) => ({ ...(prev || {}), ...updated, advancePaymentStatus: 'success', _id: updated._id || prev?._id }))
-        } else {
-          setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
-        }
-        setPayingAdvance(false)
-        advanceInFlightRef.current = false
-        if (!passengerOtp) fetchOtpOnPaid()
-      } catch (err) {
-        setAdvancePayError(formatApiError(err))
-        setPayingAdvance(false)
-        advanceInFlightRef.current = false
-      }
-      return
-    }
-
-    /** Cash — no online rail; the existing recorder stays as the advance fallback. */
-    if (ride?.paymentMethod !== 'UPI' && ride?.paymentMethod !== 'Online') {
-      setPayingAdvance(true)
-      try {
-        const res = await apiClient.post(
-          '/rides/pay-mock',
-          { rideId, method: ride?.paymentMethod || 'Cash', part: 'advance' },
-          withAuth(),
-        )
-        const o = stripApiEnvelope(res.data)
-        const updated = o?.ride || o
-        if (updated) {
-          setRide((prev) => ({ ...(prev || {}), ...updated, advancePaymentStatus: 'success', _id: updated._id || prev?._id }))
-        } else {
-          setRide((prev) => ({ ...(prev || {}), advancePaymentStatus: 'success' }))
-        }
-        setPayingAdvance(false)
-        advanceInFlightRef.current = false
-        if (!passengerOtp) fetchOtpOnPaid()
-      } catch (err) {
-        setAdvancePayError(formatApiError(err))
-        setPayingAdvance(false)
-        advanceInFlightRef.current = false
-      }
-      return
     }
 
     /** The checkout SDK is lazy-loaded: a fresh session has no window.Razorpay yet. */
@@ -883,6 +866,7 @@ const SearchingForDriver = () => {
           email: currentUser?.email || '',
         },
         theme: { color: '#FFD000' },
+        display: upiAppTarget ? upiIntentDisplay(upiAppTarget) : ADVANCE_CHECKOUT_DISPLAY,
         handler: async (paymentResponse) => {
           try {
             setAdvancePayError('')
@@ -936,7 +920,7 @@ const SearchingForDriver = () => {
       advanceInFlightRef.current = false
       setPayingAdvance(false)
     }
-  }, [rideId, advancePaid, ride?.paymentMethod, t])
+  }, [rideId, advancePaid, t])
 
   /** Only the vehicle type the passenger selected is relevant to the map marker. */
   const selectedMarkerType = normalizeVehicleTypeForMarkers(rideTierId || vehicleType || ride?.vehicleType)
@@ -1315,6 +1299,27 @@ const SearchingForDriver = () => {
                           </>
                         )}
                       </button>
+                      {/* Google Pay / PhonePe — same Razorpay order, UPI app-intent redirect. */}
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => payAdvance('Google Pay')}
+                          disabled={payingAdvance || !rideId}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2.5 text-sm font-bold text-theme-primary transition active:scale-[0.99] disabled:opacity-50"
+                        >
+                          <i className="ri-google-fill text-base text-brand-yellow" aria-hidden />
+                          Google Pay
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => payAdvance('PhonePe')}
+                          disabled={payingAdvance || !rideId}
+                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card px-3 py-2.5 text-sm font-bold text-theme-primary transition active:scale-[0.99] disabled:opacity-50"
+                        >
+                          <i className="ri-money-rupee-circle-line text-base text-brand-yellow" aria-hidden />
+                          PhonePe
+                        </button>
+                      </div>
                     </>
                   )}
                 </>
@@ -1348,8 +1353,16 @@ const SearchingForDriver = () => {
       {cancelSheetOpen && (
         <div className="absolute inset-0 z-50 flex items-end justify-center">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-[1px]" onClick={closeCancelSheet} aria-hidden />
-          <div className="relative flex max-h-[85dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.5)]">
-            <div className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-muted" aria-hidden />
+          <div
+            ref={cancelSheetDrag.panelRef}
+            style={cancelSheetDrag.panelStyle}
+            className="relative flex max-h-[85dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[28px] border-t border-theme bg-theme-card shadow-[0_-8px_40px_rgba(0,0,0,0.5)]"
+          >
+            <div
+              ref={cancelSheetDrag.handleRef}
+              className="sheet-drag-handle relative mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-theme-muted"
+              aria-hidden
+            />
 
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between px-4 pb-2 pt-2">

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { API_BASE_URL } from '../config/apiBaseUrl'
 import { useOverlayTransition } from '../hooks/useOverlayTransition'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 const HOURS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
 const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55']
@@ -189,6 +190,8 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
     const { t } = useLanguage()
     const months = localizedMonths(t)
     const { visible, closing, requestClose, onPanelAnimationEnd } = useOverlayTransition(open, onClose)
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const sheetDrag = useSheetDrag({ onClose: () => requestClose(), open, closing })
     const [dateParts, setDateParts] = useState(defaultDateParts)
     const [parts, setParts] = useState(defaultTimeParts)
     const [error, setError] = useState('')
@@ -380,11 +383,12 @@ const ScheduleModal = ({ open, onClose, onContinue, findingTrip }) => {
                 aria-hidden
             />
             <div
-                ref={sheetRef}
+                ref={(el) => { sheetRef.current = el; sheetDrag.panelRef.current = el }}
+                style={sheetDrag.panelStyle}
                 className={`relative z-[1201] flex max-h-[88dvh] w-full max-w-[340px] flex-col overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-2.5 pb-4 sm:rounded-2xl sm:border ${closing ? 'sheet-slide-down' : 'sheet-slide-up'}`}
                 onAnimationEnd={onPanelAnimationEnd}
             >
-                <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
+                <div ref={sheetDrag.handleRef} className="sheet-drag-handle relative mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-theme-card-muted sm:hidden" />
                 <div className="mb-3 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('schedule_a_ride')}</h2>
                     <button

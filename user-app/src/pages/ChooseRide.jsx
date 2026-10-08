@@ -10,6 +10,7 @@ import { formatApiError } from '../utils/apiError'
 import { fetchOsrmDrivingRoute } from '../utils/osrmClient'
 import { ConfigContext } from '../context/ConfigContext'
 import { useLanguage } from '../i18n'
+import useSheetDrag from '../hooks/useSheetDrag'
 import logoAuto from '../assets/logo-auto.png'
 import logoCar from '../assets/logo-car.png'
 import logoPremium from '../assets/premium.png'
@@ -106,6 +107,9 @@ const ChooseRide = () => {
     const [ scheduleOpen, setScheduleOpen ] = useState(false)
     const [ scheduledAt, setScheduledAt ] = useState(() => state.scheduledAt || null)
     const [ bookingError, setBookingError ] = useState('')
+    /** Handle-driven close for the payment / offers sheets (tap or swipe the grey bar down). */
+    const paymentDrag = useSheetDrag({ onClose: () => setPaymentOpen(false), open: paymentOpen })
+    const offersDrag = useSheetDrag({ onClose: () => setOffersOpen(false), open: offersOpen })
 
     const hasRoute = !!(
         pickupCoords?.lat != null && pickupCoords?.lng != null
@@ -764,8 +768,15 @@ const ChooseRide = () => {
             {paymentOpen && (
                 <div className="absolute inset-0 z-[60] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px]" onClick={() => setPaymentOpen(false)} aria-hidden />
-                    <div className="relative w-full max-w-[430px] rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
-                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                    <div
+                        ref={paymentDrag.panelRef}
+                        style={paymentDrag.panelStyle}
+                        className="relative w-full max-w-[430px] rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6"
+                    >
+                        <div
+                            ref={paymentDrag.handleRef}
+                            className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted"
+                        />
                         <h3 className="mb-3 text-base font-bold text-theme-primary">{t('payment_method')}</h3>
                         <div className="space-y-2">
                             {[ ...PAYMENT_METHODS, 'Wallet' ].map((m) => (
@@ -796,13 +807,17 @@ const ChooseRide = () => {
             {offersOpen && (
                 <div className="absolute inset-0 z-[70] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/65 backdrop-blur-[1px]" onClick={() => setOffersOpen(false)} aria-hidden />
-                    <div className="relative max-h-[82%] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card px-4 pb-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted" />
+                    <div
+                        ref={offersDrag.panelRef}
+                        style={offersDrag.panelStyle}
+                        className="relative max-h-[82%] w-full max-w-[430px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card px-4 pb-6 pt-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    >
+                        <div
+                            ref={offersDrag.handleRef}
+                            className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-card-muted"
+                        />
                         <div className="mb-4 flex items-center justify-between">
                             <h3 className="text-lg font-bold text-theme-primary">Offers</h3>
-                            <button type="button" onClick={() => setOffersOpen(false)} aria-label="Close offers" className="flex h-9 w-9 items-center justify-center rounded-full border border-theme bg-theme-bg text-theme-secondary">
-                                <i className="ri-close-line text-lg" aria-hidden />
-                            </button>
                         </div>
 
                         {offersLoading ? <p className="py-6 text-center text-sm text-theme-muted">Loading offers…</p> : offers.length === 0 ? <p className="rounded-xl border border-dashed border-theme px-4 py-6 text-center text-sm text-theme-muted">No offers available right now.</p> : (

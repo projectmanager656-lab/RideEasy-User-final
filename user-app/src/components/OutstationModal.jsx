@@ -1,5 +1,6 @@
 import React from 'react'
 import { useLanguage } from '../i18n'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 const OUTSTATION_ROUTES = [
     { city: 'Pune', note: '230 km' },
@@ -9,6 +10,8 @@ const OUTSTATION_ROUTES = [
 
 const OutstationModal = ({ open, onClose, onBook }) => {
     const { t } = useLanguage()
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const sheetDrag = useSheetDrag({ onClose, open })
     if (!open) return null
 
     return (
@@ -18,8 +21,12 @@ const OutstationModal = ({ open, onClose, onBook }) => {
                 onClick={onClose}
                 aria-hidden
             />
-            <div className="relative max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4">
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
+            <div
+                ref={sheetDrag.panelRef}
+                style={sheetDrag.panelStyle}
+                className="relative max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4"
+            >
+                <div ref={sheetDrag.handleRef} className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('outstation')}</h2>
                     <button

@@ -133,6 +133,29 @@
 
 .sheet-slide-up   { animation: sheet-slide-up 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
 .sheet-slide-down { animation: sheet-slide-down 0.2s ease-in forwards; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Handle-driven sheet close (hooks/useSheetDrag.js).
+ * The grey bar keeps its exact size and position — this only adds an invisible
+ * grab zone around it plus a scroll-free touch action, so the handle can be
+ * tapped or dragged without touching a single pixel of the sheet's design.
+ * In-flow handles also need `relative` so the grab zone is centred on the bar.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.sheet-drag-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.sheet-drag-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 40px;
+  transform: translateY(-50%);
+}
 .sheet-backdrop-in  { animation: backdrop-in  0.2s ease forwards; }
 .sheet-backdrop-out { animation: backdrop-out 0.18s ease forwards; }
 

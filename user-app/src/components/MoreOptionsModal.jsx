@@ -2,6 +2,7 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLanguage } from '../i18n'
 import { useOverlayTransition } from '../hooks/useOverlayTransition'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 const Svg = ({ children, className = 'h-4 w-4' }) => (
     <svg
@@ -87,6 +88,8 @@ const MoreOptionsModal = ({ open, onClose }) => {
     const navigate = useNavigate()
     const { t } = useLanguage()
     const { visible, closing, requestClose, onPanelAnimationEnd } = useOverlayTransition(open, onClose)
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const sheetDrag = useSheetDrag({ onClose: () => requestClose(), open, closing })
 
     if (!visible) return null
 
@@ -104,10 +107,12 @@ const MoreOptionsModal = ({ open, onClose }) => {
                 aria-hidden
             />
             <div
+                ref={sheetDrag.panelRef}
+                style={sheetDrag.panelStyle}
                 className={`relative max-h-[80vh] overflow-y-auto scrollbar-hide rounded-t-2xl border-t border-theme bg-theme-card p-4 ${closing ? 'sheet-slide-down' : 'sheet-slide-up'}`}
                 onAnimationEnd={onPanelAnimationEnd}
             >
-                <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
+                <div ref={sheetDrag.handleRef} className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-base font-bold text-theme-primary">{t('more_services')}</h2>
                     <button

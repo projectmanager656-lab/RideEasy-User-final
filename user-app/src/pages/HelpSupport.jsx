@@ -5,6 +5,7 @@ import { stripApiEnvelope } from '../utils/apiBody'
 import { normalizeLocationText } from '../utils/locationText'
 import { useLanguage } from '../i18n'
 import { FAQ_DATA, CATEGORY_IDS } from '../utils/faqData'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 const PROBLEM_TYPES = [
   'Driver issue',
@@ -87,6 +88,9 @@ const HelpSupport = () => {
 
   // Lost item
   const [lostOpen, setLostOpen] = useState(false)
+  /** Handle-driven close for the report / lost-item sheets (tap or swipe down). */
+  const reportDrag = useSheetDrag({ onClose: () => setReportOpen(false), open: reportOpen })
+  const lostDrag = useSheetDrag({ onClose: () => setLostOpen(false), open: lostOpen })
   const [rides, setRides] = useState([])
   const [ridesLoading, setRidesLoading] = useState(true)
   const [lostRide, setLostRide] = useState('')
@@ -317,8 +321,15 @@ const HelpSupport = () => {
       {/* Report a problem modal */}
       {reportOpen && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-[1px]">
-          <div className="max-h-[90dvh] w-full max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
+          <div
+            ref={reportDrag.panelRef}
+            style={reportDrag.panelStyle}
+            className="max-h-[90dvh] w-full max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6"
+          >
+            <div
+              ref={reportDrag.handleRef}
+              className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted"
+            />
             <h3 className="mb-3 text-base font-bold text-theme-primary">{t('report_problem')}</h3>
             {reportDone ? (
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-6 text-center">
@@ -391,8 +402,15 @@ const HelpSupport = () => {
       {/* Lost item modal */}
       {lostOpen && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-[1px]">
-          <div className="max-h-[90dvh] w-full max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6">
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted" />
+          <div
+            ref={lostDrag.panelRef}
+            style={lostDrag.panelStyle}
+            className="max-h-[90dvh] w-full max-w-[440px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-4 pb-6"
+          >
+            <div
+              ref={lostDrag.handleRef}
+              className="sheet-drag-handle relative mx-auto mb-3 h-1 w-10 rounded-full bg-theme-muted"
+            />
             <h3 className="mb-3 text-base font-bold text-theme-primary">{t('lost_something')}</h3>
             <p className="mb-3 text-sm text-theme-secondary">{t('lost_item_report_hint')}</p>
             {lostDone ? (

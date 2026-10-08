@@ -2,6 +2,7 @@ import React, { useContext, useMemo } from 'react'
 import { RIDE_TIERS } from '../constants/rideTiers'
 import { useLanguage } from '../i18n'
 import { ConfigContext } from '../context/ConfigContext'
+import useSheetDrag from '../hooks/useSheetDrag'
 
 function fmtDist(km) {
     if (!Number.isFinite(km) || km < 0) return null
@@ -11,6 +12,8 @@ function fmtDist(km) {
 const VehiclePanel = (props) => {
     const { t } = useLanguage()
     const { fareConfig, fareConfigurations } = useContext(ConfigContext) || {}
+    /** Handle-driven close: tap or drag the grey bar down (see hooks/useSheetDrag). */
+    const panelDrag = useSheetDrag({ onClose: () => props.setVehiclePanel?.(false) })
     const rates = fareConfig?.rates || fareConfigurations?.rates || {}
     const fare = props.fare || {}
     const selectedVehicle = props.selectedVehicle || null
@@ -47,11 +50,12 @@ const VehiclePanel = (props) => {
         : '—'
 
     return (
-        <div className="relative flex h-full min-h-0 flex-1 flex-col">
+        <div ref={panelDrag.panelRef} style={panelDrag.panelStyle} className="relative flex h-full min-h-0 flex-1 flex-col">
             {/* Handle + collapse */}
             <button
                 type="button"
-                className="absolute -top-2 left-0 right-0 z-10 flex items-center justify-center"
+                ref={panelDrag.handleRef}
+                className="sheet-drag-handle absolute -top-2 left-0 right-0 z-10 flex items-center justify-center"
                 onClick={() => props.setVehiclePanel?.(false)}
             >
                 <div className="h-1.5 w-12 rounded-full bg-theme-card-muted" />
@@ -64,14 +68,6 @@ const VehiclePanel = (props) => {
                     <p className="text-sm text-theme-secondary mb-2">{t('select_preferred_vehicle')}</p>
                     <div className="flex items-center justify-between">
                         <span className="text-xs font-medium text-theme-muted">{t('trip_info')}</span>
-                        <button
-                            type="button"
-                            className="rounded-full bg-theme-card-muted text-theme-primary px-2 py-0.5 text-xs font-medium"
-                            aria-label={t('close')}
-                            onClick={() => props.setVehiclePanel?.(false)}
-                        >
-                            <i className="ri-close-line text-xs" />
-                        </button>
                     </div>
                 </header>
 
