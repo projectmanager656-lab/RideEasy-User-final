@@ -184,7 +184,8 @@ const Home = () => {
                     return data
                 }
                 const st = normalizeRideStatus(data?.status)
-                if (st === 'accepted' || st === 'arrived') {
+                /** The PIN exists only after the driver has arrived — never fetch it earlier. */
+                if (st === 'arrived') {
                     return apiClient
                         .get(`/rides/${id}/passenger-otp`, withAuth())
                         .then((r) => {

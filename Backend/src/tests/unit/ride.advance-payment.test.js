@@ -97,6 +97,8 @@ function rideDoc(overrides = {}) {
     _id: RIDE_ID,
     user: USER_ID,
     captain: null,
+    /* The advance rail opens only once the driver has authoritatively arrived. */
+    status: "arrived",
     price: 400,
     discountAmount: 0,
     paymentMethod: "UPI",
@@ -301,6 +303,37 @@ describe("createRideRazorpayOrder", () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(mockRazorpay.orders.create).not.toHaveBeenCalled();
   });
+
+  /**
+   * The passenger section only exists on `arrived`, and so does this API: a checkout
+   * must be impossible before the driver confirms arrival.
+   */
+  test.each(["searching", "scheduled", "accepted", "started", "cancelled"])(
+    "refuses an advance checkout while the ride is %s",
+    async (status) => {
+      rideModel.findById.mockResolvedValue(rideDoc({ status }));
+
+      const res = response();
+      await rideController.createRideRazorpayOrder(request({ part: "advance" }), res);
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(mockRazorpay.orders.create).not.toHaveBeenCalled();
+      expect(mockRazorpay.orders.fetch).not.toHaveBeenCalled();
+      expect(rideModel.updateOne).not.toHaveBeenCalled();
+    },
+  );
+
+  test("keeps a verified advance idempotent even after the ride moved on", async () => {
+    rideModel.findById.mockResolvedValue(
+      rideDoc({ status: "started", advancePaymentStatus: "success" }),
+    );
+
+    const res = response();
+    await rideController.createRideRazorpayOrder(request({ part: "advance" }), res);
+
+    expect(res.status).not.toHaveBeenCalledWith(409);
+    expect(bodyOf(res).data).toMatchObject({ alreadyPaid: true });
+  });
 });
 
 describe("payMock advance guard", () => {
@@ -356,6 +389,19 @@ describe("payMock advance guard", () => {
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
+  test("refuses to record an advance before the driver arrives", async () => {
+    rideModel.findById.mockResolvedValue(
+      rideDoc({ paymentMethod: "Cash", advancePaymentRequired: false, status: "accepted" }),
+    );
+
+    const res = response();
+    await rideController.payMock(request({ rideId: RIDE_ID, method: "Cash", part: "advance" }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(PaymentRecord.create).not.toHaveBeenCalled();
+    expect(rideModel.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
   /**
    * The advance rail used to broadcast `status: "completed"`, which threw the passenger
    * off the active ride lifecycle screen (and told the driver the trip was over).
@@ -363,11 +409,11 @@ describe("payMock advance guard", () => {
   test("a paid advance broadcasts the ride's REAL status, never a fake completion", async () => {
     const socket = require("../../socket");
     rideModel.findById.mockResolvedValue(
-      rideDoc({ paymentMethod: "Cash", advancePaymentRequired: false, status: "accepted" }),
+      rideDoc({ paymentMethod: "Cash", advancePaymentRequired: false, status: "arrived" }),
     );
     PaymentRecord.create.mockResolvedValue({ externalRef: "txn_cash" });
     rideModel.findByIdAndUpdate.mockReturnValue(
-      populated(rideDoc({ paymentMethod: "Cash", advancePaymentStatus: "success", status: "accepted" })),
+      populated(rideDoc({ paymentMethod: "Cash", advancePaymentStatus: "success", status: "arrived" })),
     );
 
     await rideController.payMock(request({ rideId: RIDE_ID, method: "Cash", part: "advance" }), response());
@@ -375,7 +421,7 @@ describe("payMock advance guard", () => {
     const statusFrames = socket.emitToUser.mock.calls.filter(([, event]) => event === "ride:status-update");
     expect(statusFrames).toHaveLength(1);
     expect(statusFrames[0][2]).toEqual(
-      expect.objectContaining({ rideId: RIDE_ID, status: "accepted", advancePaymentStatus: "success" }),
+      expect.objectContaining({ rideId: RIDE_ID, status: "arrived", advancePaymentStatus: "success" }),
     );
     expect(socket.emitToUser).not.toHaveBeenCalledWith(USER_ID, "ride:completed", expect.anything());
   });
@@ -418,6 +464,28 @@ describe("verifyRideRazorpayPayment", () => {
     process.env.RAZORPAY_KEY_ID = KEY_ID;
     process.env.RAZORPAY_KEY_SECRET = KEY_SECRET;
     PaymentRecord.findOneAndUpdate.mockResolvedValue({});
+  });
+
+  test("refuses to verify an advance before the driver arrives", async () => {
+    rideModel.findById.mockResolvedValue(
+      rideDoc({ status: "accepted", advancePaymentOrderId: "order_advance" }),
+    );
+
+    const res = response();
+    await rideController.verifyRideRazorpayPayment(
+      request({
+        razorpayOrderId: "order_advance",
+        razorpayPaymentId: "pay_1",
+        razorpaySignature: signatureFor("order_advance", "pay_1"),
+        part: "advance",
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(mockRazorpay.payments.fetch).not.toHaveBeenCalled();
+    expect(rideModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(PaymentRecord.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   test("TEST 5/11: marks only the advance paid, leaving the remaining 75% outstanding", async () => {

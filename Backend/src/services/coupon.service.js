@@ -140,11 +140,19 @@ async function listAvailableCoupons(userId) {
                 usedIds.add(String(u.couponId));
             } else if (u.rideId) {
                 const ride = await rideModel.findById(u.rideId).select('status').lean();
-                if (!ride || ride.status === 'cancelled' || ride.status === 'completed') {
+                if (!ride || ride.status === 'cancelled') {
                     // Release dangling reservation so cancelled ride does not mark coupon as used
                     await CouponUsage.deleteOne({ _id: u._id, settled: false }).catch(() => {});
                 } else {
                     usedIds.add(String(u.couponId));
+                    if (ride.status === 'completed') {
+                        /**
+                         * The ride happened, so the redemption is permanent — never a dangling
+                         * reservation. Settling here (idempotent) repairs rides completed before
+                         * completion settling existed and keeps `usedCount` consistent.
+                         */
+                        await settleCouponRedemption({ rideId: u.rideId }).catch(() => {});
+                    }
                 }
             }
         }
@@ -199,9 +207,13 @@ async function validateCoupon({ code, userId, fare, session = null }) {
             }
             if (usage.rideId) {
                 const ride = await rideModel.findById(usage.rideId).select('status').lean();
-                if (!ride || ride.status === 'cancelled' || ride.status === 'completed') {
+                if (!ride || ride.status === 'cancelled') {
                     await CouponUsage.deleteOne({ _id: usage._id, settled: false }).catch(() => {});
                 } else {
+                    if (ride.status === 'completed') {
+                        /** A completed ride redeems the coupon for good — settle and block. */
+                        await settleCouponRedemption({ rideId: usage.rideId }).catch(() => {});
+                    }
                     throw couponError('Coupon has already been used', 409);
                 }
             }

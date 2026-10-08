@@ -1666,15 +1666,16 @@ module.exports.getRideById = async (req, res) => {
       return fail(res, req, 403, "Forbidden");
     }
 
-    /** Same validity rule as getPassengerOtp/startRide: never surface a stale code. */
+    /**
+     * Same validity rule as getPassengerOtp/startRide: the PIN is part of the arrival
+     * state only. It is never surfaced for a ride the driver has not arrived on, it is
+     * never minted here, and the assigned captain never receives it — only the
+     * passenger may see or share the code.
+     */
     const otpWindowValid =
       ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
     let otpPlain = null;
-    if (
-      (ride.status === "arrived" || ride.status === "accepted" || ride.advancePaymentStatus === "success") &&
-      otpWindowValid &&
-      (isPassenger || isAssignedCaptain)
-    ) {
+    if (ride.status === "arrived" && otpWindowValid && isPassenger) {
       const withCipher = await rideModel.findById(rideId).select("+otpCipher");
       if (withCipher?.otpCipher) {
         try {
@@ -1751,7 +1752,7 @@ module.exports.getActiveRide = async (req, res) => {
   }
 };
 
-/** Passenger-only: OTP never emitted on sockets. */
+/** Passenger-only: OTP exists from driver arrival until the ride starts. */
 module.exports.getPassengerOtp = async (req, res) => {
   const rideId = req.params.id;
   if (!mongoose.isValidObjectId(rideId)) {
@@ -1767,9 +1768,16 @@ module.exports.getPassengerOtp = async (req, res) => {
     if (!ownerId || ownerId !== userIdOf(req.user)) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    if (ride.status !== "accepted" && ride.status !== "arrived") {
+
+    /**
+     * The PIN exists only after the driver has authoritatively arrived. It is minted
+     * exclusively by markArrived (accepted -> arrived) and by the atomic reissue
+     * below — a mere refetch (mount fetch, poll, socket reconnect, refresh) must
+     * never create or rotate a code.
+     */
+    if (ride.status !== "arrived") {
       return res.status(400).json({
-        message: "OTP is available after the driver accepts or arrives",
+        message: "OTP is available only after the driver arrives",
       });
     }
 
@@ -1796,29 +1804,67 @@ module.exports.getPassengerOtp = async (req, res) => {
       }
     }
 
+    /**
+     * A still-valid code is always returned untouched. The write below only runs when
+     * the code genuinely expired or is unrecoverable, and it is a compare-and-swap on
+     * the cipher we just read: concurrent refetches can never each mint a different
+     * code — the loser of the race serves the winner's code instead.
+     */
+    let reissued = false;
     if (!otp) {
       const plain = randomSixDigit();
       const otpHash = await hashOtp(plain);
       const otpCipher = encryptOtp(plain);
       const otpExpiresAt = expiresInMinutes(5);
 
-      await rideModel.updateOne(
-        { _id: ride._id },
-        {
-          $set: {
-            otpHash,
-            otpCipher,
-            otpExpiresAt,
-          },
-        },
-      );
-      otp = plain;
-      ride.otpCipher = otpCipher;
-      ride.otpExpiresAt = otpExpiresAt;
+      const updated = await rideModel
+        .findOneAndUpdate(
+          { _id: ride._id, status: "arrived", otpCipher: ride.otpCipher || null },
+          { $set: { otpHash, otpCipher, otpExpiresAt } },
+          { new: true },
+        )
+        .select("+otpCipher");
+
+      if (updated?.otpCipher) {
+        otp = decryptOtp(updated.otpCipher);
+        ride.otpExpiresAt = updated.otpExpiresAt;
+        reissued = true;
+      } else {
+        /** Lost the reissue race — another request minted first; serve its code. */
+        const winner = await rideModel.findById(rideId).select("+otpCipher");
+        if (winner?.otpCipher) {
+          otp = decryptOtp(winner.otpCipher);
+          ride.otpExpiresAt = winner.otpExpiresAt;
+        }
+        if (!otp) {
+          return res
+            .status(503)
+            .json({ message: "OTP is being reissued — please retry" });
+        }
+      }
     }
 
     const etaMeta = await computeEtaCaptainToPickup(ride);
     const confirmation = buildPassengerConfirmation(ride, otp, etaMeta);
+
+    /**
+     * A reissued code must reach the passenger's active screen immediately, so the
+     * driver never verifies against a code the passenger can no longer see. The
+     * captain is deliberately NOT notified — the PIN is the passenger's to share.
+     */
+    if (reissued) {
+      const uid = userIdOf(ride.user);
+      if (uid) {
+        emitToUser(uid, "ride:status-update", {
+          rideId: ride._id,
+          status: "arrived",
+          ride: publicRide(ride),
+          confirmation,
+          otpReissued: true,
+        });
+      }
+    }
+
     return res.json({
       ok: true,
       otp,
@@ -2535,6 +2581,13 @@ module.exports.payMock = async (req, res) => {
     const amount = isRemaining ? remainingAmount : advanceAmount;
     const paymentPart = isRemaining ? "remaining" : "advance";
 
+    /** The advance is only collectable once the driver has authoritatively arrived. */
+    if (!isRemaining && ride.status !== "arrived") {
+      return res.status(409).json({
+        message: "The 25% advance payment opens once the driver has arrived.",
+      });
+    }
+
     /**
      * A ride whose rail owes a provider-verified advance must never be marked paid
      * by this unverified recorder — only the Razorpay confirmation path can do that.
@@ -2815,6 +2868,15 @@ module.exports.createRideRazorpayOrder = async (req, res) => {
     }
 
     /**
+     * The 25% advance may only be collected once the driver has authoritatively
+     * arrived — the same backend status that unlocks the passenger's payment
+     * section. This closes the API-level bypass of that gate.
+     */
+    if (part === "advance" && ride.status !== "arrived") {
+      return fail(res, req, 409, "The 25% advance payment opens once the driver has arrived.");
+    }
+
+    /**
      * Reuse the order this ride already opened, so a repeated tap (or a retry after
      * the passenger cancelled) can never start a second charge. If the provider says
      * that order is already paid, settle the ride from the provider's own record.
@@ -2940,6 +3002,11 @@ module.exports.verifyRideRazorpayPayment = async (req, res) => {
         ride: publicRide(ride),
         paymentStatus: ride.paymentStatus,
       });
+    }
+
+    /** An advance is only ever verified for a ride whose driver has arrived. */
+    if (part === "advance" && ride.status !== "arrived") {
+      return fail(res, req, 409, "The 25% advance payment opens once the driver has arrived.");
     }
 
     const paymentId = String(razorpayPaymentId);

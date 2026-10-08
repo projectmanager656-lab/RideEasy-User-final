@@ -272,6 +272,11 @@ module.exports.markArrived = async ({ rideId, captain }) => {
     if (!current) throw rideError('Ride not found', 404);
     if (current.status === 'arrived') return { ride: current, otpPlain: null };
     if (current.status !== 'accepted') throw rideError('Ride not found / not accepted', 409);
+    /**
+     * The ONLY initial OTP issuance point: the atomic accepted -> arrived transition
+     * below. A repeated arrival returns the existing ride untouched (above), so the
+     * passenger's displayed code is never rotated by another arrival event.
+     */
     const otpPlain = randomSixDigit();
     const [ otpHash, otpCipher ] = await Promise.all([
         hashOtp(otpPlain),
@@ -351,6 +356,22 @@ module.exports.endRide = async ({ rideId, captain }) => {
             console.warn('[endRide] zero-payable coupon settlement warning:', e?.message);
         }
     }
+
+    /**
+     * A completed ride permanently consumes the coupon it was booked with, whichever
+     * payment rail settles the fare afterwards. Idempotent: the reservation flips to
+     * `settled` exactly once and the global counter follows the same call, so the
+     * passenger can never redeem the same coupon on a later booking.
+     */
+    if (ride.couponCode) {
+        try {
+            const { settleCouponRedemption } = require('./coupon.service');
+            await settleCouponRedemption({ rideId });
+        } catch (e) {
+            console.warn('[endRide] coupon settlement warning:', e?.message);
+        }
+    }
+
     // Cash is settled only when the assigned captain confirms receipt.
     return rideModel.findById(rideId).populate('user', 'name phone email').populate('captain');
 };

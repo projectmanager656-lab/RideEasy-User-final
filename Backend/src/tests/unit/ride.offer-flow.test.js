@@ -298,6 +298,8 @@ describe("ride offer and first-accept flow", () => {
   });
 
   test("regenerates a passenger OTP when the existing expiry has passed", async () => {
+    const { encryptOtp } = require("../../utils/otpSecure");
+    const reissuedPlain = "222222";
     const response = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
@@ -316,7 +318,13 @@ describe("ride offer and first-accept flow", () => {
         populate: jest.fn().mockResolvedValue(expiredRide),
       }),
     });
-    rideModel.updateOne.mockResolvedValue({ acknowledged: true, matchedCount: 1 });
+    /** The compare-and-swap winner returns the freshly written cipher. */
+    rideModel.findOneAndUpdate.mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        otpCipher: encryptOtp(reissuedPlain),
+        otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      }),
+    });
 
     await rideController.getPassengerOtp(
       { params: { id: "64d1d2d0b9f7a1234567890a" }, user: { _id: "user-1" } },
@@ -325,10 +333,11 @@ describe("ride offer and first-accept flow", () => {
 
     const payload = response.json.mock.calls[0][0];
     expect(payload.ok).toBe(true);
-    expect(payload.otp).toMatch(/^\d{6}$/);
+    expect(payload.otp).toBe(reissuedPlain);
     expect(new Date(payload.expiresAt).getTime()).toBeGreaterThan(Date.now() + 4 * 60 * 1000);
-    expect(rideModel.updateOne).toHaveBeenCalledWith(
-      { _id: "64d1d2d0b9f7a1234567890a" },
+    /* Atomic reissue: only the request that still sees the old cipher may write. */
+    expect(rideModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "64d1d2d0b9f7a1234567890a", status: "arrived", otpCipher: "invalid-cipher" },
       {
         $set: expect.objectContaining({
           otpExpiresAt: expect.any(Date),
@@ -336,10 +345,13 @@ describe("ride offer and first-accept flow", () => {
           otpCipher: expect.any(String),
         }),
       },
+      { new: true },
     );
   });
 
   test("reissues a passenger OTP when the stored cipher cannot be decrypted", async () => {
+    const { encryptOtp } = require("../../utils/otpSecure");
+    const reissuedPlain = "333333";
     const response = {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
@@ -357,7 +369,12 @@ describe("ride offer and first-accept flow", () => {
         }),
       }),
     });
-    rideModel.updateOne.mockResolvedValue({ acknowledged: true, matchedCount: 1 });
+    rideModel.findOneAndUpdate.mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        otpCipher: encryptOtp(reissuedPlain),
+        otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      }),
+    });
 
     await rideController.getPassengerOtp(
       { params: { id: "64d1d2d0b9f7a1234567890b" }, user: { _id: "user-1" } },
@@ -366,9 +383,9 @@ describe("ride offer and first-accept flow", () => {
 
     const payload = response.json.mock.calls[0][0];
     expect(payload.ok).toBe(true);
-    expect(payload.otp).toMatch(/^\d{6}$/);
-    expect(rideModel.updateOne).toHaveBeenCalledWith(
-      { _id: "64d1d2d0b9f7a1234567890b" },
+    expect(payload.otp).toBe(reissuedPlain);
+    expect(rideModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: "64d1d2d0b9f7a1234567890b", status: "arrived", otpCipher: "not-a-valid-aes-gcm-cipher" },
       {
         $set: expect.objectContaining({
           otpExpiresAt: expect.any(Date),
@@ -376,6 +393,7 @@ describe("ride offer and first-accept flow", () => {
           otpCipher: expect.any(String),
         }),
       },
+      { new: true },
     );
   });
 

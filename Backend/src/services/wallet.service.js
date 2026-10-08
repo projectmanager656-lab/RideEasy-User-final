@@ -28,6 +28,14 @@ async function payRideFromWallet({ rideId, userId, part }) {
             if (ride.status !== 'accepted' && ride.status !== 'arrived' && ride.status !== 'started' && ride.status !== 'completed') {
                 throw walletError('Ride is not ready for payment', 409);
             }
+            /**
+             * The advance share is only collectable once the driver has authoritatively
+             * arrived — the same condition the passenger's payment section is gated on.
+             * The remaining share is settled after the trip, so it keeps its own flow.
+             */
+            if (paymentPart === 'advance' && ride.status !== 'arrived') {
+                throw walletError('The 25% advance payment opens once the driver has arrived.', 409);
+            }
             /** Same authoritative split as the gateway rail — one source for the 25%. */
             const { payable: total, advanceAmount: advance, remainingAmount } = computeAdvanceSplit(ride);
             const amount = paymentPart === 'remaining' ? remainingAmount : advance;

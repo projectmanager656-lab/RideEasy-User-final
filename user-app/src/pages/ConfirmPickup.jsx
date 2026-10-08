@@ -556,9 +556,27 @@ export default function ConfirmPickup() {
                 error
             )
 
-            setBookingError(
-                formatApiError(error)
-            )
+            const message = formatApiError(error)
+
+            /*
+             * A rejected coupon (already redeemed / expired / ineligible) must not
+             * stay attached to the booking: drop it so the retry books at the plain
+             * fare instead of resubmitting a code the backend will keep refusing.
+             */
+            if (
+                fareStateRef.current.couponCode &&
+                /coupon/i.test(String(message || ''))
+            ) {
+                setFareState((prev) => ({
+                    ...prev,
+                    couponCode: '',
+                    discountAmount: 0,
+                    finalFare: prev.price,
+                }))
+                setFareNote('')
+            }
+
+            setBookingError(message)
         } finally {
             setBooking(false)
         }

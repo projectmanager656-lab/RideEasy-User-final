@@ -1,8 +1,11 @@
 /**
- * getPassengerOtp self-healing — the master OTP flow requirement: an
- * undecryptable cipher (e.g. JWT_SECRET rotated between markArrived and the
- * passenger's read) must regenerate the OTP and sync BOTH parties, not 500
- * until the window expires.
+ * Passenger OTP lifecycle — the master flow requirement.
+ *
+ * The code is minted exclusively by markArrived (accepted -> arrived) and may only
+ * be reissued by this endpoint when it genuinely expired or is unrecoverable. A mere
+ * refetch must return the SAME code, a pre-arrival read must expose nothing, and a
+ * reissue must reach the passenger's screen over the existing socket — never the
+ * driver's.
  */
 
 jest.mock('../../services/rideCore.service', () => ({
@@ -32,6 +35,7 @@ jest.mock('../../models/rideCore.model', () => ({
     findById: jest.fn(),
     updateOne: jest.fn(),
     findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
 }));
 jest.mock('../../utils/otpSecure', () => ({
     decryptOtp: jest.fn(),
@@ -78,13 +82,30 @@ function rideDoc(overrides = {}) {
     };
 }
 
-function mockRideFetch(doc) {
-    rideModel.findById.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-            populate: jest.fn().mockResolvedValue(doc),
-        }),
-    });
+/** `.select().populate()` / `await .select()` — both chains of the same query. */
+function chainable(doc, awaited) {
+    const chain = {};
+    chain.select = jest.fn(() => chain);
+    chain.populate = jest.fn(() => Promise.resolve(doc));
+    chain.then = (resolve, reject) =>
+        Promise.resolve(awaited !== undefined ? awaited : doc).then(resolve, reject);
+    return chain;
+}
+
+function mockRideFetch(doc, winnerDoc) {
+    rideModel.findById.mockReturnValue(chainable(doc));
+    if (winnerDoc !== undefined) {
+        rideModel.findById
+            .mockReturnValueOnce(chainable(doc))
+            .mockReturnValueOnce(chainable(winnerDoc));
+    }
     rideModel.updateOne.mockReturnValue({});
+}
+
+function mockReissue(result) {
+    rideModel.findOneAndUpdate.mockReturnValue({
+        select: jest.fn(() => Promise.resolve(result)),
+    });
 }
 
 function responseFor() {
@@ -99,76 +120,110 @@ const req = () => ({
     user: { _id: 'u1' },
 });
 
-describe('getPassengerOtp self-healing', () => {
+describe('getPassengerOtp — arrival-gated, stable, atomic', () => {
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
-    test('undecryptable cipher (key rotated) regenerates the OTP and syncs both parties', async () => {
-        const doc = rideDoc();
-        mockRideFetch(doc);
-        decryptOtp.mockImplementation(() => {
-            throw new Error('Unsupported state or unable to authenticate data');
-        });
-
-        const res = responseFor();
-        await rideController.getPassengerOtp(req(), res);
-
-        expect(res.status).not.toHaveBeenCalledWith(500);
-        expect(rideModel.updateOne).toHaveBeenCalledWith(
-            { _id: RIDE_ID },
-            { $set: { otpHash: 'hashed-x', otpCipher: 'encrypted-x', otpExpiresAt: expect.any(Date) } },
-        );
-        expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({
-                ok: true,
-                otp: '123456',
-                confirmation: expect.objectContaining({ otp: '123456' }),
-            }),
-        );
-        expect(socket.emitToUser).toHaveBeenCalledWith(
-            'u1',
-            'ride:status-update',
-            expect.objectContaining({ rideId: RIDE_ID, status: 'arrived' }),
-        );
-        expect(socket.emitToCaptain).toHaveBeenCalled();
-    });
-
-    test('a decryptable cipher is returned as-is (no regeneration, no socket emit)', async () => {
-        const doc = rideDoc();
-        mockRideFetch(doc);
-        decryptOtp.mockReturnValue('654321');
-
-        const res = responseFor();
-        await rideController.getPassengerOtp(req(), res);
-
-        expect(rideModel.updateOne).not.toHaveBeenCalled();
-        expect(socket.emitToUser).not.toHaveBeenCalled();
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '654321' }));
-    });
-
-    test('an expired window still regenerates (existing behaviour, unified branch)', async () => {
-        const doc = rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) });
-        mockRideFetch(doc);
-
-        const res = responseFor();
-        await rideController.getPassengerOtp(req(), res);
-
-        expect(rideModel.updateOne).toHaveBeenCalledWith(
-            { _id: RIDE_ID },
-            { $set: { otpHash: 'hashed-x', otpCipher: 'encrypted-x', otpExpiresAt: expect.any(Date) } },
-        );
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '123456' }));
-        expect(socket.emitToUser).toHaveBeenCalled();
-    });
-
-    test('non-active statuses are still rejected with 400', async () => {
-        mockRideFetch(rideDoc({ status: 'completed' }));
+    test('never mints an OTP before the driver arrives', async () => {
+        mockRideFetch(rideDoc({ status: 'accepted', otpCipher: undefined }));
 
         const res = responseFor();
         await rideController.getPassengerOtp(req(), res);
 
         expect(res.status).toHaveBeenCalledWith(400);
         expect(rideModel.updateOne).not.toHaveBeenCalled();
+        expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(socket.emitToUser).not.toHaveBeenCalled();
+    });
+
+    test.each(['searching', 'started', 'completed', 'cancelled'])(
+        'exposes nothing for a %s ride and writes nothing',
+        async (status) => {
+            mockRideFetch(rideDoc({ status }));
+
+            const res = responseFor();
+            await rideController.getPassengerOtp(req(), res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(rideModel.updateOne).not.toHaveBeenCalled();
+            expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+        },
+    );
+
+    test('a still-valid code is returned as-is — a refetch never rotates it', async () => {
+        mockRideFetch(rideDoc());
+        decryptOtp.mockReturnValue('654321');
+
+        const res = responseFor();
+        await rideController.getPassengerOtp(req(), res);
+
+        expect(res.status).not.toHaveBeenCalledWith(500);
+        expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(rideModel.updateOne).not.toHaveBeenCalled();
+        expect(socket.emitToUser).not.toHaveBeenCalled();
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                ok: true,
+                otp: '654321',
+                confirmation: expect.objectContaining({ otp: '654321' }),
+            }),
+        );
+    });
+
+    test('an expired window reissues atomically and syncs the passenger only', async () => {
+        const doc = rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) });
+        mockRideFetch(doc);
+        mockReissue({ otpCipher: 'fresh-cipher', otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+        decryptOtp.mockReturnValue('123456');
+
+        const res = responseFor();
+        await rideController.getPassengerOtp(req(), res);
+
+        /* Compare-and-swap on the cipher it read: concurrent refetches cannot both mint. */
+        expect(rideModel.findOneAndUpdate).toHaveBeenCalledWith(
+            { _id: RIDE_ID, status: 'arrived', otpCipher: 'stale-cipher' },
+            { $set: { otpHash: 'hashed-x', otpCipher: 'encrypted-x', otpExpiresAt: expect.any(Date) } },
+            { new: true },
+        );
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '123456' }));
+        expect(socket.emitToUser).toHaveBeenCalledWith(
+            'u1',
+            'ride:status-update',
+            expect.objectContaining({ rideId: RIDE_ID, status: 'arrived', otpReissued: true }),
+        );
+        /* The driver verifies the code — it is never pushed to a driver room. */
+        expect(socket.emitToCaptain).not.toHaveBeenCalled();
+    });
+
+    test('an undecryptable cipher (key rotated) is reissued and synced', async () => {
+        mockRideFetch(rideDoc());
+        mockReissue({ otpCipher: 'fresh-cipher', otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+        decryptOtp
+            .mockImplementationOnce(() => {
+                throw new Error('Unsupported state or unable to authenticate data');
+            })
+            .mockReturnValue('123456');
+
+        const res = responseFor();
+        await rideController.getPassengerOtp(req(), res);
+
+        expect(res.status).not.toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '123456' }));
+        expect(socket.emitToUser).toHaveBeenCalled();
+        expect(socket.emitToCaptain).not.toHaveBeenCalled();
+    });
+
+    test('losing the reissue race serves the winner\'s code without a second mint', async () => {
+        const doc = rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) });
+        mockRideFetch(doc, { otpCipher: 'winner-cipher', otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+        mockReissue(null);
+        decryptOtp.mockReturnValue('999999');
+
+        const res = responseFor();
+        await rideController.getPassengerOtp(req(), res);
+
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '999999' }));
+        expect(socket.emitToUser).not.toHaveBeenCalled();
     });
 });

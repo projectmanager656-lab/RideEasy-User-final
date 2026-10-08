@@ -87,7 +87,7 @@ export default defineConfig(({ mode }) => {
               }
             },
             {
-              urlPattern: ({ url }) => url.pathname.startsWith('/users/login') || url.pathname.startsWith('/users/signup') || url.pathname.startsWith('/captains/login') || url.pathname.startsWith('/captains/register') || url.pathname.startsWith('/rides/create') || url.pathname.startsWith('/payments') || url.pathname.startsWith('/admin/login'),
+              urlPattern: ({ url }) => url.pathname.startsWith('/users/login') || url.pathname.startsWith('/users/signup') || url.pathname.startsWith('/captains/login') || url.pathname.startsWith('/captains/register') || url.pathname.startsWith('/rides/create') || url.pathname.startsWith('/rides/active') || url.pathname.startsWith('/users/coupons') || url.pathname.startsWith('/payments') || url.pathname.startsWith('/admin/login'),
               handler: 'NetworkOnly',
               options: {
                 cacheName: 'auth-api-cache'

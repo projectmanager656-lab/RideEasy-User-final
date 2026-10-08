@@ -142,6 +142,24 @@ describe("ride core offer assignment", () => {
     );
   });
 
+  test("a repeated arrival never rotates the OTP the passenger already sees", async () => {
+    rideModel.findOne.mockReturnValueOnce(populatedQuery({
+      _id: "ride-arrive",
+      captain: "captain-a",
+      status: "arrived",
+      user: { _id: "user-1" },
+      otpCipher: "existing-cipher",
+    }));
+
+    const result = await rideService.markArrived({
+      rideId: "ride-arrive",
+      captain: { _id: "captain-a" },
+    });
+
+    expect(result.otpPlain).toBeNull();
+    expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
   test("does not record a rejection after another captain accepts", async () => {
     rideModel.updateOne.mockResolvedValue({ acknowledged: true, matchedCount: 0 });
     rideModel.findById.mockReturnValue(populatedQuery({

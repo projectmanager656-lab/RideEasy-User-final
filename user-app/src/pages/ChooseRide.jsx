@@ -387,7 +387,13 @@ const ChooseRide = () => {
         apiClient.get('/users/coupons', withAuth())
             .then((res) => {
                 const body = stripApiEnvelope(res.data)
-                setOffers(Array.isArray(body?.coupons) ? body.coupons : [])
+                const list = Array.isArray(body?.coupons) ? body.coupons : []
+                /**
+                 * Server-authoritative eligibility: a coupon this passenger has already
+                 * redeemed (`used`) is no longer an available offer and must not stay in
+                 * the sheet — only unused, eligible coupons are listed.
+                 */
+                setOffers(list.filter((coupon) => !coupon?.used))
             })
             .catch(() => {
                 setOffers([])
@@ -497,6 +503,8 @@ const ChooseRide = () => {
         } catch (err) {
             setCouponState(null)
             setBookingError(formatApiError(err))
+            /** The list is server-authoritative — a rejection means it is stale. */
+            fetchOffers()
             return false
         } finally {
             setCouponLoading(false)

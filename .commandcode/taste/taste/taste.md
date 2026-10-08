@@ -1,11 +1,10 @@
 # Taste
-- Wants root-cause fixes, not layered patches — explicitly forbids fighting an existing bug with another workaround (e.g. "do NOT simply add another navigate() to fight the existing navigate()"); demands the actual offending line/source be found and removed. Confidence: 0.9
-- Expects a fix to address every plausible cause rather than assuming a single one ("do NOT assume one single cause"). Confidence: 0.7
-- Refuses "cheating" solutions that loosen constraints to make a symptom disappear (no blindly widening radius, no removing validation, no faking success). Confidence: 0.75
-- Strictly wants changes scoped to the stated problem: "keep everything else exactly as it is"; only modify code where required; no opportunistic refactors or unrelated UI redesign. Confidence: 0.85
-- Requires preserving all previously working behavior and prior fixes; explicitly enumerates invariants that must remain intact. Confidence: 0.8
-- Insists on honest reporting: never claim something was verified/tested when it wasn't (e.g. don't claim physical-device testing without devices); no fabricated success and no misleading/inaccurate logs. Confidence: 0.85
-- Wants an exhaustive, structured final report that answers each requested question by number, including exact file/line root cause, files changed, and before/after behavior. Confidence: 0.8
-- Values diagnostics that explain failures explicitly (which rule rejected a candidate, with distinct funnel counts) instead of misleading aggregate numbers. Confidence: 0.6
-- Expects full validation before declaring done: targeted and regression tests, builds for affected apps, lint on changed files, and Capacitor `cap sync` for mobile frontends. Confidence: 0.8
-- Provides an explicit test matrix / acceptance flow and expects it to be followed and each step confirmed. Confidence: 0.75
+- Prefers minimal, targeted changes: keep all existing working functionality, design, colors, layouts, and navigation unchanged unless a specific change is strictly necessary for the fix. Confidence: 0.9
+- Wants root causes fixed, not just the visible UI symptoms. Confidence: 0.9
+- Expects the existing architecture and conventions to be reused (e.g. "use the existing socket architecture") rather than introducing parallel mechanisms. Confidence: 0.8
+- Expects regression tests added or updated for behavioral changes, covering the fixed flows end to end (including negative/blocked cases). Confidence: 0.85
+- Expects full validation: run the targeted tests, the full suite, frontend build and lint; build/sync any other app whose code changed. Confidence: 0.8
+- Never overstate verification — do not claim real-device or manual testing unless it was actually performed. Confidence: 0.85
+- Proves pre-existing test failures with a pristine baseline (e.g. a detached `git worktree` at HEAD) and compares failing-suite/test counts against it before attributing failures to the change; cleans up the temporary baseline afterwards. Confidence: 0.7
+- Keeps diffs clean by introducing no new lint warnings/errors: treats pre-existing lint issues as out of scope, and fixes genuine new issues properly (e.g. adding real deps to React hook dependency arrays) rather than suppressing them. Confidence: 0.75
+- Prefers an explicit structured final report: root cause of each issue, how it was fixed, files changed, tests passed/failed, and build results. Confidence: 0.8
