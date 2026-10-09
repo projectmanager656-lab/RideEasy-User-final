@@ -46,6 +46,10 @@ function error (msg, extra) {
     if (shouldLog('error')) console.error(fmt('app', msg, extra));
 }
 
+function info (msg, extra) {
+    if (shouldLog('info')) console.log(fmt('app', msg, extra));
+}
+
 module.exports = {
     api,
     socket,
@@ -53,6 +57,7 @@ module.exports = {
     payment,
     warn,
     error,
+    info,
     debug: (msg, extra) => {
         if (shouldLog('debug')) console.log(fmt('debug', msg, extra));
     },

@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android network security (dev-focused):
+  - Base rule: HTTPS only (cleartext globally forbidden).
+  - Scoped exception: cleartext allowed ONLY to the local LAN dev backend IP
+    (must match VITE_BASE_URL in user-app/.env.production). When the Mac's
+    Wi-Fi IP changes, update BOTH files: the .env.production above and the
+    <domain> entry below, then rebuild: npm run build && npx cap sync android.
+  - Production releases keep cleartextTrafficPermitted="false" everywhere else.
+-->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Local dev backend (PC LAN IP) — Capacitor WebView origin remains isolated. -->
+        <domain includeSubdomains="false">192.168.1.16</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
 </network-security-config>

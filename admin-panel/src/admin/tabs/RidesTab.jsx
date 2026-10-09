@@ -1,6 +1,7 @@
 import React from 'react'
 import { displayName, rowStableKey, statusBadgeClass, RIDE_STATUSES } from '../adminUtils'
 import { useLanguage } from '../../i18n'
+import { normalizeLocationText } from '../../utils/locationText'
 
 export default function RidesTab ({
   ridesLoading,
@@ -114,9 +115,9 @@ export default function RidesTab ({
                       <span className="block text-xs text-neutral-500">{r.captain?.vehicleNumber || r.captain?.phone || ''}</span>
                     </td>
                     <td className="max-w-xs px-4 py-3 text-neutral-600">
-                      <span className="line-clamp-2">{r.pickupLocation ?? '—'}</span>
+                      <span className="line-clamp-2">{normalizeLocationText(r.pickupLocation)}</span>
                       <span className="text-neutral-600"> → </span>
-                      <span className="line-clamp-2">{r.dropLocation ?? '—'}</span>
+                      <span className="line-clamp-2">{normalizeLocationText(r.dropLocation)}</span>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium text-black">₹{r.price ?? '—'}</td>
                     <td className="px-4 py-3">

@@ -37,10 +37,11 @@ async function main() {
         phone: '9999999999',
         email,
         password: hashed,
+        // This seed represents an already-onboarded driver, not a Stage 1 signup.
         vehicleType: 'AUTO',
         vehicleNumber: 'MH12AB1234',
         license: 'LIC12345',
-        city: 'Kolhapur',
+        servingCity: 'Kolhapur',
         status: 'active',
         approved: true,
         subscriptionStatus: 'active',

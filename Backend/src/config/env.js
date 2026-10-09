@@ -73,10 +73,22 @@ function getLaunchTrialDays() {
     return Math.min(Math.floor(n), 365);
 }
 
+/**
+ * Scheduled rides dispatch EXACTLY at the selected pickup instant
+ * (`dispatchAt === scheduledPickupAt`) — there is no dispatch lead any more, so
+ * this is always 0. Published to clients via GET /config/scheduling so the
+ * picker mirrors the backend rule: a chosen pickup only has to be in the future.
+ * (SCHEDULED_RIDE_DISPATCH_LEAD_MINUTES is retired and intentionally ignored.)
+ */
+function getScheduledDispatchLeadMinutes() {
+    return 0;
+}
+
 module.exports = {
     isProductionLike,
     getMongoUri,
     validateEnv,
     warnDevelopmentEnv,
     getLaunchTrialDays,
+    getScheduledDispatchLeadMinutes,
 };

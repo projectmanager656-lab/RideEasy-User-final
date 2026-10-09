@@ -1,6 +1,5 @@
 import React, { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import InstallPWAButton from './components/InstallPWAButton'
 import BottomNav from './components/BottomNav'
 import NativeAndroidFlavorRedirect from './components/NativeAndroidFlavorRedirect'
 import { getCaptainToken } from './utils/authTokens'
@@ -43,7 +42,6 @@ const App = () => {
           <Route path="/captain/logout" element={<CaptainProtectWrapper><CaptainLogout /></CaptainProtectWrapper>} />
         </Routes>
       </Suspense>
-      <InstallPWAButton />
       <BottomNav />
     </div>
   )

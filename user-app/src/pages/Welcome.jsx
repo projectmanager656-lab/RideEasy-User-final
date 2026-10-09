@@ -1,9 +1,10 @@
-import React, { useRef } from 'react'
+import React, { useContext, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import gsap from 'gsap'
 import AuthShell from '../components/auth/AuthShell'
 import { useLanguage } from '../i18n'
 import { markOnboardingComplete } from '../utils/onboarding'
+import { UserDataContext } from '../context/UserContext'
 
 /**
  * First-launch welcome screen: RideEasy branding, night-city hero art and a
@@ -13,13 +14,21 @@ import { markOnboardingComplete } from '../utils/onboarding'
  */
 const Welcome = () => {
   const { t } = useLanguage()
+  const { authLoading, isAuthenticated } = useContext(UserDataContext)
   const navigate = useNavigate()
   const rootRef = useRef(null)
   const touchStart = useRef(null)
   const leaving = useRef(false)
 
+  useEffect(() => {
+    if (authLoading || !isAuthenticated || leaving.current) return
+    leaving.current = true
+    markOnboardingComplete()
+    navigate('/location', { replace: true })
+  }, [ authLoading, isAuthenticated, navigate ])
+
   const goToLogin = () => {
-    if (leaving.current) return
+    if (leaving.current || authLoading) return
     leaving.current = true
     markOnboardingComplete()
     gsap.to(rootRef.current, {
@@ -28,7 +37,7 @@ const Welcome = () => {
       scale: 0.96,
       duration: 0.45,
       ease: 'power2.inOut',
-      onComplete: () => navigate('/login', { replace: true, state: { fromWelcome: true } }),
+      onComplete: () => navigate(isAuthenticated ? '/location' : '/login', { replace: true, ...(!isAuthenticated ? { state: { fromWelcome: true } } : {}) }),
     })
   }
 

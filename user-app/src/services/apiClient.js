@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { getApiBaseUrl } from '../config/apiBaseUrl'
 import { getPassengerToken, getCaptainToken, getAdminToken } from '../utils/authTokens'
+import { clearUserScopedSession } from '../utils/rideSession'
 
 /**
  * Single axios instance for the deployed (or local) backend.
@@ -9,8 +10,12 @@ import { getPassengerToken, getCaptainToken, getAdminToken } from '../utils/auth
 export const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
   timeout: Number(import.meta.env.VITE_API_TIMEOUT_MS || 30000),
-  headers: { 'Content-Type': 'application/json' },
 })
+
+// Development diagnostics: the single resolved API origin every request uses.
+if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true') {
+  console.info('[API] Base URL:', apiClient.defaults.baseURL)
+}
 
 export function requestPath (config) {
   const url = config.url || ''
@@ -27,12 +32,29 @@ export function requestPath (config) {
 
 /** Clear session on expired/invalid JWT (all authed API calls use Bearer token). */
 apiClient.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true') {
+      const cfg = res.config
+      const method = String(cfg?.method || 'get').toUpperCase()
+      const url = cfg?.url || ''
+      console.info(`[API Response] ${method} ${url} -> HTTP ${res.status}`)
+    }
+    return res
+  },
   (err) => {
     const status = err.response?.status
     const cfg = err.config
     const method = String(cfg?.method || 'get').toLowerCase()
     const path = requestPath(cfg || {})
+
+    if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true') {
+      console.warn(`[API Error] ${method.toUpperCase()} ${cfg?.url || ''} -> HTTP ${status || 'NETWORK_ERR'}:`, {
+        code: err.code,
+        message: err.message,
+        serverMessage: err.response?.data?.message || err.response?.data?.error,
+      })
+    }
+
     const isAuthPublic =
       (method === 'post' && /^\/users\/(login|register)/i.test(path))
       || (method === 'get' && /^\/users\/logout/i.test(path))
@@ -46,6 +68,22 @@ apiClient.interceptors.response.use(
       } catch {
         /* ignore */
       }
+      /**
+       * The session is over — drop the previous account's ride pointer, booking draft
+       * and safety cache now, instead of relying on the reload to clean up.
+       */
+      clearUserScopedSession()
+      /**
+       * The token is gone — tell SocketContext so it drops the now-invalid live
+       * connection instead of staying authenticated on a dead JWT until the reload.
+       */
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new Event('rideeasy:session-changed'))
+        } catch {
+          /* ignore */
+        }
+      }
       const p = typeof window !== 'undefined' ? window.location.pathname : ''
       if (p !== '/login' && p !== '/signup') {
         window.location.replace('/login')
@@ -55,15 +93,26 @@ apiClient.interceptors.response.use(
   }
 )
 
-/** Passenger app: users, rides, maps, health only (no captain/admin namespaces). */
+/** Passenger app: users, rides, maps, health, public config only (no captain/admin namespaces). */
 const PASSENGER_ALLOWED = [
   /^\/users(\/|$)/i,
   /^\/rides(\/|$)/i,
   /^\/maps(\/|$)/i,
   /^\/health(\/|$)/i,
+  /^\/support-tickets(\/|$)/i,
+  /^\/chat(\/|$)/i,
+  /^\/config(\/|$)/i,
 ]
 
 apiClient.interceptors.request.use((config) => {
+  if (import.meta.env.DEV || import.meta.env.VITE_DEBUG_LOGS === 'true') {
+    const fullUrl = config.baseURL ? `${config.baseURL.replace(/\/$/, '')}/${String(config.url || '').replace(/^\//, '')}` : config.url
+    console.info(`[API Request] ${String(config.method || 'get').toUpperCase()} ${fullUrl}`, {
+      baseURL: config.baseURL,
+      path: config.url,
+    })
+  }
+
   if (import.meta.env.VITE_APP_ROLE !== 'user') return config
   const path = requestPath(config)
   if (!PASSENGER_ALLOWED.some((re) => re.test(path))) {

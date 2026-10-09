@@ -11,6 +11,15 @@ module.exports.getCoordinates = async (req, res) => {
     }
 };
 
+module.exports.getAddressFromCoordinates = async (req, res) => {
+    try {
+        const address = await mapService.getAddressFromCoordinates(req.query.lat, req.query.lng);
+        return res.status(200).json({ address });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
+};
+
 module.exports.getDistanceTime = async (req, res) => {
     try {
         const origin = (req.query.origin || '').toString().trim();

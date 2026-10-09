@@ -2,9 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   html {
+    height: 100%;
     -webkit-text-size-adjust: 100%;
+    /* Paint the status-bar inset area with the app background. On edge-to-edge
+       Android the WebView extends under the status bar — without this the inset
+       area shows the (white) window background as a strip above the app. */
+    background-color: rgb(var(--bg));
   }
 
   /* Centralized RideEasy theme tokens. The `data-theme` attribute is set on
@@ -41,14 +56,28 @@
   }
 
   body {
-    @apply overflow-x-hidden antialiased;
+    height: 100%;
+    overflow: hidden;
+    @apply antialiased;
     background-color: rgb(var(--bg));
     color: rgb(var(--text-primary));
   }
 
   #root {
-    @apply min-h-dvh min-h-screen relative mx-auto max-w-[480px] w-full shadow-2xl overflow-x-hidden;
+    height: 100%;
+    /*
+     * No 100vh/100dvh min-height here. A viewport-unit min-height keeps #root taller
+     * than the Android WebView once the keyboard opens (adjustResize shrinks the
+     * WebView), which pushed the focused login/register field behind the keyboard.
+     * height:100% follows the real viewport, so the whole layout shrinks with it.
+     */
+    @apply relative mx-auto w-full max-w-[480px] shadow-2xl overflow-x-hidden;
     background-color: rgb(var(--bg));
+    /* Edge-to-edge Android: keep content clear of the status bar / gesture bar.
+       Resolves to 0 when the WebView is already inset (older Android), so this
+       never double-pads. */
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   /* Theme-aware utility color aliases (rgb components from the tokens above). */
@@ -76,4 +105,173 @@
   .border-brand\/30 { border-color: rgba(var(--brand), 0.3); }
   .border-brand\/40 { border-color: rgba(var(--brand), 0.4); }
   .border-brand\/50 { border-color: rgba(var(--brand), 0.5); }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Bottom Sheet / Half-Screen Panel animations
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes backdrop-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.sheet-slide-up   { animation: sheet-slide-up 0.24s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+.sheet-slide-down { animation: sheet-slide-down 0.2s ease-in forwards; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Handle-driven sheet close (hooks/useSheetDrag.js).
+ * The grey bar keeps its exact size and position — this only adds an invisible
+ * grab zone around it plus a scroll-free touch action, so the handle can be
+ * tapped or dragged without touching a single pixel of the sheet's design.
+ * In-flow handles also need `relative` so the grab zone is centred on the bar.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.sheet-drag-handle {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+}
+.sheet-drag-handle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 40px;
+  transform: translateY(-50%);
+}
+.sheet-backdrop-in  { animation: backdrop-in  0.2s ease forwards; }
+.sheet-backdrop-out { animation: backdrop-out 0.18s ease forwards; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Page-switch transition
+ * Replayed on the app's scroll container after every route change. The transform
+ * resolves to `none`, so at rest it never leaves a containing block behind for
+ * the fixed-position overlays.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes page-enter-forward {
+  from { opacity: 0; transform: translate3d(14px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes page-enter-back {
+  from { opacity: 0; transform: translate3d(-14px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+.page-enter-forward { animation: page-enter-forward 0.2s ease-out both; }
+.page-enter-back    { animation: page-enter-back    0.2s ease-out both; }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Modal / popup panels + their backdrop (fast fade + subtle slide/scale)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes modal-panel-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.98); }
+}
+
+.modal-panel-in  { animation: modal-panel-in  0.2s cubic-bezier(0.32, 0.72, 0, 1) both; }
+.modal-panel-out { animation: modal-panel-out 0.18s ease-in both; }
+
+.modal-backdrop-in  { animation: backdrop-in  0.2s ease both; }
+.modal-backdrop-out { animation: backdrop-out 0.18s ease both; }
+
+/*
+ * Reduced motion: keep the stateful animations resolving almost instantly with a
+ * near-zero duration (not `none`), so any `animationend` cleanup still fires and
+ * an overlay is never left stuck on screen.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-forward,
+  .page-enter-back,
+  .modal-panel-in,
+  .modal-panel-out,
+  .modal-backdrop-in,
+  .modal-backdrop-out,
+  .sheet-slide-up,
+  .sheet-slide-down,
+  .sheet-backdrop-in,
+  .sheet-backdrop-out {
+    animation-duration: 0.001s !important;
+  }
+}
+
+/*
+ * Dark ↔ Light handoff. `.theme-transitioning` is placed on <html> ONLY for the
+ * brief window while the theme is actually switching (see ThemeProvider), so the
+ * theme colours cross-fade instead of snapping. Paint-only properties only — no
+ * layout properties — so nothing moves or reflows during the switch.
+ */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition-property: background-color, border-color, color, fill, stroke !important;
+  transition-duration: 0.2s !important;
+  transition-timing-function: ease-out !important;
+  transition-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-transitioning,
+  .theme-transitioning *,
+  .theme-transitioning *::before,
+  .theme-transitioning *::after {
+    transition-duration: 0.001s !important;
+  }
+}
+
+/*
+ * Print output — the invoice page is a clean white printable document.
+ * Applies only when printing (no effect on the on-screen UI).
+ */
+@media print {
+  html,
+  body,
+  #root {
+    height: auto;
+    overflow: visible;
+    background: #ffffff !important;
+    max-width: none !important;
+  }
+  /* The app shell scroller must not clip multi-page or long invoices in print. */
+  body * {
+    overflow: visible !important;
+  }
+  /* Hide app chrome and unrelated elements from the printed document. */
+  .print\:hidden,
+  header,
+  nav,
+  button,
+  iframe,
+  video {
+    display: none !important;
+  }
+  .leaflet-container,
+  .leaflet-pane {
+    display: none !important;
+  }
 }

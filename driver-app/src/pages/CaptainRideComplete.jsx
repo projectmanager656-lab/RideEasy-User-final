@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { apiClient, withCaptainAuth } from '../services/http'
 import { stripApiEnvelope } from '../utils/apiBody'
 import { formatApiError } from '../utils/apiError'
+import { normalizeLocationText } from '../utils/locationText'
 import { getPlaceholderAvatarUrl } from '../config/externalEndpoints'
 
 const TAG_OPTIONS = [
@@ -247,14 +248,14 @@ const CaptainRideComplete = () => {
                             <i className="ri-map-pin-user-fill mt-0.5 text-emerald-500" />
                             <div>
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Pickup</p>
-                                <p className="font-medium text-zinc-100">{ride?.pickupLocation || '—'}</p>
+                                <p className="font-medium text-zinc-100">{normalizeLocationText(ride?.pickupLocation)}</p>
                             </div>
                         </div>
                         <div className="flex gap-3">
                             <i className="ri-map-pin-2-fill mt-0.5 text-emerald-500" />
                             <div>
                                 <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Drop</p>
-                                <p className="font-medium text-zinc-100">{ride?.dropLocation || '—'}</p>
+                                <p className="font-medium text-zinc-100">{normalizeLocationText(ride?.dropLocation)}</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 pt-1">

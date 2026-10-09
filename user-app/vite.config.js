@@ -17,14 +17,23 @@ export default defineConfig(({ mode }) => {
     base: './',
     define: {
       'import.meta.env.VITE_APP_ROLE': JSON.stringify('user'),
-      'import.meta.env.VITE_BASE_URL': JSON.stringify(env.VITE_BASE_URL || 'http://localhost:5001'),
-      'import.meta.env.VITE_SOCKET_URL': JSON.stringify(env.VITE_SOCKET_URL || env.VITE_BASE_URL || 'http://localhost:5001'),
+      /**
+       * Never bake a `localhost` fallback into the bundle. On a physical Android
+       * device "localhost" is the phone itself, so a baked localhost silently
+       * breaks every API call. Leaving the value empty lets config/apiBaseUrl.js
+       * apply the correct per-platform fallback (LAN URL in dev, fail-fast on native).
+       */
+      'import.meta.env.VITE_BASE_URL': JSON.stringify(env.VITE_BASE_URL || ''),
+      'import.meta.env.VITE_SOCKET_URL': JSON.stringify(env.VITE_SOCKET_URL || env.VITE_BASE_URL || ''),
       /** Changes every build → boot-time purge of stale service workers/caches. */
       __BUILD_STAMP__: JSON.stringify(Date.now()),
     },
     plugins: [
       react(),
       VitePWA({
+        // Capacitor Android must not auto-register the PWA service worker.
+        // We register it manually only in normal web browsers.
+        injectRegister: false,
         registerType: 'autoUpdate',
         includeAssets: [ 'vite.svg', 'offline.html' ],
         manifest: {
@@ -78,7 +87,7 @@ export default defineConfig(({ mode }) => {
               }
             },
             {
-              urlPattern: ({ url }) => url.pathname.startsWith('/users/login') || url.pathname.startsWith('/users/signup') || url.pathname.startsWith('/captains/login') || url.pathname.startsWith('/captains/register') || url.pathname.startsWith('/rides/create') || url.pathname.startsWith('/payments') || url.pathname.startsWith('/admin/login'),
+              urlPattern: ({ url }) => url.pathname.startsWith('/users/login') || url.pathname.startsWith('/users/signup') || url.pathname.startsWith('/captains/login') || url.pathname.startsWith('/captains/register') || url.pathname.startsWith('/rides/create') || url.pathname.startsWith('/rides/active') || url.pathname.startsWith('/users/coupons') || url.pathname.startsWith('/payments') || url.pathname.startsWith('/admin/login'),
               handler: 'NetworkOnly',
               options: {
                 cacheName: 'auth-api-cache'

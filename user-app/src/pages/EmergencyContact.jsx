@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react'
+
+import React, { useCallback, useEffect, useContext, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { ConfigContext } from '../context/ConfigContext'
 import { useLanguage } from '../i18n'
 import { inputBase, errorBoxClass } from '../components/auth/classes'
 import PhoneInput from '../components/auth/PhoneInput'
@@ -10,6 +12,7 @@ import PhoneInput from '../components/auth/PhoneInput'
 const EmergencyContact = () => {
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const { support, supportSettled: supportReady } = useContext(ConfigContext)
   const [ loading, setLoading ] = useState(true)
   const [ error, setError ] = useState('')
   const [ message, setMessage ] = useState('')
@@ -28,10 +31,6 @@ const EmergencyContact = () => {
     { value: 'spouse', label: t('spouse') },
     { value: 'other', label: t('other') },
   ]
-
-  useEffect(() => {
-    loadEmergencyContact()
-  }, [])
 
   const loadEmergencyContact = useCallback(async () => {
     setLoading(true)
@@ -61,6 +60,30 @@ const EmergencyContact = () => {
       setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    void loadEmergencyContact()
+  }, [loadEmergencyContact])
+
+  /** Digits (plus a leading +) a phone dialer understands; Indian 10-digit
+   * mobiles get an E.164 +91 prefix; '' when there is nothing dialable
+   * (missing numbers and placeholders like "+91XXXXXXXXXX" both land here). */
+  const dialablePhone = (raw) => {
+    const cleaned = String(raw || '').replace(/[^+\d]/g, '')
+    const digitCount = cleaned.replace(/\D/g, '').length
+    if (!cleaned || digitCount < 8) return ''
+    if (/^[6-9]\d{9}$/.test(cleaned)) return `+91${cleaned}`
+    return cleaned
+  }
+
+  const handleCall = (rawPhone) => {
+    const dialable = dialablePhone(rawPhone)
+    if (!dialable) {
+      setError(t('phone_not_available'))
+      return
+    }
+    window.location.href = `tel:${dialable}`
+  }
 
   const saveEmergencyContact = useCallback(async (e) => {
     e.preventDefault()
@@ -103,7 +126,7 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [name, phone, relationship])
+  }, [name, phone, relationship, t])
 
   const deleteEmergencyContact = useCallback(async () => {
     if (!window.confirm(t('delete_contact'))) {
@@ -127,17 +150,17 @@ const EmergencyContact = () => {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [t])
 
   const handleEditClick = () => {
     setEditing(true)
   }
 
   return (
-    <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-theme-bg text-theme-primary">
       {/* header */}
-      <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-lg items-center gap-3">
+      <header className="z-10 shrink-0 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-md items-start gap-3">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -153,7 +176,47 @@ const EmergencyContact = () => {
         </div>
       </header>
 
-      <div className="mx-auto max-w-lg space-y-5 px-4 pt-4">
+      {/* Only this area scrolls — the header stays fixed. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain scrollbar-hide touch-pan-y [-webkit-overflow-scrolling:touch]">
+      <div className="mx-auto w-full max-w-md space-y-4 px-4 pt-5 pb-28">
+        {error ? (
+          <div role="alert" className={errorBoxClass}>
+            {error}
+          </div>
+        ) : null}
+
+        {/* RideEasy Support — active record from the rideeasy_support collection */}
+        <section className="rounded-2xl border border-theme bg-theme-card p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-rose-500/15 text-rose-500">
+              <i className="ri-customer-service-2-line text-2xl" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-base font-bold text-theme-primary">{support?.name || t('rideeasy_support')}</h2>
+              <p className="mt-0.5 text-sm text-theme-muted">{support?.description || t('rideeasy_support_sub')}</p>
+              {support?.phone ? (
+                <p className="mt-1 text-sm font-medium text-theme-secondary">{support.phone}</p>
+              ) : null}
+            </div>
+          </div>
+          {!supportReady ? (
+            <div className="mt-3 flex items-center justify-center py-1 text-theme-muted">
+              <i className="ri-loader-4-line animate-spin text-lg text-brand" aria-hidden />
+            </div>
+          ) : support?.isActive !== false && dialablePhone(support?.phone) ? (
+            <button
+              type="button"
+              onClick={() => handleCall(support.phone)}
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-rose-500 py-2.5 text-sm font-bold text-white transition hover:bg-rose-600 active:scale-[0.99]"
+            >
+              <i className="ri-phone-line text-base" aria-hidden />
+              {t('call')}
+            </button>
+          ) : (
+            <p className="mt-3 text-center text-xs text-theme-muted">{t('phone_not_available')}</p>
+          )}
+        </section>
+
         {/* emergency contact info card */}
         <section className="rounded-2xl border border-theme bg-theme-card p-4">
           {loading ? (
@@ -162,7 +225,7 @@ const EmergencyContact = () => {
             </div>
           ) : contact ? (
             <>
-              <div className="flex items-start gap-3">
+              <div className="flex flex-wrap items-start gap-3">
                 <div className="relative">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-theme-card-muted text-theme-muted">
                     <i className="ri-phone-line text-3xl" />
@@ -181,7 +244,15 @@ const EmergencyContact = () => {
                     </span>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="ml-auto flex w-full items-center justify-end gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCall(contact.phone)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full bg-rose-500 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-600"
+                  >
+                    <i className="ri-phone-line text-sm" />
+                    {t('call')}
+                  </button>
                   <button
                     type="button"
                     onClick={handleEditClick}
@@ -224,11 +295,6 @@ const EmergencyContact = () => {
         {/* edit form */}
         {editing && (
           <form onSubmit={saveEmergencyContact} className="space-y-4 rounded-2xl border border-theme bg-theme-card p-4">
-            {error ? (
-              <div role="alert" className={errorBoxClass}>
-                {error}
-              </div>
-            ) : null}
             {message ? (
               <div className="rounded-xl border border-emerald-500/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
                 {message}
@@ -287,6 +353,7 @@ const EmergencyContact = () => {
             </div>
           </form>
         )}
+      </div>
       </div>
     </div>
   )

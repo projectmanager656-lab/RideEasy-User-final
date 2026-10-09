@@ -1,0 +1,28 @@
+--------- beginning of main
+09-24 15:51:42.504 V/Capacitor/AppPlugin(15112): Notifying listeners for event pause
+09-24 15:51:42.504 D/Capacitor/AppPlugin(15112): No listeners found for event pause
+09-24 15:51:42.505 D/Capacitor(15112): App paused
+09-24 15:51:42.604 D/DecorView[](15112): onWindowFocusChanged hasWindowFocus false
+09-24 15:51:42.617 D/Capacitor/AppPlugin(15112): Firing change: false
+09-24 15:51:42.617 V/Capacitor/AppPlugin(15112): Notifying listeners for event appStateChange
+09-24 15:51:42.617 D/Capacitor/AppPlugin(15112): No listeners found for event appStateChange
+09-24 15:51:42.618 D/Capacitor(15112): App stopped
+09-24 15:51:42.622 D/Capacitor(15112): Saving instance state!
+--------- beginning of system
+09-24 15:58:30.336 I/ForceDarkHelperStubImpl(15112): setViewRootImplForceDark: false for com.rideeasy.passenger.MainActivity@24abd45, reason: AppDarkModeEnable
+09-24 15:58:30.430 I/ForceDarkHelperStubImpl(15112): setViewRootImplForceDark: false for com.rideeasy.passenger.MainActivity@24abd45, reason: AppDarkModeEnable
+09-24 15:58:30.432 D/Capacitor(15112): App restarted
+09-24 15:58:30.439 D/Capacitor(15112): App started
+09-24 15:58:30.452 D/Capacitor/AppPlugin(15112): Firing change: true
+09-24 15:58:30.452 V/Capacitor/AppPlugin(15112): Notifying listeners for event appStateChange
+09-24 15:58:30.452 D/Capacitor/AppPlugin(15112): No listeners found for event appStateChange
+09-24 15:58:30.452 V/Capacitor/AppPlugin(15112): Notifying listeners for event resume
+09-24 15:58:30.473 D/Capacitor(15112): App resumed
+09-24 15:58:30.482 V/Capacitor/AppPlugin(15112): Notifying listeners for event pause
+09-24 15:58:30.482 D/Capacitor/AppPlugin(15112): No listeners found for event pause
+09-24 15:58:30.482 D/Capacitor(15112): App paused
+09-24 15:58:30.532 D/Capacitor/AppPlugin(15112): Firing change: false
+09-24 15:58:30.532 V/Capacitor/AppPlugin(15112): Notifying listeners for event appStateChange
+09-24 15:58:30.532 D/Capacitor/AppPlugin(15112): No listeners found for event appStateChange
+09-24 15:58:30.532 D/Capacitor(15112): App stopped
+09-24 15:58:30.535 D/Capacitor(15112): Saving instance state!

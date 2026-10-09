@@ -13,10 +13,24 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Keep the native window/status/navigation bars on the app background so no
+             white strip can appear above the web content. -->
+        <item name="android:windowBackground">@color/rideeasy_window_bg</item>
+        <item name="android:statusBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:navigationBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <!-- REQUIRED by androidx.core.splashscreen: after the splash the activity must
+             switch to the real app theme. Without this the activity stays on the launch
+             theme, which renders a light strip at the top of the screen. -->
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:navigationBarColor">@color/rideeasy_window_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

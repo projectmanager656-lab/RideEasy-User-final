@@ -18,4 +18,7 @@ module.exports = {
      * { rideId, lat, lng, at, source }
      */
     LOCATION_UPDATE: 'locationUpdate',
+    /** Admin config pushes (broadcast to every connected client). */
+    FARE_CONFIG_UPDATED: 'fareConfigUpdated',
+    RIDEEASY_SUPPORT_UPDATED: 'rideeasySupportUpdated',
 };

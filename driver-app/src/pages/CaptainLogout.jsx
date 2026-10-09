@@ -21,6 +21,7 @@ export const CaptainLogout = () => {
                 if (cancelled) return
                 localStorage.removeItem('captainToken')
                 localStorage.removeItem('captain-token')
+                window.dispatchEvent(new Event('rideeasy:session-changed'))
                 navigate('/captain-login', { replace: true })
             })
         return () => {

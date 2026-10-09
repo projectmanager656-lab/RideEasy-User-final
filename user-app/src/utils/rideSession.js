@@ -1,0 +1,160 @@
+/**
+ * ONE source of truth for the passenger's "active ride" pointer and for deciding
+ * whether a stored ride id may still drive the live-tracking UI.
+ *
+ * The pointer is only a HINT: it is never proof that a ride is active. A ride is
+ * treated as live-tracking-worthy only when the backend confirms a genuinely active
+ * status (`searching` / `accepted` / `arrived`) that has NOT run past the search
+ * window. Finished, failed or stale rides must clear the pointer and leave tracking.
+ */
+
+/** Session key written by the booking flow and read by the restore paths. */
+export const RIDE_SESSION_KEY = 'rideeasy_user_ride'
+
+/** Booking draft handed Home → Choose Ride (sessionStorage). */
+export const DRAFT_BOOKING_KEY = 'rideeasy_draft_booking'
+
+/** Same window the tracking screen uses before it declares "No Driver Found". */
+export const RIDE_SEARCH_TIMEOUT_SECONDS = 120
+
+const ACTIVE_STATUSES = new Set([ 'searching', 'accepted', 'arrived' ])
+const FINAL_STATUSES = new Set([ 'cancelled', 'completed', 'failed', 'rejected', 'expired' ])
+
+export function normalizeRideStatus (status) {
+  return String(status || '').trim().toLowerCase()
+}
+
+export function readRideSessionId () {
+  try {
+    const fromSession = sessionStorage.getItem(RIDE_SESSION_KEY)
+    if (fromSession) return fromSession
+  } catch {
+    /* ignore */
+  }
+  try {
+    /* Survives the Android WebView recreation that the payment/UPI handoff causes. */
+    return localStorage.getItem(RIDE_SESSION_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The pointer is mirrored into localStorage as well as sessionStorage.
+ *
+ * sessionStorage does not survive the Android activity/WebView recreation that happens
+ * when the payment step hands off to an external UPI app (Capacitor logs "App
+ * restarted"), which left the re-created ride screen with no ride to resolve and forced
+ * the passenger back to Home AFTER a verified advance payment. Both keys hold the same
+ * non-secret ride id and both are dropped together by clearRideSession() /
+ * clearUserScopedSession() (logout, 401, finished rides), so no extra state is kept.
+ */
+export function writeRideSessionId (id) {
+  if (id == null || id === '') return
+  const value = String(id)
+  try {
+    sessionStorage.setItem(RIDE_SESSION_KEY, value)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.setItem(RIDE_SESSION_KEY, value)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearRideSession () {
+  try {
+    sessionStorage.removeItem(RIDE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem(RIDE_SESSION_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Every storage key that belongs to the signed-in passenger session and must never
+ * survive a logout / account switch:
+ * - the active-ride pointer (could otherwise resume the previous account's ride),
+ * - the booking draft (previous account's pickup/drop addresses + coordinates),
+ * - the safety-prefs cache (per-user setting; key mirrors PREFS_KEY in
+ *   utils/safetyData.js — kept literal to avoid a circular import).
+ *
+ * Device prefs (language/theme/onboarding/device id) and the per-user recent searches
+ * are deliberately NOT touched.
+ */
+export function clearUserScopedSession () {
+  clearRideSession()
+  try {
+    sessionStorage.removeItem(DRAFT_BOOKING_KEY)
+  } catch {
+    /* ignore */
+  }
+  try {
+    localStorage.removeItem('rideeasy_safety_prefs')
+  } catch {
+    /* ignore */
+  }
+}
+
+/** A status the tracking screen can still legitimately show. */
+export function isRideStatusActive (status) {
+  return ACTIVE_STATUSES.has(normalizeRideStatus(status))
+}
+
+/** A status that ends the ride — tracking must not survive it. */
+export function isRideStatusFinal (status) {
+  return FINAL_STATUSES.has(normalizeRideStatus(status))
+}
+
+/** Seconds since the search actually began (dispatch), else row creation. Null when unknown. */
+export function rideSearchAgeSeconds (ride, now = Date.now()) {
+  const raw = ride?.searchStartedAt || ride?.createdAt
+  const ms = raw ? new Date(raw).getTime() : NaN
+  if (!Number.isFinite(ms)) return null
+  return Math.max(0, (now - ms) / 1000)
+}
+
+/** A `searching` ride older than the search window is a dead search — never restore it. */
+export function isRideSearchExpired (ride, now = Date.now()) {
+  if (normalizeRideStatus(ride?.status) !== 'searching') return false
+  const age = rideSearchAgeSeconds(ride, now)
+  return age != null && age >= RIDE_SEARCH_TIMEOUT_SECONDS
+}
+
+/**
+ * The ONLY definition of "this ride is worth restoring the tracking screen for".
+ * Requires a backend-confirmed active status that has not expired.
+ */
+export function isRideGenuinelyActive (ride, now = Date.now()) {
+  if (!ride?._id) return false
+  if (isRideStatusFinal(ride.status)) return false
+  if (isRideSearchExpired(ride, now)) return false
+  return isRideStatusActive(ride.status)
+}
+
+/**
+ * THE canonical ride status → screen mapping, shared by the Home active-ride banner,
+ * notification clicks and the cold-boot ride recovery. `null` means there is no screen
+ * to open (nothing live).
+ *
+ * `searching`, `accepted` and `arrived` are all owned by the live ride screen
+ * (/searching-for-driver): it renders the driver search, the assigned driver's details
+ * and the arrival/OTP state of the ride a passenger is actually on. The standalone
+ * `/driver-details` and `/user-otp` pages are superseded — nothing in the live ride
+ * flow navigates to them, so they must never be a routing target from here.
+ */
+export function rideRouteForStatus (status) {
+  const st = normalizeRideStatus(status)
+  if (st === 'searching') return '/searching-for-driver'
+  if (st === 'accepted' || st === 'arrived') return '/searching-for-driver'
+  if (st === 'started' || st === 'completed') return '/riding'
+  /* Reserved or finished: the upcoming/history list owns it. */
+  if (st === 'scheduled' || st === 'cancelled') return '/history'
+  return null
+}

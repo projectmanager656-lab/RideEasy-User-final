@@ -1,13 +1,20 @@
-import React, { useCallback, useContext, useEffect, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Capacitor } from '@capacitor/core'
 import { UserDataContext } from '../context/UserContext'
 import { apiClient, withAuth } from '../services/http'
 import { formatApiError } from '../utils/apiError'
 import { stripApiEnvelope } from '../utils/apiBody'
+import { resolveMediaUrl } from '../utils/mediaUrl'
 import { useLanguage } from '../i18n'
 import ThemeSelector from '../components/ThemeSelector'
 import LanguageSelector from '../components/LanguageSelector'
 import PasswordInput from '../components/auth/PasswordInput'
+import PhoneInput from '../components/auth/PhoneInput'
+import OtpInputs from '../components/auth/OtpInputs'
+import AuthButton from '../components/auth/AuthButton'
+import { useCountdown } from '../components/auth/useCountdown'
 
 const ProfileStatCard = ({ icon, value, label, accent }) => {
   const accents = {
@@ -93,9 +100,11 @@ const UserProfile = () => {
   const [ editingPlaces, setEditingPlaces ] = useState(false)
   const [ home, setHome ] = useState('')
   const [ work, setWork ] = useState('')
-  // name inline edit (personal info)
+  // account-details inline edit (personal info)
   const [ editingName, setEditingName ] = useState(false)
   const [ name, setName ] = useState('')
+  const [ gender, setGender ] = useState('')
+  const [ dateOfBirth, setDateOfBirth ] = useState('')
   // change password
   const [ currentPassword, setCurrentPassword ] = useState('')
   const [ newPassword, setNewPassword ] = useState('')
@@ -103,7 +112,22 @@ const UserProfile = () => {
   const [ pwError, setPwError ] = useState('')
   const [ pwMessage, setPwMessage ] = useState('')
   const [ pwSaving, setPwSaving ] = useState(false)
+  // forgot password (OTP-verified reset)
+  const [ forgotOpen, setForgotOpen ] = useState(false)
+  const [ forgotStep, setForgotStep ] = useState('phone') // phone | otp | reset
+  const [ forgotPhone, setForgotPhone ] = useState('')
+  const [ forgotOtp, setForgotOtp ] = useState('')
+  const [ fpNewPassword, setFpNewPassword ] = useState('')
+  const [ fpConfirmPassword, setFpConfirmPassword ] = useState('')
+  const [ fpError, setFpError ] = useState('')
+  const [ fpDevOtp, setFpDevOtp ] = useState('')
+  const [ fpSaving, setFpSaving ] = useState(false)
+  const [ fpDone, setFpDone ] = useState(false)
+  const { secondsLeft: fpSecondsLeft, reset: fpResetCountdown } = useCountdown(300)
   const [ saving, setSaving ] = useState(false)
+  const [ uploadingPhoto, setUploadingPhoto ] = useState(false)
+  const photoInputRef = useRef(null)
+  const isNative = Capacitor.isNativePlatform()
   const [ message, setMessage ] = useState('')
   const [ error, setError ] = useState('')
   const [ rideCount, setRideCount ] = useState(0)
@@ -111,17 +135,20 @@ const UserProfile = () => {
 
   useEffect(() => {
     setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
     setHome(user?.savedAddresses?.home || '')
     setWork(user?.savedAddresses?.work || '')
-  }, [ user?._id, user?.name, user?.savedAddresses?.home, user?.savedAddresses?.work ])
+  }, [ user?._id, user?.name, user?.gender, user?.dateOfBirth, user?.savedAddresses?.home, user?.savedAddresses?.work ])
 
   const loadRideSummary = useCallback(async () => {
     try {
-      const res = await apiClient.get('/rides/history', withAuth({ params: { limit: 100 } }))
+      const res = await apiClient.get('/rides/history', withAuth({ params: { limit: 'all' } }))
       const raw = stripApiEnvelope(res.data)
       const list = Array.isArray(raw?.rides) ? raw.rides : Array.isArray(raw) ? raw : []
       const completed = list.filter((r) => String(r?.status).toLowerCase() === 'completed')
-      setRideCount(list.length)
+      /** Real total from the backend (covers all rides), not just the fetched page. */
+      setRideCount(Number(raw?.counts?.total) || list.length)
       if (completed.length) {
         const sum = completed.reduce((acc, r) => acc + (Number(r?.rating) || 0), 0)
         setRating(Math.round((sum / completed.length) * 10) / 10)
@@ -157,8 +184,8 @@ const UserProfile = () => {
     }
   }
 
-  // Save display name (Personal Information).
-  const saveName = async (e) => {
+  // Save account details (name, gender, date of birth).
+  const saveAccountDetails = async (e) => {
     e.preventDefault()
     if (String(name || '').trim().length < 2) {
       setError(t('valid_name_error'))
@@ -170,6 +197,8 @@ const UserProfile = () => {
     try {
       const { data } = await apiClient.patch('/users/profile', {
         name: String(name).trim(),
+        gender,
+        dateOfBirth,
       }, withAuth())
       const body = stripApiEnvelope(data)
       const u = body?.user ?? body
@@ -181,6 +210,97 @@ const UserProfile = () => {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Upload a chosen/captured image and refresh the signed-in user.
+  const uploadProfilePhotoBlob = async (blob, format) => {
+    setUploadingPhoto(true)
+    setError('')
+    setMessage('')
+    try {
+      const formData = new FormData()
+      formData.append('profilePhoto', blob, `profile-${Date.now()}.${format || 'jpg'}`)
+
+      // No manual Content-Type — axios lets the browser set the multipart boundary.
+      const { data } = await apiClient.post('/users/profile/photo', formData, withAuth())
+      const body = stripApiEnvelope(data)
+      const u = body?.user || body
+      if (u && typeof u === 'object') setUser(u)
+      setMessage(t('saved'))
+    } catch (err) {
+      setError(formatApiError(err))
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  // Change the profile photo via Camera/Gallery, then upload it to the backend.
+  const pickProfilePhoto = async (source = CameraSource.Prompt) => {
+    if (uploadingPhoto) return
+
+    // Web/PWA has no native camera plugin — fall back to the browser file picker.
+    if (!isNative) {
+      const input = photoInputRef.current
+      if (!input) return
+      input.value = ''
+      input.capture = source === CameraSource.Camera ? 'environment' : ''
+      input.click()
+      return
+    }
+
+    let photo
+    try {
+      photo = await Camera.getPhoto({
+        quality: 80,
+        width: 512,
+        height: 512,
+        resultType: CameraResultType.Uri,
+        source,
+      })
+    } catch {
+      // Camera/Gallery cancelled or unavailable — don't surface an error.
+      return
+    }
+
+    const blob = await (await fetch(photo.webPath)).blob()
+    await uploadProfilePhotoBlob(blob, photo.format)
+  }
+
+  const onPhotoInputChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const ext = String(file.name.split('.').pop() || 'jpg').toLowerCase()
+    await uploadProfilePhotoBlob(file, ext === 'jpeg' ? 'jpg' : ext)
+  }
+
+  // Reset the account-details fields back to the saved user.
+  const cancelAccountEdit = () => {
+    setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
+    setEditingName(false)
+    setError('')
+  }
+
+  const toggleAccountEdit = () => {
+    if (editingName) {
+      cancelAccountEdit()
+      return
+    }
+    setName(user?.name || '')
+    setGender(user?.gender || '')
+    setDateOfBirth(user?.dateOfBirth || '')
+    setEditingName(true)
+    setError('')
+    setMessage('')
+  }
+
+  // Render a stored YYYY-MM-DD birth date as "D MMM YYYY".
+  const formatDob = (value) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''))
+    if (!m) return ''
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+    return `${Number(m[3])} ${t(months[Number(m[2]) - 1])} ${m[1]}`
   }
 
   const changePassword = async (e) => {
@@ -199,6 +319,10 @@ const UserProfile = () => {
     }
     if (String(newPassword).length < 6) {
       setPwError(t('password_min_length'))
+      return
+    }
+    if (String(newPassword) === String(currentPassword)) {
+      setPwError(t('new_password_same_as_current'))
       return
     }
     if (String(confirmPassword) !== String(newPassword)) {
@@ -221,6 +345,99 @@ const UserProfile = () => {
       setPwError(formatApiError(err))
     } finally {
       setPwSaving(false)
+    }
+  }
+
+  const openForgot = () => {
+    setForgotStep('phone')
+    setForgotPhone('')
+    setForgotOtp('')
+    setFpNewPassword('')
+    setFpConfirmPassword('')
+    setFpError('')
+    setFpDevOtp('')
+    setFpDone(false)
+    setForgotOpen(true)
+  }
+
+  const closeForgot = () => {
+    setForgotOpen(false)
+    setForgotStep('phone')
+    setForgotPhone('')
+    setForgotOtp('')
+    setFpNewPassword('')
+    setFpConfirmPassword('')
+    setFpError('')
+    setFpDevOtp('')
+    setFpDone(false)
+  }
+
+  const sendForgotOtp = async () => {
+    const normalized = String(forgotPhone || '').replace(/\D/g, '').replace(/^91/, '')
+    if (!/^[6-9]\d{9}$/.test(normalized)) {
+      setFpError(t('valid_phone_error'))
+      return
+    }
+    setForgotPhone(normalized)
+    setFpError('')
+    setFpSaving(true)
+    try {
+      const response = await apiClient.post('/users/forgot-password/send-otp', { phone: normalized })
+      const data = stripApiEnvelope(response.data)
+      if (data?.debugOtp) setFpDevOtp(String(data.debugOtp))
+      setForgotOtp('')
+      setForgotStep('otp')
+      fpResetCountdown(300)
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
+    }
+  }
+
+  const verifyForgotOtp = async () => {
+    if (String(forgotOtp).replace(/\D/g, '').length !== 6) return
+    setFpError('')
+    setFpSaving(true)
+    try {
+      await apiClient.post('/users/forgot-password/verify-otp', {
+        phone: forgotPhone,
+        otp: String(forgotOtp).replace(/\D/g, ''),
+      })
+      setForgotStep('reset')
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
+    }
+  }
+
+  const resetForgotPassword = async () => {
+    if (!fpNewPassword) {
+      setFpError(t('new_password_required'))
+      return
+    }
+    if (fpNewPassword.length < 6) {
+      setFpError(t('password_min_length'))
+      return
+    }
+    if (fpConfirmPassword !== fpNewPassword) {
+      setFpError(t('passwords_do_not_match'))
+      return
+    }
+    setFpError('')
+    setFpSaving(true)
+    try {
+      await apiClient.post('/users/forgot-password/reset', {
+        phone: forgotPhone,
+        otp: String(forgotOtp).replace(/\D/g, ''),
+        newPassword: fpNewPassword,
+      })
+      setFpDone(true)
+    } catch (err) {
+      setFpError(formatApiError(err))
+    } finally {
+      setFpSaving(false)
     }
   }
 
@@ -251,7 +468,14 @@ const UserProfile = () => {
   if (view === 'personal') {
     const username = user?.username
     return (
-      <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+      <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={onPhotoInputChange}
+        />
         {/* header */}
         <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -282,13 +506,54 @@ const UserProfile = () => {
             </div>
           ) : null}
 
+          {/* profile photo */}
+          <section className="rounded-2xl border border-theme bg-theme-card p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-theme-secondary">{t('profile_photo')}</h2>
+            <div className="mt-4 flex items-center gap-4">
+              <div className="relative h-20 w-20 shrink-0">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted">
+                  {user?.profilePhoto ? (
+                    <img src={resolveMediaUrl(user.profilePhoto)} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <i className="ri-user-3-fill text-4xl" />
+                  )}
+                </div>
+                {uploadingPhoto ? (
+                  <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white">
+                    <i className="ri-loader-4-line animate-spin text-xl" />
+                  </span>
+                ) : null}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => pickProfilePhoto(CameraSource.Photos)}
+                  disabled={uploadingPhoto}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-theme bg-theme-card-muted py-2.5 text-sm font-semibold text-theme-secondary transition hover:text-theme-primary disabled:opacity-60"
+                >
+                  <i className="ri-image-line text-base" />
+                  {t('choose_photo')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => pickProfilePhoto(CameraSource.Camera)}
+                  disabled={uploadingPhoto}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand py-2.5 text-sm font-bold text-brand-ink transition hover:bg-brand-light disabled:opacity-60"
+                >
+                  <i className="ri-camera-line text-base" />
+                  {t('take_photo')}
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* account details */}
           <section className="rounded-2xl border border-theme bg-theme-card p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wide text-theme-secondary">{t('account_details')}</h2>
               <button
                 type="button"
-                onClick={() => { setEditingName((v) => !v); setError(''); setMessage('') }}
+                onClick={toggleAccountEdit}
                 className="flex shrink-0 items-center gap-1.5 rounded-full border border-theme bg-theme-card-muted px-3 py-1.5 text-xs font-semibold text-theme-secondary transition hover:text-theme-primary"
               >
                 <i className="ri-edit-line text-sm" />
@@ -297,7 +562,7 @@ const UserProfile = () => {
             </div>
 
             {editingName ? (
-              <form onSubmit={saveName} className="mt-4 space-y-4">
+              <form onSubmit={saveAccountDetails} className="mt-4 space-y-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('full_name')}</label>
                   <input
@@ -307,6 +572,29 @@ const UserProfile = () => {
                     placeholder={t('your_name')}
                     minLength={2}
                     required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('gender')}</label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full rounded-xl border border-theme bg-theme-input px-4 py-3 text-base text-theme-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60"
+                  >
+                    <option value="">{t('select_gender')}</option>
+                    <option value="male">{t('male')}</option>
+                    <option value="female">{t('female')}</option>
+                    <option value="other">{t('other')}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-theme-secondary">{t('date_of_birth')}</label>
+                  <input
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    max={new Date().toISOString().slice(0, 10)}
+                    className="w-full rounded-xl border border-theme bg-theme-input px-4 py-3 text-base text-theme-primary focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/60"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -319,7 +607,7 @@ const UserProfile = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setEditingName(false)}
+                    onClick={cancelAccountEdit}
                     className="rounded-xl border border-theme bg-theme-card px-4 py-3 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted"
                   >
                     {t('close')}
@@ -329,6 +617,8 @@ const UserProfile = () => {
             ) : (
               <div className="mt-2 divide-y divide-theme">
                 <InfoRow icon="ri-user-3-line" label={t('full_name')} value={user?.name} />
+                <InfoRow icon="ri-venus-mars-line" label={t('gender')} value={user?.gender ? t(user.gender) : null} />
+                <InfoRow icon="ri-calendar-line" label={t('date_of_birth')} value={formatDob(user?.dateOfBirth)} />
                 <InfoRow icon="ri-phone-line" label={t('phone_number')} value={user?.phone ? `+91 ${user.phone}` : null} />
                 <InfoRow icon="ri-mail-line" label={t('email')} value={user?.email} />
                 {username ? (
@@ -386,15 +676,152 @@ const UserProfile = () => {
                 {pwSaving ? t('changing_password') : t('change_password')}
               </button>
             </form>
+            <div className="mt-3 text-right">
+              <button
+                type="button"
+                onClick={openForgot}
+                className="text-sm font-semibold text-brand hover:text-brand-light"
+              >
+                {t('forgot_password')}
+              </button>
+            </div>
           </section>
         </div>
+
+        {forgotOpen ? (
+          <div className="fixed inset-0 z-[1200] flex items-end justify-center sm:items-center">
+            <div className="absolute inset-0 bg-black/60" onClick={closeForgot} aria-hidden />
+            <div className="relative z-[1201] max-h-[88dvh] w-full max-w-[360px] overflow-y-auto rounded-t-2xl border-t border-theme bg-theme-card p-5 sm:rounded-2xl sm:border">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-base font-bold text-theme-primary">{t('forgot_password')}</h2>
+                <button
+                  type="button"
+                  onClick={closeForgot}
+                  className="rounded-full border border-theme bg-theme-card-muted px-2.5 py-1 text-xs text-theme-secondary active:scale-95"
+                >
+                  {t('close')}
+                </button>
+              </div>
+
+              {fpError ? (
+                <div role="alert" className="mb-4 rounded-xl border border-red-400/50 bg-red-50 px-3 py-2 text-sm text-red-700 whitespace-pre-line dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                  {fpError}
+                </div>
+              ) : null}
+
+              {fpDone ? (
+                <>
+                  <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    {t('reset_password_success')}
+                  </div>
+                  <AuthButton type="button" onClick={() => navigate('/user/logout', { replace: true })}>
+                    {t('login')}
+                  </AuthButton>
+                </>
+              ) : forgotStep === 'phone' ? (
+                <>
+                  <p className="mb-4 text-sm text-theme-muted">{t('reset_password_hint')}</p>
+                  <div className="mb-4">
+                    <PhoneInput
+                      value={forgotPhone}
+                      onChange={setForgotPhone}
+                      label={t('phone')}
+                      placeholder={t('enter_phone')}
+                      name="forgot-phone"
+                    />
+                  </div>
+                  <AuthButton type="button" loading={fpSaving} onClick={sendForgotOtp}>
+                    {fpSaving ? t('sending_otp') : t('send_otp')}
+                  </AuthButton>
+                </>
+              ) : forgotStep === 'otp' ? (
+                <>
+                  <p className="mb-4 text-sm text-theme-muted">
+                    {t('otp_sent_to_phone')} +91 {forgotPhone}
+                  </p>
+                  {fpDevOtp ? (
+                    <button
+                      type="button"
+                      onClick={() => setForgotOtp(String(fpDevOtp).replace(/\D/g, '').slice(0, 6))}
+                      className="mb-4 w-full rounded-lg border border-brand/30 bg-brand/10 px-3 py-2 text-center text-sm font-semibold text-brand transition hover:bg-brand/15"
+                      title="Tap to autofill"
+                    >
+                      Temporary OTP: {fpDevOtp}
+                    </button>
+                  ) : null}
+                  <div className="mb-4">
+                    <OtpInputs otp={forgotOtp} onChange={setForgotOtp} disabled={fpSaving} />
+                  </div>
+                  <div className="mb-4 text-center">
+                    {fpSecondsLeft === 0 ? (
+                      <button
+                        type="button"
+                        onClick={sendForgotOtp}
+                        disabled={fpSaving}
+                        className="text-sm font-semibold text-brand hover:text-brand-light disabled:opacity-60"
+                      >
+                        {t('resend_otp')}
+                      </button>
+                    ) : (
+                      <span className="text-sm text-theme-muted">{t('resend_otp_in', { seconds: fpSecondsLeft })}</span>
+                    )}
+                  </div>
+                  <AuthButton
+                    type="button"
+                    loading={fpSaving}
+                    disabled={String(forgotOtp).replace(/\D/g, '').length !== 6}
+                    onClick={verifyForgotOtp}
+                  >
+                    {fpSaving ? t('verifying') : t('verify_continue')}
+                  </AuthButton>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 rounded-xl border border-emerald-500/50 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-200">
+                    {t('otp_verified')}
+                  </div>
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={fpNewPassword}
+                      onChange={setFpNewPassword}
+                      label={t('new_password')}
+                      placeholder={t('new_password')}
+                      autoComplete="new-password"
+                      name="forgot-new-password"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <PasswordInput
+                      value={fpConfirmPassword}
+                      onChange={setFpConfirmPassword}
+                      label={t('confirm_new_password')}
+                      placeholder={t('confirm_new_password')}
+                      autoComplete="new-password"
+                      name="forgot-confirm-password"
+                    />
+                  </div>
+                  <AuthButton type="button" loading={fpSaving} onClick={resetForgotPassword}>
+                    {t('reset_password')}
+                  </AuthButton>
+                </>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     )
   }
 
   // ---- Overview (account menu) ----
   return (
-    <div className="min-h-screen bg-theme-bg text-theme-primary pb-24">
+    <div className="min-h-screen scrollbar-hide bg-theme-bg text-theme-primary pb-24">
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onPhotoInputChange}
+      />
       {/* header */}
       <header className="sticky top-0 z-10 border-b border-theme bg-theme-bg/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg items-center gap-3">
@@ -420,9 +847,24 @@ const UserProfile = () => {
         <section className="rounded-2xl border border-theme bg-theme-card p-4">
           <div className="flex items-start gap-3">
             <div className="relative">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-theme-card-muted text-theme-muted">
-                <i className="ri-user-3-fill text-3xl" />
-              </div>
+              <button
+                type="button"
+                onClick={() => pickProfilePhoto()}
+                disabled={uploadingPhoto}
+                aria-label={t('edit')}
+                className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-theme-card-muted text-theme-muted disabled:opacity-60"
+              >
+                {user?.profilePhoto ? (
+                  <img src={resolveMediaUrl(user.profilePhoto)} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <i className="ri-user-3-fill text-3xl" />
+                )}
+                {uploadingPhoto ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                    <i className="ri-loader-4-line animate-spin text-xl" />
+                  </span>
+                ) : null}
+              </button>
               <span className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full border-2 border-theme-card bg-emerald-500" />
             </div>
             <div className="min-w-0 flex-1">
@@ -430,9 +872,6 @@ const UserProfile = () => {
                 <h2 className="truncate text-lg font-bold text-theme-primary">{user?.name || t('your_name')}</h2>
                 <i className="ri-verified-badge-fill text-sky-500" title={t('verified')} />
               </div>
-              <span className="mt-1 inline-flex items-center rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-bold text-brand">
-                {t('premium_user')}
-              </span>
               <div className="mt-2 flex items-center gap-2 text-sm text-theme-secondary">
                 <i className="ri-star-fill text-brand" />
                 <span className="font-semibold text-theme-primary">{rating || '—'}</span>
@@ -529,6 +968,13 @@ const UserProfile = () => {
             onClick={openPersonal}
           />
           <AccountMenuItem
+            icon="ri-wallet-3-line"
+            title="Wallet"
+            subtitle="View your wallet balance and transactions"
+            accent="purple"
+            onClick={() => navigate('/wallet')}
+          />
+          <AccountMenuItem
             icon="ri-map-pin-2-line"
             title={t('saved_places')}
             subtitle={t('saved_places_sub')}
@@ -572,7 +1018,7 @@ const UserProfile = () => {
         <button
           type="button"
           onClick={logout}
-          className="w-full rounded-2xl border border-theme bg-theme-card py-3 text-sm font-semibold text-theme-secondary hover:bg-theme-card-muted"
+          className="w-full rounded-2xl border border-red-500/30 bg-red-500/10 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/15"
         >
           {t('log_out')}
         </button>

@@ -77,6 +77,22 @@ export const adminApi = {
     return client.put('/admin/pricing', payload).then((r) => unwrap(r.data))
   },
 
+  getSupport (signal) {
+    return client.get('/admin/support', { signal }).then((r) => unwrap(r.data))
+  },
+
+  putSupport (payload) {
+    return client.put('/admin/support', payload).then((r) => unwrap(r.data))
+  },
+
+  sendNotification (payload) {
+    return client.post('/admin/notifications', payload).then((r) => unwrap(r.data))
+  },
+
+  listNotifications (signal) {
+    return client.get('/admin/notifications', { signal }).then((r) => unwrap(r.data))
+  },
+
   approveDriver (id) {
     return client.put(`/admin/drivers/${id}/approve`, {}).then((r) => unwrap(r.data))
   },

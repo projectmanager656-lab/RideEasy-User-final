@@ -2,7 +2,7 @@ import React from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useLanguage } from '../i18n'
 
-const BottomNav = () => {
+const BottomNav = ({ onMoreClick }) => {
   const { t } = useLanguage()
   const location = useLocation()
   const path = location.pathname
@@ -18,42 +18,44 @@ const BottomNav = () => {
     'flex flex-col items-center justify-center flex-1 gap-0.5 text-xs font-medium transition-colors'
 
   const itemCls = (isActive) =>
-    `${base} ${isActive ? 'text-brand' : 'text-zinc-500'}`
+    `${base} ${isActive ? 'text-brand' : 'text-theme-muted'}`
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-[110] border-t border-zinc-800 bg-black/95 backdrop-blur"
+      className="shrink-0 border-t border-theme bg-theme-bg"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex h-16 max-w-lg items-center justify-between px-1 min-[400px]:px-2">
+      <div className="mx-auto flex h-[68px] max-w-[430px] items-center justify-between px-1 min-[400px]:px-3 sm:px-4">
         <NavLink
           to="/home"
           className={({ isActive }) => itemCls(isActive)}
         >
-          <i className="ri-map-pin-line text-xl" />
-          <span className="text-[10px] sm:text-xs">{t('book')}</span>
-        </NavLink>
-        <NavLink
-          to="/riding"
-          className={() => itemCls(path === '/riding')}
-        >
-          <i className="ri-roadster-line text-xl" />
-          <span className="text-[10px] sm:text-xs">{t('live')}</span>
+          <i className="ri-home-5-line text-lg" />
+          <span className="max-[380px]:text-[10px]">{t('book')}</span>
         </NavLink>
         <NavLink
           to="/history"
           className={({ isActive }) => itemCls(isActive)}
         >
-          <i className="ri-history-line text-xl" />
-          <span className="text-[10px] sm:text-xs">{t('trips')}</span>
+          <i className="ri-history-line text-lg" />
+          <span className="max-[380px]:text-[10px]">{t('trips')}</span>
         </NavLink>
         <NavLink
           to="/profile"
           className={({ isActive }) => itemCls(isActive)}
         >
-          <i className="ri-user-3-line text-xl" />
-          <span className="text-[10px] sm:text-xs">{t('profile')}</span>
+          <i className="ri-user-3-line text-lg" />
+          <span className="max-[380px]:text-[10px]">{t('profile')}</span>
         </NavLink>
+        <button
+          type="button"
+          onClick={onMoreClick}
+          aria-label={t('more')}
+          className={`${base} cursor-pointer bg-transparent border-0 text-theme-muted`}
+        >
+          <i className="ri-more-line text-xl" />
+          <span className="max-[380px]:text-[10px]">{t('more')}</span>
+        </button>
       </div>
     </nav>
   )

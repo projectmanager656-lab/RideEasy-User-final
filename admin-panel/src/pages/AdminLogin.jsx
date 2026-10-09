@@ -43,6 +43,7 @@ const AdminLogin = () => {
         return
       }
       localStorage.setItem('adminToken', token)
+      window.dispatchEvent(new Event('rideeasy:session-changed'))
       navigate('/admin/dashboard')
     } catch (err) {
       setError(formatApiError(err))
