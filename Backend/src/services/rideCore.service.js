@@ -308,7 +308,9 @@ module.exports.startRide = async ({ rideId, otp, captain }) => {
     if (ride.status !== 'arrived') throw rideError('Driver has not arrived', 409);
     const ok = await verifyOtp(String(otp || '').trim(), ride.otpHash);
     if (!ok) throw rideError('Invalid OTP', 400);
-    if (ride.otpExpiresAt && ride.otpExpiresAt < new Date()) throw rideError('OTP expired — ask passenger for new code', 400);
+    /* ONE RIDE = ONE FINAL OTP — the stored code never expires and never rotates,
+     * so there is no expiry check here (it would strand an arrived ride).
+     * The hash/secret and the arrived + advance gates remain the safeguards. */
     /**
      * The 25% advance has to be verified by the payment provider before the trip
      * may start — a valid OTP alone is not proof of payment. Only the online rails

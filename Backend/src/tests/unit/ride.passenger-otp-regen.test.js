@@ -1,11 +1,12 @@
 /**
  * Passenger OTP lifecycle — the master flow requirement.
  *
- * The code is minted exclusively by markArrived (accepted -> arrived) and may only
- * be reissued by this endpoint when it genuinely expired or is unrecoverable. A mere
- * refetch must return the SAME code, a pre-arrival read must expose nothing, and a
- * reissue must reach the passenger's screen over the existing socket — never the
- * driver's.
+ * The code is minted exclusively by markArrived (accepted -> arrived) and is NEVER
+ * rotated by a refetch: one ride = one final OTP, stored on the ride document and
+ * returned as-is forever (refresh, reconnect, repeated arrival, payment success).
+ * A reissue may happen only when the stored cipher is unreadable (infra), and a
+ * pre-arrival or unpaid read must expose nothing. A reissue must reach the
+ * passenger's screen over the existing socket — never the driver's.
  */
 
 jest.mock('../../services/rideCore.service', () => ({
@@ -76,6 +77,8 @@ function rideDoc(overrides = {}) {
         user: 'u1',
         captain: null,
         status: 'arrived',
+        /** New release contract: arrived AND backend-verified advance. */
+        advancePaymentStatus: 'success',
         otpCipher: 'stale-cipher',
         otpExpiresAt: new Date(Date.now() + 4 * 60 * 1000),
         ...overrides,
@@ -137,6 +140,33 @@ describe('getPassengerOtp — arrival-gated, stable, atomic', () => {
         expect(socket.emitToUser).not.toHaveBeenCalled();
     });
 
+    test.each(['pending', 'failed'])(
+        'releases nothing for an arrived ride whose advance is %s — no read, no mint, no emit',
+        async (advancePaymentStatus) => {
+            mockRideFetch(rideDoc({ advancePaymentStatus, otpCipher: undefined }));
+
+            const res = responseFor();
+            await rideController.getPassengerOtp(req(), res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(decryptOtp).not.toHaveBeenCalled();
+            expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+            expect(socket.emitToUser).not.toHaveBeenCalled();
+        },
+    );
+
+    test('a fully-paid ride (paymentStatus success) also satisfies the advance condition', async () => {
+        mockRideFetch(rideDoc({ advancePaymentStatus: 'pending', paymentStatus: 'success' }));
+        decryptOtp.mockReturnValue('654321');
+
+        const res = responseFor();
+        await rideController.getPassengerOtp(req(), res);
+
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ ok: true, otp: '654321' }),
+        );
+    });
+
     test.each(['searching', 'started', 'completed', 'cancelled'])(
         'exposes nothing for a %s ride and writes nothing',
         async (status) => {
@@ -171,28 +201,19 @@ describe('getPassengerOtp — arrival-gated, stable, atomic', () => {
         );
     });
 
-    test('an expired window reissues atomically and syncs the passenger only', async () => {
+    test('an expired window returns the SAME stored code — never re-mints on refresh', async () => {
         const doc = rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) });
         mockRideFetch(doc);
-        mockReissue({ otpCipher: 'fresh-cipher', otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000) });
         decryptOtp.mockReturnValue('123456');
 
         const res = responseFor();
         await rideController.getPassengerOtp(req(), res);
 
-        /* Compare-and-swap on the cipher it read: concurrent refetches cannot both mint. */
-        expect(rideModel.findOneAndUpdate).toHaveBeenCalledWith(
-            { _id: RIDE_ID, status: 'arrived', otpCipher: 'stale-cipher' },
-            { $set: { otpHash: 'hashed-x', otpCipher: 'encrypted-x', otpExpiresAt: expect.any(Date) } },
-            { new: true },
-        );
+        /* ONE RIDE = ONE FINAL OTP: a refetch after the old window is read-only. */
+        expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
+        expect(rideModel.updateOne).not.toHaveBeenCalled();
         expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ ok: true, otp: '123456' }));
-        expect(socket.emitToUser).toHaveBeenCalledWith(
-            'u1',
-            'ride:status-update',
-            expect.objectContaining({ rideId: RIDE_ID, status: 'arrived', otpReissued: true }),
-        );
-        /* The driver verifies the code — it is never pushed to a driver room. */
+        expect(socket.emitToUser).not.toHaveBeenCalled();
         expect(socket.emitToCaptain).not.toHaveBeenCalled();
     });
 
@@ -215,10 +236,16 @@ describe('getPassengerOtp — arrival-gated, stable, atomic', () => {
     });
 
     test('losing the reissue race serves the winner\'s code without a second mint', async () => {
-        const doc = rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) });
+        /* Reissue is only reachable when the stored cipher is unreadable (infra),
+         * never because of an expiry window. */
+        const doc = rideDoc({ otpCipher: 'unreadable-cipher' });
         mockRideFetch(doc, { otpCipher: 'winner-cipher', otpExpiresAt: new Date(Date.now() + 5 * 60 * 1000) });
         mockReissue(null);
-        decryptOtp.mockReturnValue('999999');
+        decryptOtp
+            .mockImplementationOnce(() => {
+                throw new Error('Unsupported state or unable to authenticate data');
+            })
+            .mockReturnValue('999999');
 
         const res = responseFor();
         await rideController.getPassengerOtp(req(), res);

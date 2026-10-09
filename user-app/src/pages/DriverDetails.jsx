@@ -235,6 +235,8 @@ const DriverDetails = () => {
   useEffect(() => {
     if (!rideId || passengerOtp) return
     if (normalizeStatus(ride?.status) !== 'arrived') return
+    /** OTP visibility = driverArrived && advancePaymentVerified — both from backend ride state. */
+    if (!(ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success')) return
     let cancelled = false
     apiClient.get(`/rides/${rideId}`, withAuth())
       .then((res) => {
@@ -247,7 +249,7 @@ const DriverDetails = () => {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [rideId, ride?.status, passengerOtp])
+  }, [rideId, ride?.status, ride?.advancePaymentStatus, ride?.paymentStatus, passengerOtp])
 
   // Periodic polling for status & OTP
   useEffect(() => {
@@ -582,8 +584,8 @@ const DriverDetails = () => {
           </div>
         </div>
 
-        {/* User OTP Banner / Shortcut */}
-        {advancePaid ? (
+        {/* User OTP Banner / Shortcut — BOTH backend conditions: driver arrived AND advance verified */}
+        {advancePaid && isArrived ? (
           <div className="flex items-center justify-between rounded-2xl border-2 border-brand-yellow/60 bg-brand-yellow/10 p-4 shadow-sm animate-fade-in">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-theme-secondary">{t('your_ride_otp')}</span>

@@ -487,6 +487,14 @@ const SearchingForDriver = () => {
     if (!rideId || passengerOtp) return
     const st = normalizeStatus(ride?.status)
     if (st !== 'accepted' && st !== 'arrived') return
+    /**
+     * OTP visibility = driverArrived && advancePaymentVerified — BOTH from the
+     * backend ride doc. Before both hold the endpoints answer 400, so skip the
+     * calls; the effect re-runs the moment `arrived` or the verified advance lands
+     * (deps below) and pulls the ONE existing code.
+     */
+    if (st === 'arrived' && !(ride?.advancePaymentStatus === 'success' || ride?.paymentStatus === 'success')) return
+    if (st === 'accepted') return
     let cancelled = false
     apiClient.get(`/rides/${rideId}/passenger-otp`, withAuth())
       .then((res) => {
@@ -527,7 +535,7 @@ const SearchingForDriver = () => {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [rideId, ride?.status, passengerOtp])
+  }, [rideId, ride?.status, ride?.advancePaymentStatus, ride?.paymentStatus, passengerOtp])
 
   /**
    * Poll ride status while searching (8s) / after assignment (5s).
@@ -1109,9 +1117,9 @@ const SearchingForDriver = () => {
               </div>
             )}
 
-            {/* Share PIN / OTP — shown once a driver accepts; unlocked once advance is verified */}
+            {/* Share PIN / OTP — locked until BOTH backend conditions hold: driver arrived AND advance verified */}
             {!isSearching && (
-              advancePaid ? (
+              isArrived && advancePaid ? (
                 passengerOtp ? (
                   <div className="mt-4 rounded-xl border-2 border-brand-yellow/60 bg-brand-yellow/10 px-4 py-3 text-center">
                     <p className="text-[11px] font-semibold uppercase tracking-wider text-theme-secondary">

@@ -49,6 +49,10 @@ const {
   recordDispatchAttemptSafe,
   markRideDispatchesStatusSafe,
 } = require("../services/rideDispatch.service");
+/** H3 hexagon candidate discovery (§3/§6) — ordering still uses real GPS distance. */
+const driverHex = require("../services/driverHex.service");
+/** Configurable GPS freshness window (§11), shared with driverHex.service. */
+const DRIVER_GPS_FRESH_MS = driverHex.DRIVER_GPS_FRESH_MS;
 
 /** Driver search radius in metres. Override with RIDE_SEARCH_RADIUS_M when testing locally. */
 const RIDE_SEARCH_RADIUS_M = Number(process.env.RIDE_SEARCH_RADIUS_M || 5000);
@@ -242,6 +246,22 @@ function publicRide(ride) {
   return o;
 }
 
+/**
+ * The ONE release gate for the passenger's ride-start PIN — BOTH conditions must be
+ * true in the ride's own backend state: the driver has authoritatively arrived
+ * (status `arrived`, set only by markArrived) AND the 25% advance is provider-verified
+ * (`advancePaymentStatus: success`) or the fare is fully paid. Frontends derive OTP
+ * visibility from the same ride fields; nothing else (localStorage, a payment callback,
+ * an accept/arrive event) can open this gate.
+ */
+function otpGateOpen(ride) {
+  return Boolean(
+    ride &&
+      ride.status === "arrived" &&
+      (ride.advancePaymentStatus === "success" || ride.paymentStatus === "success"),
+  );
+}
+
 const VEHICLE_TYPE_LABELS = {
   BIKE: "Bike",
   AUTO: "Auto rickshaw",
@@ -381,27 +401,79 @@ async function notifyPassengerAccepted(
   }
 }
 
+/**
+ * Eligibility filters shared by BOTH discovery paths — H3 ring candidates and
+ * the legacy `$near` fallback (§4): approved & not blocked, active
+ * subscription, online/active presence, wallet minimum, serving city,
+ * compatible vehicle type, RECENT GPS, valid coordinates, and NOT already
+ * assigned / on another active ride.
+ */
+async function nearbyEligibilityClauses({ rideCity, vehicleType }) {
+  const cityMatch = captainServingCityMatch(rideCity);
+  if (!cityMatch) return null;
+  return [
+    { approved: true, blocked: { $ne: true } },
+    subscriptionNotExpiredMatch(),
+    driverPresenceMatch(),
+    await captainWalletMatch(),
+    cityMatch,
+    { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
+    /** Not already assigned, not on another active ride. */
+    { busy: { $ne: true } },
+    /**
+     * Fresh GPS only (§11): a driver whose last position is older than the
+     * configurable window is skipped for matching — its records are never
+     * deleted just for going stale.
+     */
+    { lastLocationUpdatedAt: { $gte: new Date(Date.now() - DRIVER_GPS_FRESH_MS) } },
+  ];
+}
+
+/**
+ * Nearby driver discovery (§3–§6):
+ *   1. H3 pickup cell → progressive Ring 0 → maxRing over the existing
+ *      `driverlocations` index (never a full driver scan), stopping as soon as
+ *      enough eligible drivers exist.
+ *   2. Every H3 candidate is then ranked by ACTUAL GPS distance to the pickup,
+ *      nearest → farthest — an H3 cell is only "who to check", never a distance.
+ *   3. Legacy `$near` stays as the fallback while the hexagon index has no fresh
+ *      data yet (first deploy) or the rings found nobody.
+ */
 async function findNearbyDriverIds({
   rideCity,
   vehicleType,
   pickupLng,
   pickupLat,
+  rideId = "",
 }) {
   if (pickupLng == null || pickupLat == null) return [];
-  const cityMatch = captainServingCityMatch(rideCity);
-  if (!cityMatch) return [];
+  const clauses = await nearbyEligibilityClauses({ rideCity, vehicleType });
+  if (!clauses) return [];
+
+  try {
+    const { candidates } = await driverHex.getCandidateDrivers({
+      rideId,
+      pickupLat,
+      pickupLng,
+      isEligible: (driverIds) =>
+        captainModel
+          .find({ $and: [...clauses, { _id: { $in: driverIds } }] })
+          .select("_id location")
+          .lean(),
+    });
+    if (candidates.length > 0) return candidates.map((d) => String(d._id));
+  } catch (e) {
+    console.warn(
+      "[ride dispatch] H3 candidate discovery failed (%s) — falling back to $near",
+      e?.message || e,
+    );
+  }
+
   try {
     const drivers = await captainModel
       .find({
         /** `$and` keeps the subscription `$or` and the presence `$or` from clobbering each other. */
-        $and: [
-          { approved: true, blocked: { $ne: true } },
-          subscriptionNotExpiredMatch(),
-          driverPresenceMatch(),
-          await captainWalletMatch(),
-          cityMatch,
-          { vehicleType: { $in: captainVehicleTypesForRide(vehicleType) } },
-        ],
+        $and: clauses,
         location: {
           $near: {
             $geometry: { type: "Point", coordinates: [pickupLng, pickupLat] },
@@ -695,9 +767,22 @@ async function broadcastRideNew(rideDoc, driverIds) {
     /**
      * Durable per-(ride, captain) record of what the attempt actually did. Live room
      * membership is the only honest "delivered" signal — recorded here so a matched
-     * driver with no live socket is `failed`, never falsely `delivered`.
+     * driver with no live socket is `failed`, never falsely `delivered`. Awaiting the
+     * safe wrapper only to read the attempt number: a tracking failure resolves null
+     * and never affects dispatch.
      */
-    recordDispatchAttemptSafe({ rideId: rid, captainId, roomName, socketIds: roomSocketIds });
+    const dispatchRec = await recordDispatchAttemptSafe({
+      rideId: rid,
+      captainId,
+      roomName,
+      socketIds: roomSocketIds,
+    });
+    console.log("[DISPATCH]", {
+      rideId: rid,
+      captainId,
+      socketCount,
+      attempt: dispatchRec?.dispatchAttempts ?? 1,
+    });
     if (socketCount > 0) {
       delivered += 1;
       console.log("[ride dispatch] socket offer sent", { rideId: rid, captainId, roomName, socketCount });
@@ -775,6 +860,7 @@ async function startRideDispatch(rideOrId) {
     vehicleType: populated.vehicleType,
     pickupLng,
     pickupLat,
+    rideId,
   });
   const cityDriverIds = await findCityFallbackDriverIds({
     rideCity,
@@ -1114,6 +1200,7 @@ module.exports.retryAssign = async (req, res) => {
       vehicleType: ride.vehicleType,
       pickupLng,
       pickupLat,
+      rideId,
     });
     const cityDriverIds = await findCityFallbackDriverIds({
       rideCity: ride.city,
@@ -1318,7 +1405,18 @@ module.exports.arriveRide = async (req, res) => {
 
     const etaMeta = await computeEtaCaptainToPickup(full);
 
-    const confirmation = buildPassengerConfirmation(full, otpPlain, etaMeta);
+    /**
+     * Case A vs Case B — the emit follows the ride's state, not the event: if the
+     * advance was already verified when the driver arrives, the PIN rides along with
+     * the arrival frame; if it was not, the frame carries NO OTP and the passenger
+     * sees the locked UI until payment verification releases it (same single code —
+     * markArrived minted it once and nothing here rotates it).
+     */
+    const confirmation = buildPassengerConfirmation(
+      full,
+      otpGateOpen(full) ? otpPlain : null,
+      etaMeta,
+    );
 
     const uid = userIdOf(ride.user);
 
@@ -1667,15 +1765,14 @@ module.exports.getRideById = async (req, res) => {
     }
 
     /**
-     * Same validity rule as getPassengerOtp/startRide: the PIN is part of the arrival
-     * state only. It is never surfaced for a ride the driver has not arrived on, it is
-     * never minted here, and the assigned captain never receives it — only the
-     * passenger may see or share the code.
+     * Same validity rule as getPassengerOtp/startRide: the PIN is released only when
+     * BOTH backend conditions hold — the driver has authoritatively arrived AND the
+     * advance is provider-verified (otpGateOpen). The STORED per-ride code is served
+     * as-is (one ride = one final OTP; no window, no rotation on refresh), it is
+     * never minted here, and the assigned captain never receives it.
      */
-    const otpWindowValid =
-      ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
     let otpPlain = null;
-    if (ride.status === "arrived" && otpWindowValid && isPassenger) {
+    if (otpGateOpen(ride) && isPassenger) {
       const withCipher = await rideModel.findById(rideId).select("+otpCipher");
       if (withCipher?.otpCipher) {
         try {
@@ -1782,17 +1879,32 @@ module.exports.getPassengerOtp = async (req, res) => {
     }
 
     /**
-     * The cipher is keyed to JWT_SECRET, so it can be unreadable while the ride
-     * itself is fine: the secret rotated, or a different backend instance (a
-     * stale deployment, a second server on the same DB) wrote this ride's OTP.
-     * Reissue instead of failing — the passenger must always see the code that
-     * matches the stored hash, which is what the driver verifies.
+     * Condition 2 — the 25% advance must be verified by the BACKEND (provider
+     * confirmation), never a client-side payment callback: unpaid / failed /
+     * cancelled / in-progress advances release nothing, for either arrival order.
+     * Placed before any decrypt/reissue so an unpaid read can never mint either.
      */
-    const hasValidOtpWindow =
-      ride.otpExpiresAt && new Date(ride.otpExpiresAt).getTime() > Date.now();
+    if (
+      ride.advancePaymentStatus !== "success" &&
+      ride.paymentStatus !== "success"
+    ) {
+      return res.status(400).json({
+        message: "OTP is available only after the advance payment is verified",
+      });
+    }
 
+    /**
+     * ONE RIDE = ONE FINAL OTP: the stored per-ride code is always returned
+     * untouched — refresh, socket reconnect, Driver Details reopen, repeated
+     * arrival and payment success all read this same cipher and can never rotate
+     * it (no expiry window is enforced here or anywhere on display). The cipher is
+     * keyed to JWT_SECRET, so it can be unreadable while the ride itself is fine
+     * (secret rotated / another instance wrote it); that infra case below reissues
+     * instead of failing — the passenger must always see the code matching the
+     * stored hash the driver verifies.
+     */
     let otp = null;
-    if (hasValidOtpWindow && ride.otpCipher) {
+    if (ride.otpCipher) {
       try {
         otp = decryptOtp(ride.otpCipher);
       } catch (e) {
@@ -1805,10 +1917,14 @@ module.exports.getPassengerOtp = async (req, res) => {
     }
 
     /**
-     * A still-valid code is always returned untouched. The write below only runs when
-     * the code genuinely expired or is unrecoverable, and it is a compare-and-swap on
-     * the cipher we just read: concurrent refetches can never each mint a different
+     * The write below runs ONLY when no readable code exists (absent or
+     * unrecoverable cipher) — never on a mere refetch. It is a compare-and-swap on
+     * the exact cipher read: concurrent requests can never each mint a different
      * code — the loser of the race serves the winner's code instead.
+     *
+     * ONE RIDE = ONE FINAL OTP: once minted the cipher is never cleared or
+     * expired-checked, so this filter never matches for a stored code — a lost
+     * race can never overwrite the shared code with a different one.
      */
     let reissued = false;
     if (!otp) {

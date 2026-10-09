@@ -89,6 +89,8 @@ function rideDoc(overrides = {}) {
         status: 'arrived',
         price: 400,
         discountAmount: 0,
+        /** New release contract: arrived AND backend-verified advance. */
+        advancePaymentStatus: 'success',
         otpCipher: 'cipher-x',
         otpExpiresAt: new Date(Date.now() + 4 * 60 * 1000),
         ...overrides,
@@ -120,6 +122,21 @@ describe('getRideById OTP visibility', () => {
         expect(body.confirmation.otp).toBeUndefined();
     });
 
+    test('never exposes the OTP while the advance is unverified — arrived + unpaid', async () => {
+        rideModel.findById.mockReturnValue(
+            query(rideDoc({ advancePaymentStatus: 'pending' })),
+        );
+        decryptOtp.mockReturnValue('654321');
+
+        const res = responseFor();
+        await rideController.getRideById({ params: { id: RIDE_ID }, user: { _id: USER_ID } }, res);
+
+        const body = res.json.mock.calls[0][0];
+        expect(body.otp).toBeUndefined();
+        expect(body.confirmation.otp).toBeUndefined();
+        expect(decryptOtp).not.toHaveBeenCalled();
+    });
+
     test('exposes the OTP to the passenger once arrived', async () => {
         decryptOtp.mockReturnValue('654321');
 
@@ -145,16 +162,19 @@ describe('getRideById OTP visibility', () => {
         expect(body.confirmation.otp).toBeUndefined();
     });
 
-    test('never surfaces an expired code', async () => {
+    test('a stale window still surfaces the SAME stored code — no rotation on refresh', async () => {
         rideModel.findById.mockReturnValue(
             query(rideDoc({ otpExpiresAt: new Date(Date.now() - 60 * 1000) })),
         );
+        decryptOtp.mockReturnValue('654321');
 
         const res = responseFor();
         await rideController.getRideById({ params: { id: RIDE_ID }, user: { _id: USER_ID } }, res);
 
         const body = res.json.mock.calls[0][0];
-        expect(body.otp).toBeUndefined();
+        expect(body.otp).toBe('654321');
+        expect(body.confirmation.otp).toBe('654321');
+        /* Read-only: the stored per-ride OTP is never re-minted here. */
         expect(rideModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 });
@@ -192,6 +212,24 @@ describe('arriveRide payloads', () => {
         expect(body.confirmation?.otp).toBeUndefined();
         expect(body.otp).toBeUndefined();
         expect(socket.emitToCaptain).not.toHaveBeenCalled();
+    });
+
+    test('an arrival before payment emits NO code — the PIN stays gated until the advance is verified', async () => {
+        rideService.markArrived.mockResolvedValue({
+            ride: { _id: RIDE_ID, user: USER_ID, status: 'arrived' },
+            otpPlain: '123456',
+        });
+        rideModel.findById.mockReturnValue(
+            query(rideDoc({ advancePaymentStatus: 'pending', otpCipher: undefined })),
+        );
+
+        const res = responseFor();
+        await rideController.arriveRide({ body: { rideId: RIDE_ID }, captain: { _id: CAPTAIN_ID } }, res);
+
+        const frame = statusFrame();
+        expect(frame).toBeTruthy();
+        expect(frame[2].confirmation.otp).toBeUndefined();
+        expect(frame[2].otp).toBeUndefined();
     });
 
     test('a repeated arrival emits no new code and rotates nothing', async () => {

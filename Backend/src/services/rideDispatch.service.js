@@ -37,6 +37,8 @@ async function recordDispatchAttempt({ rideId, captainId, roomName, socketIds = 
             },
             /** Preserved across re-dispatches of the same (ride, captain). */
             $setOnInsert: { matchedAt: now },
+            /** Attempt counter for the `[DISPATCH]` log — per (ride, captain). */
+            $inc: { dispatchAttempts: 1 },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
     );
@@ -69,14 +71,19 @@ async function markRideDispatchesStatus(rideId, status) {
     );
 }
 
-/** Fire-and-forget wrappers — a tracking failure is logged, never thrown. */
+/**
+ * Fire-and-forget wrapper — a tracking failure is logged, never thrown.
+ * Returns the stored record (or null on failure) so callers that want the
+ * attempt number for logging can await it without ever risking dispatch.
+ */
 function recordDispatchAttemptSafe(args) {
-    void recordDispatchAttempt(args).catch((err) => {
+    return recordDispatchAttempt(args).catch((err) => {
         logger.warn('rideDispatch.record failed', {
             rideId: String(args?.rideId ?? ''),
             captainId: String(args?.captainId ?? ''),
             message: err?.message,
         });
+        return null;
     });
 }
 

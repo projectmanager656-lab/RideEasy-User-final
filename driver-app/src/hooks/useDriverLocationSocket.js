@@ -40,7 +40,20 @@ export function useDriverLocationSocket (socket, driverId, options = {}) {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
       }
-      lastRef.current = loc
+      /**
+       * Full GPS sample for the backend's H3 matching index (spec §2): the
+       * screen-facing `loc` shape above is untouched — only the wire payload
+       * gains heading/speed/accuracy/timestamp, which the backend stores in
+       * `driverlocations` alongside h3Cell. Browser APIs report null heading/
+       * speed when unavailable; the backend skips any field that is null.
+       */
+      lastRef.current = {
+        ...loc,
+        heading: Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
+        speed: Number.isFinite(pos.coords.speed) ? pos.coords.speed : null,
+        accuracy: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
+        timestamp: Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now(),
+      }
       onPositionRef.current?.(loc)
       if (onGeoErrorRef.current) onGeoErrorRef.current(null)
     }
@@ -48,7 +61,15 @@ export function useDriverLocationSocket (socket, driverId, options = {}) {
     const emit = () => {
       const p = lastRef.current
       if (!p) return
-      const payload = { driverId: id, lat: p.lat, lng: p.lng }
+      const payload = {
+        driverId: id,
+        lat: p.lat,
+        lng: p.lng,
+        heading: p.heading,
+        speed: p.speed,
+        accuracy: p.accuracy,
+        timestamp: p.timestamp,
+      }
       socket.emit('driver:location-update', payload)
       socket.emit('driver-location-update', payload)
     }

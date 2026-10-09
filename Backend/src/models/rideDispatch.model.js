@@ -90,6 +90,16 @@ const rideDispatchSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    /**
+     * How many times a ride offer was (re-)dispatched to THIS captain — feeds the
+     * `[DISPATCH] … attempt` log. Scoped per (ride, captain) like everything else
+     * here, so back-to-back rides never share a counter.
+     */
+    dispatchAttempts: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

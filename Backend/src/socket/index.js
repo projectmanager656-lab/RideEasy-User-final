@@ -5,6 +5,7 @@ const { socketIoCorsConfig } = require("../config/cors.config");
 const { LOCATION_UPDATE } = require("./rideSocket.events");
 const { emitJoinCatchUp } = require("./rideJoinCatchUp");
 const { markDispatchAcknowledgedSafe } = require("../services/rideDispatch.service");
+const { recordDriverGps } = require("../services/driverHex.service");
 const userModel = require("../models/user.model");
 const captainModel = require("../models/captain.model");
 const adminModel = require("../models/admin.model");
@@ -369,24 +370,8 @@ async function handleDriverPresenceJoin(socket, payload, sourceEvent) {
     // Update driver location if valid.
     if (validCoordinates(lat, lng)) {
       try {
-        await DriverLocation.findOneAndUpdate(
-          { captain: captainId },
-          {
-            captain: captainId,
-            location: {
-              type: "Point",
-              coordinates: [lng, lat],
-            },
-            latitude: lat,
-            longitude: lng,
-            updatedAt: new Date(),
-          },
-          {
-            upsert: true,
-            new: true,
-            setDefaultsOnInsert: true,
-          },
-        );
+        /** Existing `driverlocations` row + H3 cell for the join-time position. */
+        await recordDriverGps({ driverId: captainId, lat, lng });
       } catch (locationError) {
         console.warn(
           "[socket driver join] location update failed",
@@ -571,13 +556,24 @@ function initializeSocket(server, app) {
       });
     });
 
-    const handleCaptainLocation = async (driverId, lat, lng) => {
+    const handleCaptainLocation = async (driverId, lat, lng, gps = {}) => {
       if (!driverId || lat == null || lng == null) return;
       await captainModel.findByIdAndUpdate(driverId, {
         location: { type: "Point", coordinates: [lng, lat] },
         lastLocationUpdatedAt: new Date(),
         socketId: socket.id,
       });
+      /**
+       * Every valid GPS sample refreshes the driver's current `driverlocations`
+       * row together with its H3 res-9 cell — the ring index used by ride
+       * matching. A driver crossing a hexagon is discovered in the new cell on
+       * the next search with no manual refresh.
+       */
+      try {
+        await recordDriverGps({ driverId, lat, lng, ...gps });
+      } catch (hexError) {
+        console.warn("[driverLocation] h3 upsert failed", hexError?.message || hexError);
+      }
       if (process.env.DRIVER_LOCATION_PERSIST === "true") {
         try {
           await DriverLocation.create({
@@ -616,14 +612,19 @@ function initializeSocket(server, app) {
     };
 
     const onDriverLocationPayload = async (payload) => {
-      const { lat, lng } = payload || {};
+      const { lat, lng, heading, speed, accuracy, timestamp } = payload || {};
       const latN = Number(lat);
       const lngN = Number(lng);
       if (socket.data.jwtRole !== "captain" || !validCoordinates(latN, lngN))
         return;
       const did = socket.data.jwtUserId;
       if (!did) return;
-      await handleCaptainLocation(did, latN, lngN);
+      await handleCaptainLocation(did, latN, lngN, {
+        heading,
+        speed,
+        accuracy,
+        timestamp,
+      });
     };
 
     socket.on("driver:location-update", onDriverLocationPayload);
