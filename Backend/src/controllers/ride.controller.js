@@ -51,6 +51,8 @@ const {
 } = require("../services/rideDispatch.service");
 /** H3 hexagon candidate discovery (§3/§6) — ordering still uses real GPS distance. */
 const driverHex = require("../services/driverHex.service");
+/** ETA-based ranking (§2.C) — refines the TOP of the distance-ordered nearby list with road ETA. */
+const driverRanking = require("../services/driverRanking.service");
 /** Configurable GPS freshness window (§11), shared with driverHex.service. */
 const DRIVER_GPS_FRESH_MS = driverHex.DRIVER_GPS_FRESH_MS;
 
@@ -430,6 +432,23 @@ async function nearbyEligibilityClauses({ rideCity, vehicleType }) {
 }
 
 /**
+ * ETA ranking must never be able to break discovery: any unexpected error
+ * degrades to the already distance-ordered list (the H3/GPS order Phase 1
+ * relies on), with a single warn line for diagnosis.
+ */
+async function rankCandidatesSafely(candidates, { pickupLat, pickupLng, rideId }) {
+  try {
+    return await driverRanking.rankCandidates(candidates, { pickupLat, pickupLng, rideId });
+  } catch (e) {
+    console.warn(
+      "[ride dispatch] ETA ranking failed (%s) — keeping distance order",
+      e?.message || e,
+    );
+    return candidates;
+  }
+}
+
+/**
  * Nearby driver discovery (§3–§6):
  *   1. H3 pickup cell → progressive Ring 0 → maxRing over the existing
  *      `driverlocations` index (never a full driver scan), stopping as soon as
@@ -461,7 +480,16 @@ async function findNearbyDriverIds({
           .select("_id location")
           .lean(),
     });
-    if (candidates.length > 0) return candidates.map((d) => String(d._id));
+    if (candidates.length > 0) {
+      /**
+       * ETA ranking (§2.C): H3 + distance answer "who is nearby, nearest first";
+       * the shortlist's TOP slots are then refined with real road ETA from the
+       * existing routing provider (cache/timeout/circuit handled inside the
+       * service — a provider failure leaves the distance order untouched).
+       */
+      const ranked = await rankCandidatesSafely(candidates, { pickupLat, pickupLng, rideId });
+      return ranked.map((d) => String(d._id));
+    }
   } catch (e) {
     console.warn(
       "[ride dispatch] H3 candidate discovery failed (%s) — falling back to $near",
@@ -482,8 +510,10 @@ async function findNearbyDriverIds({
         },
       })
       .limit(40)
-      .select("_id");
-    return drivers.map((d) => d._id.toString());
+      .select("_id location");
+    /** `$near` yields distance order; the same shortlist ETA refinement applies. */
+    const ranked = await rankCandidatesSafely(drivers, { pickupLat, pickupLng, rideId });
+    return ranked.map((d) => d._id.toString());
   } catch (e) {
     /* A missing 2dsphere index (fresh DB) must not fail ride creation — the city
        fallbacks and the connected-driver broadcast still run after this. */
